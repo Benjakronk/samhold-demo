@@ -6,6 +6,7 @@ import { TERRAIN } from '../data/terrain.js';
 import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { THREAT_TYPES } from '../data/threats.js';
+import { GOVERNANCE_MODELS } from '../data/governance.js';
 import * as CONSTANTS from '../data/constants.js';
 import { createGameState } from './core/gameState.js';
 import { createRNG } from '../utils/random.js';
@@ -16,12 +17,16 @@ import {
   pixelToHex,
   hexNeighbor
 } from '../utils/hexMath.js';
+import * as ExternalThreats from '../systems/externalThreats.js';
+import * as Combat from '../systems/combat.js';
+import * as Governance from '../systems/governance.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
 window.BUILDINGS = BUILDINGS;
 window.UNIT_TYPES = UNIT_TYPES;
 window.THREAT_TYPES = THREAT_TYPES;
+window.GOVERNANCE_MODELS = GOVERNANCE_MODELS;
 
 // Export constants individually for compatibility
 window.MAP_COLS = CONSTANTS.MAP_COLS;
@@ -45,16 +50,46 @@ window.hexToPixel = hexToPixel;
 window.pixelToHex = pixelToHex;
 window.hexNeighbor = hexNeighbor;
 
+// External Threats system
+window.spawnThreat = ExternalThreats.spawnThreat;
+window.findRandomMapEdge = ExternalThreats.findRandomMapEdge;
+window.findNearestSettlement = ExternalThreats.findNearestSettlement;
+window.processThreats = ExternalThreats.processThreats;
+window.moveThreatTowardTarget = ExternalThreats.moveThreatTowardTarget;
+window.attackSettlement = ExternalThreats.attackSettlement;
+window.calculateDefensiveStrength = ExternalThreats.calculateDefensiveStrength;
+window.applyRaidDamage = ExternalThreats.applyRaidDamage;
+window.shouldSpawnThreat = ExternalThreats.shouldSpawnThreat;
+window.checkThreatSpawning = ExternalThreats.checkThreatSpawning;
+
+// Combat system
+window.initiateCombat = Combat.initiateCombat;
+window.resolveCombat = Combat.resolveCombat;
+window.checkForCombatOpportunities = Combat.checkForCombatOpportunities;
+window.findUnitsInRange = Combat.findUnitsInRange;
+window.processCombatPhase = Combat.processCombatPhase;
+window.canUnitAttackThreat = Combat.canUnitAttackThreat;
+
+// Governance system
+window.changeGovernanceModel = Governance.changeGovernanceModel;
+window.adjustPolicy = Governance.adjustPolicy;
+window.getGovernanceModel = Governance.getGovernanceModel;
+window.adjustWorkingAge = Governance.adjustWorkingAge;
+window.getPolicyLabel = Governance.getPolicyLabel;
+window.getWorkingAgeLabel = Governance.getWorkingAgeLabel;
+window.updatePolicySummary = Governance.updatePolicySummary;
+
 // Game state factory
 window.createGameState = createGameState;
 
-console.log('✅ Phase 1 modules loaded: Data definitions');
+console.log('✅ Phase 1 & 2 modules loaded: Data, utilities, and systems');
 console.log('📦 Available data:', {
   terrain: Object.keys(TERRAIN).length + ' types',
   buildings: Object.keys(BUILDINGS).length + ' types',
   units: Object.keys(UNIT_TYPES).length + ' types',
   threats: Object.keys(THREAT_TYPES).length + ' types'
 });
+console.log('⚔️ Systems loaded: External Threats, Combat, Governance');
 
 // Signal that modules are ready
 window.modulesReady = true;

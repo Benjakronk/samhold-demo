@@ -7,6 +7,7 @@ import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { THREAT_TYPES } from '../data/threats.js';
 import { GOVERNANCE_MODELS } from '../data/governance.js';
+import { EVENT_LIBRARY } from '../data/events.js';
 import * as CONSTANTS from '../data/constants.js';
 import { createGameState } from './core/gameState.js';
 import { createRNG } from '../utils/random.js';
@@ -20,6 +21,9 @@ import {
 import * as ExternalThreats from '../systems/externalThreats.js';
 import * as Combat from '../systems/combat.js';
 import * as Governance from '../systems/governance.js';
+import * as Events from '../systems/events.js';
+import * as Economy from '../systems/economy.js';
+import * as Cohesion from '../systems/cohesion.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -27,6 +31,7 @@ window.BUILDINGS = BUILDINGS;
 window.UNIT_TYPES = UNIT_TYPES;
 window.THREAT_TYPES = THREAT_TYPES;
 window.GOVERNANCE_MODELS = GOVERNANCE_MODELS;
+window.EVENT_LIBRARY = EVENT_LIBRARY;
 
 // Export constants individually for compatibility
 window.MAP_COLS = CONSTANTS.MAP_COLS;
@@ -79,6 +84,53 @@ window.getPolicyLabel = Governance.getPolicyLabel;
 window.getWorkingAgeLabel = Governance.getWorkingAgeLabel;
 window.updatePolicySummary = Governance.updatePolicySummary;
 
+// Event system
+window.checkEventTriggers = Events.checkEventTriggers;
+window.canEventTrigger = Events.canEventTrigger;
+window.evaluateCondition = Events.evaluateCondition;
+window.evaluateOperator = Events.evaluateOperator;
+window.triggerEvent = Events.triggerEvent;
+window.showEventDialog = Events.showEventDialog;
+window.hideEventDialog = Events.hideEventDialog;
+window.generateEventFeedback = Events.generateEventFeedback;
+window.showEventResolution = Events.showEventResolution;
+window.closeEventResolution = Events.closeEventResolution;
+window.selectEventChoice = Events.selectEventChoice;
+window.applyEventConsequences = Events.applyEventConsequences;
+window.processPendingEvents = Events.processPendingEvents;
+window.processActiveEvents = Events.processActiveEvents;
+window.applyImmediateEffects = Events.applyImmediateEffects;
+window.calculateContextualModifiers = Events.calculateContextualModifiers;
+window.getTotalChildren = Events.getTotalChildren;
+window.resetEventSystem = Events.resetEventSystem;
+
+// Economy system
+window.isInTerritory = Economy.isInTerritory;
+window.getMaxWorkers = Economy.getMaxWorkers;
+window.getHexYield = Economy.getHexYield;
+window.calculateIncome = Economy.calculateIncome;
+window.clampWorkers = Economy.clampWorkers;
+window.assignWorker = Economy.assignWorker;
+window.unassignWorker = Economy.unassignWorker;
+window.getWorkforceGroups = Economy.getWorkforceGroups;
+window.renderWorkersTab = Economy.renderWorkersTab;
+window.wfAddWorker = Economy.wfAddWorker;
+window.wfRemoveWorker = Economy.wfRemoveWorker;
+window.openWorkforceOverlay = Economy.openWorkforceOverlay;
+window.hexHasFreshWater = Economy.hexHasFreshWater;
+window.hexAdjacentToLake = Economy.hexAdjacentToLake;
+
+// Cohesion system
+window.calculateCohesion = Cohesion.calculateCohesion;
+window.calculateSatisfactionPillar = Cohesion.calculateSatisfactionPillar;
+window.calculateIdentityPillar = Cohesion.calculateIdentityPillar;
+window.calculateLegitimacyPillar = Cohesion.calculateLegitimacyPillar;
+window.calculateBondsPillar = Cohesion.calculateBondsPillar;
+window.calculateShelterPoints = Cohesion.calculateShelterPoints;
+window.getCohesionStatus = Cohesion.getCohesionStatus;
+window.applyCohesionEffects = Cohesion.applyCohesionEffects;
+window.updateCohesionDisplay = Cohesion.updateCohesionDisplay;
+
 // Game state factory
 window.createGameState = createGameState;
 
@@ -89,7 +141,7 @@ console.log('📦 Available data:', {
   units: Object.keys(UNIT_TYPES).length + ' types',
   threats: Object.keys(THREAT_TYPES).length + ' types'
 });
-console.log('⚔️ Systems loaded: External Threats, Combat, Governance');
+console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion');
 
 // Signal that modules are ready
 window.modulesReady = true;

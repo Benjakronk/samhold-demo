@@ -56,11 +56,14 @@ console.log('📦 Available data:', {
   threats: Object.keys(THREAT_TYPES).length + ' types'
 });
 
-// Initialize game state now that modules are loaded
-if (window.gameState === null) {
-  window.gameState = createGameState();
-  console.log('🎮 Game state initialized');
-}
-
 // Signal that modules are ready
 window.modulesReady = true;
+
+// Initialize the game now that all modules are loaded
+// The initGame function will create gameState if needed
+setTimeout(() => {
+  if (typeof window.initGame === 'function') {
+    window.initGame(7743); // Use default seed
+    console.log('🎯 Game initialized with modules');
+  }
+}, 100); // Small delay to ensure DOM and other scripts are ready

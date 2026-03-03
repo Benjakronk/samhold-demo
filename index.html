@@ -1820,7 +1820,7 @@ let WORKING_AGE = 10; // policy slider: age when children join workforce (6-16)
 
 // ---- GAME STATE ----
 // Game state will be created by the createGameState() factory function after modules load
-let gameState = null;
+var gameState = null;
 
 // ---- CACHED CANVAS DIMS ----
 let canvasW = 0, canvasH = 0;
@@ -5874,7 +5874,7 @@ minimapCanvas.addEventListener('mousedown',(e)=>{minimapDragging=true;const r=mi
 
 // ---- RENDER ----
 function render() {
-  if (!gameState.map.length) return;
+  if (!gameState || !gameState.map || !gameState.map.length) return;
   if (mapDirty) renderMapToCache();
   ctx.fillStyle = '#0e0c0a'; ctx.fillRect(0, 0, canvasW, canvasH);
   const cam = gameState.camera;
@@ -9161,6 +9161,13 @@ function initGame(seed) {
   currentSeed = seed;
   devHighlightRivers = new Set();
   devShowRiverVertices = false;
+
+  // Initialize game state if it's null (for modular version)
+  if (gameState === null) {
+    gameState = window.createGameState();
+    console.log('🎮 Game state created in initGame');
+  }
+
   // Reset game state
   gameState.turn = 1; gameState.year = 1; gameState.season = 0;
   gameState.resources = { food: 200, materials: 50, knowledge: 5 };
@@ -9274,7 +9281,8 @@ function initGame(seed) {
   render();
 }
 
-requestAnimationFrame(() => { requestAnimationFrame(() => initGame()); });
+// Game initialization is now handled by the module loader after all modules are ready
+// requestAnimationFrame(() => { requestAnimationFrame(() => initGame()); });
 </script>
 </body>
 </html>

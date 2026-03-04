@@ -24,6 +24,7 @@ import * as Governance from '../systems/governance.js';
 import * as Events from '../systems/events.js';
 import * as Economy from '../systems/economy.js';
 import * as Cohesion from '../systems/cohesion.js';
+import * as MapGeneration from '../systems/mapGeneration.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -131,6 +132,13 @@ window.getCohesionStatus = Cohesion.getCohesionStatus;
 window.applyCohesionEffects = Cohesion.applyCohesionEffects;
 window.updateCohesionDisplay = Cohesion.updateCohesionDisplay;
 
+// Map Generation system
+window.generateMap = MapGeneration.generateMap;
+window.buildVertexGraph = MapGeneration.buildVertexGraph;
+window.generateRivers = MapGeneration.generateRivers;
+window.mkHex = MapGeneration.mkHex;
+window.weightedPick = MapGeneration.weightedPick;
+
 // Game state factory
 window.createGameState = createGameState;
 
@@ -141,7 +149,7 @@ console.log('📦 Available data:', {
   units: Object.keys(UNIT_TYPES).length + ' types',
   threats: Object.keys(THREAT_TYPES).length + ' types'
 });
-console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion');
+console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion, Map Generation');
 
 // Signal that modules are ready
 window.modulesReady = true;

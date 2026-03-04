@@ -6,50 +6,77 @@ Transform samhold-phase7.html (9,489 lines) into maintainable modular code organ
 ## Method
 Incremental extraction - one system at a time, testing functionality after each extraction to ensure nothing breaks.
 
-## Current Status
-- ✅ **Baseline Setup Complete**: Development server running at http://localhost:3001
-- ✅ **Starting Point**: index.html with full Phase 7 functionality (all systems working)
-- 🎯 **Next**: Begin Phase 1 extractions
+## Current Status (Updated March 2026)
+- ✅ **Phases 1-3 Complete**: All major data and core game systems extracted
+- ✅ **Phase 4 Started**: Map Generation system successfully extracted
+- ✅ **Development Environment**: Stable modular development workflow at http://localhost:3001
+- ✅ **Progress**: Reduced from 9,489 lines → 6,865 lines (2,624 lines extracted across 12 modules)
+- 🎯 **Current**: Phase 4+ extractions - Complex interconnected systems
 
-## Extraction Order (Based on Dependency Analysis)
+## Extraction Progress
 
-### **Phase 1: Data & Utilities (Safest First)**
-1. **Data Definitions** (lines 1814-2012) - TERRAIN, BUILDINGS, UNIT_TYPES, THREAT_TYPES
-2. **Hex Math & Utilities** (lines 2013-2074) - Pure functions, no side effects
-3. **Map Generation** (lines 2074-2552) - Self-contained, runs once
+### ✅ **Phase 1: Data & Utilities (COMPLETE)**
+1. ✅ **Data Definitions** → `data/terrain.js`, `data/buildings.js`, `data/units.js`, `data/threats.js`, `data/governance.js`, `data/events.js`, `data/constants.js`
+2. ✅ **Hex Math & Utilities** → `utils/hexMath.js`, `utils/random.js`
 
-### **Phase 2: Self-Contained Systems**
-4. **External Threats** (lines 3056-3314) - Clear boundaries, minimal dependencies
-5. **Combat System** (lines 3314-3498) - Well-defined inputs/outputs
-6. **Governance Models** (lines 3702-3770) - Mostly data definitions
+### ✅ **Phase 2: Self-Contained Systems (COMPLETE)**
+3. ✅ **External Threats** → `systems/externalThreats.js`
+4. ✅ **Combat System** → `systems/combat.js`
+5. ✅ **Governance Models** → `systems/governance.js`
 
-### **Phase 3: Game Logic Systems**
-7. **Territory System** (lines 2552-2650) - Foundational but used by many others
-8. **Population & Aging** (lines 3624-3702) - Medium complexity, manageable dependencies
-9. **Units System** (lines 2650-3056) - Depends on territory, needed by combat
+### ✅ **Phase 3: Game Logic Systems (COMPLETE)**
+6. ✅ **Economy System** → `systems/economy.js` (includes territory functions)
+7. ✅ **Event System** → `systems/events.js`
+8. ✅ **Cohesion System** → `systems/cohesion.js`
 
-### **Phase 4: Complex Core Systems**
-10. **Economy System** (lines 3498-3624) - Complex but core functionality
-11. **Event System** (lines 3770-4672) - Large but can be isolated
-12. **Governance Functions** (lines 5039-5352) - Depends on governance models
+### 🔄 **Phase 4: Complex Systems (IN PROGRESS)**
+9. ✅ **Map Generation** → `systems/mapGeneration.js` (COMPLETED)
+10. 🔄 **Remaining High-Complexity Systems**:
+    - **Rendering System** (~300 lines): Canvas drawing, hex rendering, overlays, minimap
+    - **UI System** (~400 lines): HTML panels, overlays, form handling, DOM manipulation
+    - **Input System** (~200 lines): Mouse/keyboard events, camera controls
+    - **Turn Processing** (~100 lines): Game loop, phase management
+    - **Save/Load System** (~150 lines): Serialization, persistence
 
-### **Phase 5: High-Coupling Systems (Most Risky)**
-13. **Cohesion System** (lines 4672-5039) - Reads from many systems
-14. **Rendering System** (lines 5352-6096) - Needs access to most game state
-15. **Input System** (lines 6096-6213) - Triggers actions across systems
-16. **UI Systems** (lines 6213-6792) - Displays data from all systems
-17. **Turn Processing** (lines 6792-6834) - Orchestrates everything (extract last)
+## Current Architecture (12 Modules Extracted)
 
-## Key Challenges to Watch For
-- **630+ references to `gameState`** - Need careful state management
-- **Circular dependencies** between UI and game systems
+### **Data Layer (7 modules)**
+- `data/terrain.js` - Terrain type definitions and properties
+- `data/buildings.js` - Building definitions and costs
+- `data/units.js` - Unit types and capabilities
+- `data/threats.js` - External threat definitions
+- `data/governance.js` - Governance model definitions
+- `data/events.js` - Event library and consequences
+- `data/constants.js` - Game constants and configuration
+
+### **Utility Layer (2 modules)**
+- `utils/hexMath.js` - Hexagonal grid mathematics
+- `utils/random.js` - Seeded random number generation
+
+### **Game Systems (5 modules)**
+- `systems/externalThreats.js` - AI threat spawning and behavior
+- `systems/combat.js` - Unit vs unit and unit vs threat combat
+- `systems/governance.js` - Policy management and governance effects
+- `systems/events.js` - Event triggering and resolution
+- `systems/economy.js` - Resource management and territory
+- `systems/cohesion.js` - Social cohesion calculation
+- `systems/mapGeneration.js` - Procedural map generation
+
+### **Integration Layer**
+- `js/loader.js` - Module import and window binding system
+- `js/core/gameState.js` - Central game state factory
+
+## Remaining Challenges
+- **Complex interconnected systems**: Rendering, UI, and Input systems have many cross-dependencies
 - **Shared canvas context** - Multiple systems draw to same canvas
-- **Cross-system event coordination** - Turn processing coordinates all systems
+- **Event coordination** - Turn processing coordinates all systems
+- **State management** - Careful handling of gameState references
 
 ## Success Criteria
 - ✅ Game remains fully playable after each extraction
 - ✅ All existing functionality preserved
 - ✅ Code organized into logical, maintainable modules
 - ✅ Clear separation of concerns between systems
+- ✅ **12 modules successfully extracted** with stable functionality
 
-## Current Phase: Starting Phase 1 - Data Definitions
+## Current Phase: Phase 4+ Complex System Extractions

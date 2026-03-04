@@ -1,0 +1,254 @@
+// systems/ui/dialogSystem.js
+// Dialog and confirmation system for game UI
+// Handles confirmation dialogs, alerts, and user input dialogs
+
+let gameState = null;
+
+export function initDialogSystem(gameStateRef) {
+    gameState = gameStateRef;
+    setupDialogEventListeners();
+}
+
+// Core confirmation dialog with custom styling
+export function showConfirmDialog(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').innerHTML = bodyHtml;
+    document.getElementById('confirm-ok').textContent = okLabel;
+    document.getElementById('confirm-cancel').textContent = cancelLabel;
+    const dialog = document.getElementById('confirm-dialog');
+    dialog.classList.add('visible');
+
+    const okBtn = document.getElementById('confirm-ok');
+    const cancelBtn = document.getElementById('confirm-cancel');
+
+    function cleanup() {
+        dialog.classList.remove('visible');
+        okBtn.replaceWith(okBtn.cloneNode(true));
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    }
+
+    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
+    document.getElementById('confirm-cancel').addEventListener('click', cleanup);
+}
+
+// Wrapper for standard confirm dialog with default labels
+export function showConfirmationDialog(title, bodyHtml, onConfirm) {
+    showConfirmDialog(title, bodyHtml, 'Confirm', 'Cancel', onConfirm);
+}
+
+// Non-destructive confirmation dialog (primary style instead of danger)
+export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').innerHTML = bodyHtml;
+    document.getElementById('confirm-ok').textContent = okLabel;
+    document.getElementById('confirm-cancel').textContent = cancelLabel;
+
+    // Remove danger class and add primary class
+    const okBtn = document.getElementById('confirm-ok');
+    okBtn.classList.remove('danger');
+    okBtn.classList.add('primary');
+
+    const dialog = document.getElementById('confirm-dialog');
+    dialog.classList.add('visible');
+
+    const cancelBtn = document.getElementById('confirm-cancel');
+
+    function cleanup() {
+        dialog.classList.remove('visible');
+        // Reset to default danger styling for future destructive confirmations
+        okBtn.classList.remove('primary');
+        okBtn.classList.add('danger');
+        okBtn.replaceWith(okBtn.cloneNode(true));
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+    }
+
+    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
+    document.getElementById('confirm-cancel').addEventListener('click', cleanup);
+}
+
+// Game-specific confirmation dialogs
+
+// Confirm unit training
+export function confirmTrainUnit(unitType, col, row) {
+    if (!gameState) return;
+
+    const unitData = window.UNIT_TYPES[unitType];
+    if (!unitData) return;
+
+    const popCost = unitData.cost.population;
+    const materialCost = unitData.cost.materials;
+    const trainingTime = unitData.training;
+
+    showConfirmDialog(
+        `Train ${unitData.name}`,
+        `<p>Train a ${unitData.name} at this location?</p>
+         <p><strong>Cost:</strong> ${popCost} population, ${materialCost} materials</p>
+         <p><strong>Training time:</strong> ${trainingTime} turns</p>
+         <p><em>${unitData.description}</em></p>`,
+        'Train',
+        'Cancel',
+        () => {
+            if (window.trainUnit) {
+                window.trainUnit(unitType, col, row);
+            }
+        }
+    );
+}
+
+// Confirm building construction
+export function confirmBuildBuilding(col, row, buildingType) {
+    if (!gameState) return;
+
+    const buildingData = window.BUILDINGS[buildingType];
+    if (!buildingData) return;
+
+    const materialCost = buildingData.cost.materials;
+    const buildTime = buildingData.buildTurns;
+    const maxWorkers = buildingData.maxWorkers;
+
+    showConfirmDialog(
+        `Build ${buildingData.name}`,
+        `<p>Build a ${buildingData.name} at this location?</p>
+         <p><strong>Cost:</strong> ${materialCost} materials</p>
+         <p><strong>Build time:</strong> ${buildTime} work</p>
+         <p><strong>Max workers:</strong> ${maxWorkers}</p>
+         <p><em>${buildingData.description || ''}</em></p>`,
+        'Build',
+        'Cancel',
+        () => {
+            if (window.startBuilding) {
+                window.startBuilding(col, row, buildingType);
+            }
+        }
+    );
+}
+
+// Confirm unit disbanding
+export function confirmDisbandUnit(unitId) {
+    if (!gameState) return;
+
+    const unit = gameState.units.find(u => u.id === unitId);
+    if (!unit) return;
+
+    const unitData = window.UNIT_TYPES[unit.type];
+    if (!unitData) return;
+
+    showConfirmDialog(
+        `Disband ${unitData.name}`,
+        `<p>Are you sure you want to disband this ${unitData.name}?</p>
+         <p>This unit will be permanently removed and cannot be recovered.</p>
+         <p><strong>Population will return to idle pool.</strong></p>`,
+        'Disband',
+        'Cancel',
+        () => {
+            if (window.disbandUnit) {
+                window.disbandUnit(unitId);
+            }
+        }
+    );
+}
+
+// Confirm building demolition
+export function confirmDemolishBuilding(col, row) {
+    if (!gameState) return;
+
+    const hex = gameState.map[row] && gameState.map[row][col];
+    if (!hex || !hex.building) return;
+
+    const buildingData = window.BUILDINGS[hex.building];
+    if (!buildingData) return;
+
+    const materialRefund = Math.floor((buildingData.cost.materials || 0) / 2);
+
+    showConfirmDialog(
+        `Demolish ${buildingData.name}`,
+        `<p>Are you sure you want to demolish this ${buildingData.name}?</p>
+         <p>This building will be permanently destroyed.</p>
+         <p><strong>Material refund:</strong> ${materialRefund} materials</p>
+         <p><strong>Workers will become idle.</strong></p>`,
+        'Demolish',
+        'Cancel',
+        () => {
+            if (window.demolishBuilding) {
+                window.demolishBuilding(col, row);
+            }
+        }
+    );
+}
+
+// Confirm construction cancellation
+export function confirmCancelConstruction(col, row) {
+    if (!gameState) return;
+
+    const hex = gameState.map[row] && gameState.map[row][col];
+    if (!hex || !hex.constructing) return;
+
+    const buildingData = window.BUILDINGS[hex.constructing.type];
+    if (!buildingData) return;
+
+    const materialRefund = buildingData.cost.materials;
+
+    showConfirmDialog(
+        `Cancel Construction`,
+        `<p>Cancel construction of this ${buildingData.name}?</p>
+         <p>Construction progress will be lost.</p>
+         <p><strong>Full material refund:</strong> ${materialRefund} materials</p>
+         <p><strong>Workers will become idle.</strong></p>`,
+        'Cancel Construction',
+        'Keep Building',
+        () => {
+            if (window.cancelConstruction) {
+                window.cancelConstruction(col, row);
+            }
+        }
+    );
+}
+
+// Simple alert-style dialog
+export function showAlert(title, bodyHtml) {
+    showConfirmDialogNonDestructive(
+        title,
+        bodyHtml,
+        'OK',
+        '',
+        () => {} // No action on OK
+    );
+}
+
+// Utility function to close any open dialog
+export function closeDialog() {
+    const dialog = document.getElementById('confirm-dialog');
+    if (dialog) {
+        dialog.classList.remove('visible');
+    }
+}
+
+// Setup event listeners for dialog system
+function setupDialogEventListeners() {
+    // Handle escape key to close dialogs
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeDialog();
+        }
+    });
+
+    // Handle click outside dialog to close (if desired)
+    const dialog = document.getElementById('confirm-dialog');
+    if (dialog) {
+        dialog.addEventListener('click', (e) => {
+            if (e.target === dialog) {
+                // Only close on background click for non-destructive dialogs
+                const okBtn = document.getElementById('confirm-ok');
+                if (okBtn && okBtn.classList.contains('primary')) {
+                    closeDialog();
+                }
+            }
+        });
+    }
+}
+
+// Check if dialog is currently open
+export function isDialogOpen() {
+    const dialog = document.getElementById('confirm-dialog');
+    return dialog && dialog.classList.contains('visible');
+}

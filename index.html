@@ -2644,259 +2644,7 @@ function handleHexClick(e) {
 
 
 // ---- UI ----
-function updateSidePanel(hex) {
-  const t = TERRAIN[hex.terrain];
-  const riverLabel = hexHasRiver(hex) ? ' 🏞️' : '';
-  document.querySelector('#hex-info-section h3').innerHTML = `${t.icon} ${t.name} (${hex.col},${hex.row})${riverLabel} <span class="section-toggle-hint">click to toggle</span>`;
-  const inTerr = isInTerritory(hex.col, hex.row);
-  const y = getHexYield(hex);
-  const maxW = getMaxWorkers(hex);
 
-  const hasRiver = hexHasRiver(hex);
-  const nearLake = !hasRiver && hexAdjacentToLake(hex);
-  const hasFreshWater = hasRiver || nearLake;
-  const freshWaterStr = hasRiver ? `<div class="hex-info-row"><span class="label">River</span><span class="value" style="color:#5ab0d8">🏞️ Fresh water (+1🌾)</span></div>`
-    : nearLake ? `<div class="hex-info-row"><span class="label">Lake</span><span class="value" style="color:#5ab0d8">💧 Fresh water (+1🌾)</span></div>` : '';
-
-  let html = `
-    <div class="hex-info-row"><span class="label">Terrain</span><span class="terrain-badge" style="background:${t.color}">${t.name}</span></div>
-    ${freshWaterStr}
-    <div class="hex-info-row"><span class="label">Base yield</span><span class="value">${t.food ? '🌾' + t.food : ''}${t.food && t.materials ? ' ' : ''}${t.materials ? '🪵' + t.materials : ''}${!t.food && !t.materials ? '—' : ''}${hasFreshWater ? ' +🌾1' : ''}</span></div>
-    <div class="hex-info-row"><span class="label">Movement cost</span><span class="value">${t.movement}</span></div>
-    <div class="hex-info-row"><span class="label">Territory</span><span class="value">${inTerr ? '✅ Yours' : '—'}</span></div>`;
-
-  // Show existing building
-  if (hex.building) {
-    const bDef = BUILDINGS[hex.building];
-    if (hex.buildProgress > 0) {
-      const turnsLeft = hex.workers > 0 ? Math.ceil(hex.buildProgress / hex.workers) : '∞';
-      const totalWork = bDef.buildTurns;
-      const workDone = totalWork - hex.buildProgress;
-      const progress = Math.round((workDone / totalWork) * 100);
-
-      html += `<div class="building-display">
-        <div class="bd-name">${bDef.icon} ${bDef.name}</div>
-        <div class="bd-detail">🔨 ${hex.buildProgress} work remaining${hex.workers > 0 ? ` · ~${turnsLeft} turn${turnsLeft !== 1 ? 's' : ''}` : ' · stalled!'}</div>
-        <div class="building-progress-bar">
-          <div class="progress-fill" style="width: ${progress}%"></div>
-        </div>
-        <button class="demolish-btn" onclick="demolishBuilding(${hex.col},${hex.row})">✕ Cancel (🪵+${bDef.cost.materials})</button>
-      </div>`;
-    } else {
-      html += `<div class="building-display">
-        <div class="bd-name">${bDef.icon} ${bDef.name}</div>`;
-      if (hex.building === 'settlement') {
-        html += `<div class="bd-detail">🌾+${bDef.autoFood || 0} food (community foraging)</div>`;
-      } else {
-        const refund = Math.floor((bDef.cost.materials || 0) / 2);
-        html += `<div class="bd-detail">Bonus: ${bDef.foodBonus ? '🌾+' + bDef.foodBonus : ''}${bDef.foodBonus && bDef.materialBonus ? ' ' : ''}${bDef.materialBonus ? '🪵+' + bDef.materialBonus : ''} (at full workers)</div>
-        <button class="demolish-btn" onclick="demolishBuilding(${hex.col},${hex.row})">✕ Demolish (🪵+${refund})</button>`;
-      }
-      html += `</div>`;
-    }
-  }
-
-  // Show units on this hex
-  const unitsHere = getUnitsAt(hex.col, hex.row);
-  if (unitsHere.length > 0) {
-    html += `<div class="units-section">
-      <h4>Unit controls</h4>`;
-    for (const unit of unitsHere) {
-      const unitType = UNIT_TYPES[unit.type];
-      const healthColor = unit.health > 75 ? '#5a8a4a' : unit.health > 50 ? '#c9a84c' : unit.health > 25 ? '#d4800a' : '#a94442';
-      const movementInfo = unit.movementLeft < unitType.movement ? ` · Moved` : ` · ${unit.movementLeft}/${unitType.movement} movement`;
-      const isSelected = gameState.selectedUnit && gameState.selectedUnit.id === unit.id;
-
-      html += `
-        <div class="unit-display">
-          <div class="unit-header">
-            <span class="unit-icon">${unitType.icon}</span>
-            <span class="unit-name">${unitType.name}</span>
-            <span class="unit-health" style="color: ${healthColor}">${unit.health}%</span>
-          </div>
-          <div class="unit-details">${unitType.description}${movementInfo}</div>
-          <div class="unit-controls">
-            ${isSelected ?
-              `<button class="detail-btn unit-control-btn" onclick="deselectUnit(); updateSidePanel(gameState.selectedHex); if (window.render) window.render();">✕ Cancel</button>` :
-              `<button class="detail-btn unit-control-btn" onclick="selectUnitForMovement(${unit.id}); updateSidePanel(gameState.selectedHex);">🚶 Move</button>`
-            }
-            <button class="demolish-btn unit-control-btn" onclick="confirmDisbandUnit(${unit.id}); updateSidePanel(gameState.selectedHex);">✕ Disband</button>
-          </div>
-        </div>`;
-    }
-    html += `</div>`;
-  }
-
-  // Show units being trained on this hex
-  const unitsTrainingHere = gameState.unitsInTraining.filter(t => t.col === hex.col && t.row === hex.row);
-  if (unitsTrainingHere.length > 0) {
-    html += `<div class="training-section">
-      <h4>🔨 Units in training</h4>`;
-    for (const training of unitsTrainingHere) {
-      const unitType = UNIT_TYPES[training.type];
-      const progress = Math.round(((training.trainingNeeded - training.trainingProgress) / training.trainingNeeded) * 100);
-      const turnsLeft = training.trainingProgress;
-
-      html += `
-        <div class="training-display">
-          <div class="training-header">
-            <span class="unit-icon">${unitType.icon}</span>
-            <span class="unit-name">${unitType.name}</span>
-            <span class="training-progress">${progress}%</span>
-          </div>
-          <div class="training-details">🔨 ${turnsLeft} turn${turnsLeft !== 1 ? 's' : ''} remaining</div>
-          <div class="training-progress-bar">
-            <div class="progress-fill" style="width: ${progress}%"></div>
-          </div>
-          <button class="demolish-btn" onclick="cancelUnitTraining(${training.col}, ${training.row})">✕ Cancel Training</button>
-        </div>`;
-    }
-    html += `</div>`;
-  }
-
-  // Show external threats on this hex
-  const threatsHere = gameState.externalThreats.filter(t => t.col === hex.col && t.row === hex.row);
-  if (threatsHere.length > 0) {
-    html += `<div class="threats-section">
-      <h4>⚠️ External Threats</h4>`;
-    for (const threat of threatsHere) {
-      const threatType = THREAT_TYPES[threat.type];
-      const healthColor = threat.health > 75 ? '#a94442' : threat.health > 50 ? '#722b2b' : threat.health > 25 ? '#5a1f1f' : '#401515';
-      const targetInfo = threat.target ? ` → targeting (${threat.target.col},${threat.target.row})` : '';
-      html += `
-        <div class="threat-display">
-          <div class="threat-header">
-            <span class="threat-icon">${threatType.icon}</span>
-            <span class="threat-name">${threatType.name}</span>
-            <span class="threat-health" style="color: ${healthColor}">${threat.health}/${threat.maxHealth}</span>
-          </div>
-          <div class="threat-details">Combat: ${threatType.combat} · Movement: ${threatType.movement}${targetInfo}</div>
-          <div class="threat-description">${threatType.description}</div>
-        </div>`;
-    }
-    html += `</div>`;
-  }
-
-  // Show unit training options if in territory and on/adjacent to settlement
-  const nearSettlement = gameState.settlements.some(s =>
-    cubeDistance(offsetToCube(hex.col, hex.row), offsetToCube(s.col, s.row)) <= 1
-  );
-  if (inTerr && nearSettlement) {
-    html += `<div class="build-section">
-      <h4 onclick="toggleTrainingSection()" style="cursor: pointer;">Train Units <span class="section-toggle-hint">click to toggle</span></h4>
-      <div class="training-content collapsed" id="training-content">`;
-    for (const [key, unitType] of Object.entries(UNIT_TYPES)) {
-      const canAffordPop = gameState.population.idle >= unitType.cost.population;
-      const canAffordMaterials = gameState.resources.materials >= unitType.cost.materials;
-      const canTrain = canAffordPop && canAffordMaterials;
-
-      const costStr = `👥${unitType.cost.population} 🪵${unitType.cost.materials}`;
-      const reason = !canAffordPop ? `Need ${unitType.cost.population} idle population` :
-                    !canAffordMaterials ? `Need ${unitType.cost.materials} materials` : '';
-
-      html += `
-        <button class="build-btn${canTrain ? '' : ' disabled'}"
-                ${canTrain ? `onclick="confirmTrainUnit('${key}', ${hex.col}, ${hex.row})"` : ''}
-                ${!canTrain ? 'disabled' : ''}>
-          <div class="bb-header">
-            <span class="bb-icon">${unitType.icon}</span>
-            <span class="bb-name">${unitType.name}</span>
-            <span class="bb-cost">${costStr}</span>
-          </div>
-          <div class="bb-desc">${unitType.description}</div>
-          ${!canTrain ? `<div class="bb-reason">${reason}</div>` : ''}
-        </button>`;
-    }
-    html += `</div></div>`;
-  }
-
-  // Worker assignment controls
-  if (inTerr && maxW > 0) {
-    const canAdd = hex.workers < maxW && gameState.population.idle > 0;
-    const canRemove = hex.workers > 0;
-    const isConstruction = hex.building && hex.buildProgress > 0;
-    const workerLabel = isConstruction ? '🔨 Builders' : (hex.building ? '👥 Workers' : '👥 Gatherer');
-    const emptyMsg = isConstruction ? 'stalled — assign builders!' : (hex.building ? 'nothing — assign workers!' : 'nothing — assign a gatherer!');
-
-    let statusStr;
-    if (isConstruction) {
-      statusStr = hex.workers > 0
-        ? `<span class="yield-val" style="color:var(--text-gold)">Building... (🍖×2 rations)</span>`
-        : `<span class="yield-none">${emptyMsg}</span>`;
-    } else {
-      statusStr = (y.food || y.materials)
-        ? `<span class="yield-val">${y.food ? '🌾' + y.food : ''}${y.food && y.materials ? ' ' : ''}${y.materials ? '🪵' + y.materials : ''}</span>`
-        : `<span class="yield-none">${emptyMsg}</span>`;
-    }
-
-    html += `<div class="worker-section">
-      <div class="worker-controls">
-        <span class="worker-label">${workerLabel}</span>
-        <div class="worker-btns">
-          <button class="worker-btn" ${canRemove ? '' : 'disabled'} onclick="unassignWorker(${hex.col},${hex.row})">−</button>
-          <span class="worker-count">${hex.workers} / ${maxW}</span>
-          <button class="worker-btn" ${canAdd ? '' : 'disabled'} onclick="assignWorker(${hex.col},${hex.row})">+</button>
-        </div>
-      </div>
-      <div class="yield-row">
-        <span class="yield-label">${isConstruction ? 'Progress:' : 'Producing:'}</span>
-        ${statusStr}
-      </div>
-    </div>`;
-  } else if (inTerr && hex.building === 'settlement') {
-    html += `<div class="worker-section">
-      <div class="yield-row">
-        <span class="yield-label">Producing:</span>
-        <span class="yield-val">🌾${y.food}</span>
-      </div>
-    </div>`;
-  }
-
-  // Show build options if in territory and no building
-  if (inTerr && !hex.building) {
-    let buildHtml = '';
-    for (const [key, bDef] of Object.entries(BUILDINGS)) {
-      if (bDef.onlyStart) continue;
-      const terrainValid = bDef.validTerrain.includes(hex.terrain);
-      const riverValid = bDef.validOnRiver && hexHasRiver(hex);
-      const waterAdjValid = bDef.requiresAdjacentWater && hexAdjacentToWater(hex) && bDef.validTerrain.includes(hex.terrain);
-      if (!terrainValid && !riverValid) continue;
-      // If requiresAdjacentWater, terrain alone isn't enough — need water neighbor or river
-      if (bDef.requiresAdjacentWater && !waterAdjValid && !riverValid) continue;
-
-      const canAfford = gameState.resources.materials >= bDef.cost.materials;
-      const reason = canAfford ? '' : `Need ${bDef.cost.materials} materials`;
-
-      const freshWater = hexHasFreshWater(hex);
-      const riverBase = freshWater ? 1 : 0;
-      const riverBldg = freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0;
-      const terrFood = t.food + bDef.foodBonus + riverBase + riverBldg;
-      const terrMat = t.materials + bDef.materialBonus;
-      const riverTag = freshWater ? ' 💧' : '';
-
-      buildHtml += `<button class="build-btn" ${canAfford ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'${key}')" title="${reason}">
-        <span class="b-icon">${bDef.icon}</span>
-        <span class="b-info">
-          <span class="b-name">${bDef.name}</span><br>
-          <span class="b-cost">🪵${bDef.cost.materials} · 🔨${bDef.buildTurns} work · 👥${bDef.maxWorkers}</span>
-          <span class="b-yield"> → ${terrFood ? '🌾' + terrFood : ''}${terrMat ? ' 🪵' + terrMat : ''}${riverTag}</span>
-        </span>
-      </button>`;
-    }
-    if (buildHtml) {
-      html += `<div class="build-section"><h4>Build</h4>${buildHtml}</div>`;
-    } else if (hex.terrain === 'coast' || hex.terrain === 'lake' || hex.terrain === 'ocean') {
-      html += `<div class="build-section" style="opacity:0.6"><em>Water hex — build on adjacent land</em></div>`;
-    }
-  }
-
-  document.getElementById('hex-info-content').innerHTML = html;
-}
-
-function clearSidePanel() {
-  document.querySelector('#hex-info-section h3').innerHTML = 'Select a Hex <span class="section-toggle-hint">click to toggle</span>';
-  document.getElementById('hex-info-content').innerHTML = '<p class="help-text">Click any hex to see details and build options. Your territory extends 3 hexes from each settlement.</p>';
-}
 
 // ---- BUILD ----
 function placeBuilding(col, row, buildingKey) {
@@ -2930,60 +2678,8 @@ function placeBuilding(col, row, buildingKey) {
   if (window.render) window.render();
 }
 
-function showConfirmDialog(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-body').innerHTML = bodyHtml;
-  document.getElementById('confirm-ok').textContent = okLabel;
-  document.getElementById('confirm-cancel').textContent = cancelLabel;
-  const dialog = document.getElementById('confirm-dialog');
-  dialog.classList.add('visible');
 
-  const okBtn = document.getElementById('confirm-ok');
-  const cancelBtn = document.getElementById('confirm-cancel');
 
-  function cleanup() {
-    dialog.classList.remove('visible');
-    okBtn.replaceWith(okBtn.cloneNode(true));
-    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-  }
-
-  document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
-  document.getElementById('confirm-cancel').addEventListener('click', cleanup);
-}
-
-// Wrapper for standard confirm dialog with default labels
-function showConfirmationDialog(title, bodyHtml, onConfirm) {
-  showConfirmDialog(title, bodyHtml, 'Confirm', 'Cancel', onConfirm);
-}
-
-function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
-  document.getElementById('confirm-title').textContent = title;
-  document.getElementById('confirm-body').innerHTML = bodyHtml;
-  document.getElementById('confirm-ok').textContent = okLabel;
-  document.getElementById('confirm-cancel').textContent = cancelLabel;
-
-  // Remove danger class and add primary class
-  const okBtn = document.getElementById('confirm-ok');
-  okBtn.classList.remove('danger');
-  okBtn.classList.add('primary');
-
-  const dialog = document.getElementById('confirm-dialog');
-  dialog.classList.add('visible');
-
-  const cancelBtn = document.getElementById('confirm-cancel');
-
-  function cleanup() {
-    dialog.classList.remove('visible');
-    // Reset to default danger styling for future destructive confirmations
-    okBtn.classList.remove('primary');
-    okBtn.classList.add('danger');
-    okBtn.replaceWith(okBtn.cloneNode(true));
-    cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-  }
-
-  document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
-  document.getElementById('confirm-cancel').addEventListener('click', cleanup);
-}
 
 function demolishBuilding(col, row) {
   const hex = gameState.map[row][col];
@@ -3202,25 +2898,6 @@ document.getElementById('summary-ok').addEventListener('click', () => {
 });
 
 // ---- OVERLAY BLOCKING ----
-function isAnyOverlayOpen() {
-  // Check all overlays that should block turn progression
-  const overlaysToCheck = [
-    'game-menu-overlay',
-    'workforce-overlay',
-    'governance-overlay',
-    'population-details-overlay',
-    'settings-overlay',
-    'saveload-overlay',
-    'dev-overlay',
-    'event-dialog',
-    'confirm-dialog'
-  ];
-
-  return overlaysToCheck.some(id => {
-    const el = document.getElementById(id);
-    return el && el.classList.contains('visible');
-  });
-}
 
 // ---- END TURN ----
 document.getElementById('end-turn-btn').addEventListener('click', () => {
@@ -3508,61 +3185,14 @@ function selectAndFocusUnit(unitId) {
 }
 
 
-function openWorkforceOverlay() {
-  renderWorkforceOverlay();
-  document.getElementById('workforce-overlay').classList.add('visible');
-}
 
-document.getElementById('wf-close').addEventListener('click', () => {
-  document.getElementById('workforce-overlay').classList.remove('visible');
-});
 
-document.getElementById('workforce-overlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('workforce-overlay')) {
-    document.getElementById('workforce-overlay').classList.remove('visible');
-  }
-});
 
-// Workforce tab management
-let workforceActiveTab = 'workers';
-
-function switchWorkforceTab(tab) {
-  workforceActiveTab = tab;
-  document.querySelectorAll('.workforce-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.workforce-tab-panel').forEach(p => {
-    p.classList.toggle('active', p.id === tab + '-tab-panel');
-  });
-
-  // Re-render the active tab content
-  if (tab === 'workers') {
-    renderWorkersTab();
-  } else if (tab === 'units') {
-    renderUnitsTab();
-  }
-}
-
-// Add event listeners for workforce tabs (needs to be done after DOM is loaded)
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('.workforce-tab').forEach(t => {
-    t.addEventListener('click', () => switchWorkforceTab(t.dataset.tab));
-  });
-});
 
 // Governance Overlay
 let governanceActiveTab = 'governance';
 
-function openGovernanceOverlay() {
-  renderGovernanceOverlay();
-  document.getElementById('governance-overlay').classList.add('visible');
-}
 
-function switchGovernanceTab(tab) {
-  governanceActiveTab = tab;
-  document.querySelectorAll('.governance-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.governance-tab-panel').forEach(p => {
-    p.classList.toggle('active', p.id === tab + '-tab-panel');
-  });
-}
 
 function renderGovernanceOverlay() {
   // Wire up tab buttons
@@ -3694,15 +3324,6 @@ function selectGovernanceModel(modelKey) {
   }
 }
 
-document.getElementById('governance-close').addEventListener('click', () => {
-  document.getElementById('governance-overlay').classList.remove('visible');
-});
-
-document.getElementById('governance-overlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('governance-overlay')) {
-    document.getElementById('governance-overlay').classList.remove('visible');
-  }
-});
 
 // Population Details Overlay
 function openPopulationDetails() {
@@ -5595,6 +5216,27 @@ function initGame(seed) {
   if (window.initRendering) {
     window.initRendering(gameState, canvas, mapCanvas, minimapCanvas, canvasW, canvasH, canvasRect);
     console.log('🎮 Rendering system initialized');
+  }
+
+  // Initialize UI systems
+  if (window.initSidePanel) {
+    window.initSidePanel(gameState);
+    console.log('🎮 Side panel system initialized');
+  }
+
+  if (window.initOverlayManager) {
+    window.initOverlayManager(gameState);
+    console.log('🎮 Overlay manager system initialized');
+  }
+
+  if (window.initDialogSystem) {
+    window.initDialogSystem(gameState);
+    console.log('🎮 Dialog system initialized');
+  }
+
+  if (window.initDevPanel) {
+    window.initDevPanel(gameState);
+    console.log('🎮 Dev panel system initialized');
   }
 
   updateTurnDisplay();

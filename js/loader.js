@@ -29,6 +29,10 @@ import * as SaveLoad from '../systems/saveLoad.js';
 import * as Input from '../systems/input.js';
 import * as TurnProcessing from '../systems/turnProcessing.js';
 import * as Rendering from '../systems/rendering.js';
+import * as SidePanel from '../systems/ui/sidePanel.js';
+import * as OverlayManager from '../systems/ui/overlayManager.js';
+import * as DialogSystem from '../systems/ui/dialogSystem.js';
+import * as DevPanel from '../systems/ui/devPanel.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -207,6 +211,75 @@ window.minimapToCamera = Rendering.minimapToCamera;
 window.setDevRenderingFlags = Rendering.setDevRenderingFlags;
 window.updateCanvasRect = Rendering.updateCanvasRect;
 window.setMapDirty = Rendering.setMapDirty;
+
+// Side Panel system
+window.initSidePanel = SidePanel.initSidePanel;
+window.updateSidePanel = SidePanel.updateSidePanel;
+window.clearSidePanel = SidePanel.clearSidePanel;
+
+// Overlay Manager system
+window.initOverlayManager = OverlayManager.initOverlayManager;
+window.isAnyOverlayOpen = OverlayManager.isAnyOverlayOpen;
+window.openOverlay = OverlayManager.openOverlay;
+window.closeOverlay = OverlayManager.closeOverlay;
+window.closeAllOverlays = OverlayManager.closeAllOverlays;
+window.openWorkforceOverlay = OverlayManager.openWorkforceOverlay;
+window.closeWorkforceOverlay = OverlayManager.closeWorkforceOverlay;
+window.openGovernanceOverlay = OverlayManager.openGovernanceOverlay;
+window.closeGovernanceOverlay = OverlayManager.closeGovernanceOverlay;
+window.openPopulationDetailsOverlay = OverlayManager.openPopulationDetailsOverlay;
+window.closePopulationDetailsOverlay = OverlayManager.closePopulationDetailsOverlay;
+window.openSettingsOverlay = OverlayManager.openSettingsOverlay;
+window.closeSettingsOverlay = OverlayManager.closeSettingsOverlay;
+window.openGameMenuOverlay = OverlayManager.openGameMenuOverlay;
+window.closeGameMenuOverlay = OverlayManager.closeGameMenuOverlay;
+window.openDevOverlay = OverlayManager.openDevOverlay;
+window.closeDevOverlay = OverlayManager.closeDevOverlay;
+window.switchWorkforceTab = OverlayManager.switchWorkforceTab;
+window.switchGovernanceTab = OverlayManager.switchGovernanceTab;
+window.getActiveWorkforceTab = OverlayManager.getActiveWorkforceTab;
+window.getActiveGovernanceTab = OverlayManager.getActiveGovernanceTab;
+window.isOverlayOpen = OverlayManager.isOverlayOpen;
+window.handleEscapeKey = OverlayManager.handleEscapeKey;
+
+// Dialog System
+window.initDialogSystem = DialogSystem.initDialogSystem;
+window.showConfirmDialog = DialogSystem.showConfirmDialog;
+window.showConfirmationDialog = DialogSystem.showConfirmationDialog;
+window.showConfirmDialogNonDestructive = DialogSystem.showConfirmDialogNonDestructive;
+window.confirmTrainUnit = DialogSystem.confirmTrainUnit;
+window.confirmBuildBuilding = DialogSystem.confirmBuildBuilding;
+window.confirmDisbandUnit = DialogSystem.confirmDisbandUnit;
+window.confirmDemolishBuilding = DialogSystem.confirmDemolishBuilding;
+window.confirmCancelConstruction = DialogSystem.confirmCancelConstruction;
+window.showAlert = DialogSystem.showAlert;
+window.closeDialog = DialogSystem.closeDialog;
+window.isDialogOpen = DialogSystem.isDialogOpen;
+
+// Dev Panel System
+window.initDevPanel = DevPanel.initDevPanel;
+window.renderDevOverlay = DevPanel.renderDevOverlay;
+window.switchDevTab = DevPanel.switchDevTab;
+window.getActiveDevTab = DevPanel.getActiveDevTab;
+window.renderDevTabContent = DevPanel.renderDevTabContent;
+window.devGroup = DevPanel.devGroup;
+window.devRow = DevPanel.devRow;
+window.devAdjust = DevPanel.devAdjust;
+window.devRandomizeSeed = DevPanel.devRandomizeSeed;
+window.applyDevValues = DevPanel.applyDevValues;
+window.applyDevValuesAndRestart = DevPanel.applyDevValuesAndRestart;
+window.devTriggerEvent = DevPanel.devTriggerEvent;
+window.devClearEventCooldowns = DevPanel.devClearEventCooldowns;
+window.devCreateUnit = DevPanel.devCreateUnit;
+window.devGiveResources = DevPanel.devGiveResources;
+window.devSpawnThreat = DevPanel.devSpawnThreat;
+window.devAddPopulation = DevPanel.devAddPopulation;
+window.devMaxCohesion = DevPanel.devMaxCohesion;
+window.devMinCohesion = DevPanel.devMinCohesion;
+window.updateDevBadge = DevPanel.updateDevBadge;
+window.devToggleRiverVertices = DevPanel.devToggleRiverVertices;
+window.devToggleRiver = DevPanel.devToggleRiver;
+window.setCurrentSeed = DevPanel.setCurrentSeed;
 
 // Game state factory
 window.createGameState = createGameState;

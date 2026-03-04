@@ -3186,8 +3186,16 @@ function resizeCanvas() {
 function getMapPixelSize() { const w = Math.sqrt(3)*HEX_SIZE, h = 2*HEX_SIZE; return { width: w*(MAP_COLS+0.5), height: h*0.75*(MAP_ROWS-1)+h }; }
 
 // ---- TRANSFORMS ----
-function worldToScreen(wx, wy) { const c=gameState.camera; return { x:(wx-c.x)*c.zoom+canvasW/2, y:(wy-c.y)*c.zoom+canvasH/2 }; }
-function screenToWorld(sx, sy) { const c=gameState.camera; return { x:(sx-canvasW/2)/c.zoom+c.x, y:(sy-canvasH/2)/c.zoom+c.y }; }
+function worldToScreen(wx, wy) {
+  if (!gameState || !gameState.camera) return { x: 0, y: 0 };
+  const c=gameState.camera;
+  return { x:(wx-c.x)*c.zoom+canvasW/2, y:(wy-c.y)*c.zoom+canvasH/2 };
+}
+function screenToWorld(sx, sy) {
+  if (!gameState || !gameState.camera) return { x: 0, y: 0 };
+  const c=gameState.camera;
+  return { x:(sx-canvasW/2)/c.zoom+c.x, y:(sy-canvasH/2)/c.zoom+c.y };
+}
 function pageToCanvas(cx, cy) { return { x: cx-canvasRect.left, y: cy-canvasRect.top }; }
 
 // ---- HEX DRAWING ----
@@ -3887,7 +3895,12 @@ function drawMinimap() {
   }
 }
 
-function minimapToCamera(mx,my){const ms=getMapPixelSize();gameState.camera.x=(mx/MM_W)*ms.width;gameState.camera.y=(my/MM_H)*ms.height;}
+function minimapToCamera(mx,my){
+  if(!gameState || !gameState.camera) return;
+  const ms=getMapPixelSize();
+  gameState.camera.x=(mx/MM_W)*ms.width;
+  gameState.camera.y=(my/MM_H)*ms.height;
+}
 
 minimapCanvas.addEventListener('mousedown',(e)=>{minimapDragging=true;const r=minimapCanvas.getBoundingClientRect();minimapToCamera(e.clientX-r.left,e.clientY-r.top);render();e.stopPropagation();e.preventDefault();});
 
@@ -3906,14 +3919,22 @@ function render() {
 // ---- INPUT ----
 let isDragging=false, dragStart={x:0,y:0}, camStart={x:0,y:0}, dragMoved=false;
 
-container.addEventListener('mousedown',(e)=>{if(minimapDragging)return;isDragging=true;dragMoved=false;dragStart={x:e.clientX,y:e.clientY};camStart={x:gameState.camera.x,y:gameState.camera.y};});
+container.addEventListener('mousedown',(e)=>{
+  if(minimapDragging || !gameState || !gameState.camera) return;
+  isDragging=true;
+  dragMoved=false;
+  dragStart={x:e.clientX,y:e.clientY};
+  camStart={x:gameState.camera.x,y:gameState.camera.y};
+});
 
 window.addEventListener('mousemove',(e)=>{
+  if(!gameState || !gameState.camera) return;
+
   if(minimapDragging){const r=minimapCanvas.getBoundingClientRect();minimapToCamera(Math.max(0,Math.min(MM_W,e.clientX-r.left)),Math.max(0,Math.min(MM_H,e.clientY-r.top)));render();return;}
   if(isDragging){const dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;if(Math.abs(dx)>3||Math.abs(dy)>3)dragMoved=true;gameState.camera.x=camStart.x-dx/gameState.camera.zoom;gameState.camera.y=camStart.y-dy/gameState.camera.zoom;render();}
   const cs=pageToCanvas(e.clientX,e.clientY);
   if(cs.x>=0&&cs.x<=canvasW&&cs.y>=0&&cs.y<=canvasH){const w=screenToWorld(cs.x,cs.y),h=pixelToHex(w.x,w.y,HEX_SIZE);
-    if(h.col>=0&&h.col<MAP_COLS&&h.row>=0&&h.row<MAP_ROWS){const hex=gameState.map[h.row][h.col];const rv=hexHasRiver(hex)?' 🏞️':'';document.getElementById('coords-display').textContent=hex.revealed?`${TERRAIN[hex.terrain].icon} ${TERRAIN[hex.terrain].name}${rv} (${h.col},${h.row})`:`Unexplored (${h.col},${h.row})`;}
+    if(h.col>=0&&h.col<MAP_COLS&&h.row>=0&&h.row<MAP_ROWS && gameState.map){const hex=gameState.map[h.row][h.col];const rv=hexHasRiver(hex)?' 🏞️':'';document.getElementById('coords-display').textContent=hex.revealed?`${TERRAIN[hex.terrain].icon} ${TERRAIN[hex.terrain].name}${rv} (${h.col},${h.row})`:`Unexplored (${h.col},${h.row})`;}
     else document.getElementById('coords-display').textContent='—';
   }
 });
@@ -4018,7 +4039,14 @@ function handleHexClick(e) {
   render();
 }
 
-container.addEventListener('wheel',(e)=>{e.preventDefault();const nz=Math.max(0.35,Math.min(2.5,gameState.camera.zoom*(e.deltaY>0?0.9:1.1)));gameState.camera.zoom=nz;document.getElementById('zoom-display').textContent=`Zoom: ${Math.round(nz*100)}%`;render();},{passive:false});
+container.addEventListener('wheel',(e)=>{
+  if(!gameState || !gameState.camera) return;
+  e.preventDefault();
+  const nz=Math.max(0.35,Math.min(2.5,gameState.camera.zoom*(e.deltaY>0?0.9:1.1)));
+  gameState.camera.zoom=nz;
+  document.getElementById('zoom-display').textContent=`Zoom: ${Math.round(nz*100)}%`;
+  render();
+},{passive:false});
 
 // ---- UI ----
 function updateSidePanel(hex) {
@@ -4573,7 +4601,7 @@ document.getElementById('summary-ok').addEventListener('click', () => {
     gameState.pendingEventCheck = false;
     // Small delay to ensure turn summary is fully closed
     setTimeout(() => {
-      processActiveEvents();
+      window.EventSystem.processActiveEvents();
     }, 50);
   }
 });
@@ -4651,6 +4679,8 @@ window.addEventListener('keydown', (e) => {
   )) {
     return;
   }
+
+  if(!gameState || !gameState.camera) return;
 
   const sp = 50 / gameState.camera.zoom; let h = true;
   switch(e.key) {
@@ -6447,15 +6477,15 @@ function renderDevTabContent() {
       <div>
         <h4 style="color:var(--text-light);margin:0 0 4px;font-size:14px">Event State:</h4>
         <div style="color:var(--text-dim);font-size:12px;margin:0 0 8px">
-          <div>Active Events: <span style="color:var(--text-light)">${activeEvents.length}</span></div>
-          <div>Pending Events: <span style="color:var(--text-light)">${pendingEvents.length}</span></div>
+          <div>Active Events: <span style="color:var(--text-light)">${window.EventSystem.activeEvents.length}</span></div>
+          <div>Pending Events: <span style="color:var(--text-light)">${window.EventSystem.pendingEvents.length}</span></div>
           <div>Current Turn: <span style="color:var(--text-light)">${gameState.turn}</span></div>
         </div>
 
         <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">Cooldowns:</h4>
         <div style="max-height:120px;overflow-y:auto;font-size:11px">`;
 
-    const cooldownEntries = Object.entries(eventCooldowns);
+    const cooldownEntries = Object.entries(window.EventSystem.eventCooldowns);
     if (cooldownEntries.length === 0) {
       html += `<div style="color:var(--text-dim)">No events on cooldown</div>`;
     } else {
@@ -6767,26 +6797,26 @@ function devTriggerEvent(eventId) {
   }
 
   // Check if event is already active
-  if (activeEvents.some(e => e.id === eventId)) {
+  if (window.EventSystem.activeEvents.some(e => e.id === eventId)) {
     console.warn('Event already active:', eventId);
     return;
   }
 
   // Add event to active events (bypass normal triggering logic)
-  activeEvents.push({
+  window.EventSystem.activeEvents.push({
     id: eventId,
     triggeredTurn: gameState.turn
   });
 
   // Show the event immediately
-  processActiveEvents();
+  window.EventSystem.processActiveEvents();
 
   console.log('Triggered event:', eventData.title);
   renderDevTabContent(); // Refresh dev panel
 }
 
 function devClearEventCooldowns() {
-  eventCooldowns = {};
+  window.EventSystem.eventCooldowns = {};
   console.log('Cleared all event cooldowns');
   renderDevTabContent(); // Refresh dev panel
 }

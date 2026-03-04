@@ -788,7 +788,10 @@ function selectEventChoice(eventData, choice) {
   const feedback = generateEventFeedback(stateBefore, choice.consequences);
 
   // Remove the event from active events
-  activeEvents = activeEvents.filter(e => e.id !== eventData.id);
+  const eventIndex = activeEvents.findIndex(e => e.id === eventData.id);
+  if (eventIndex !== -1) {
+    activeEvents.splice(eventIndex, 1);
+  }
 
   // Show resolution feedback before closing dialog
   showEventResolution(eventData.title, choice.text, feedback);
@@ -943,7 +946,8 @@ function calculateContextualModifiers(effects) {
 function processPendingEvents() {
   const gameState = getGameState();
   // Process delayed events that should trigger this turn
-  pendingEvents = pendingEvents.filter(pending => {
+  for (let i = pendingEvents.length - 1; i >= 0; i--) {
+    const pending = pendingEvents[i];
     if (pending.turnToTrigger <= gameState.turn) {
       if (pending.followUp) {
         // Trigger follow-up event
@@ -952,10 +956,9 @@ function processPendingEvents() {
           triggerEvent(followUpEvent);
         }
       }
-      return false; // Remove processed event
+      pendingEvents.splice(i, 1); // Remove processed event
     }
-    return true; // Keep future events
-  });
+  }
 }
 
 function processActiveEvents() {
@@ -975,9 +978,9 @@ function processActiveEvents() {
 
 // Reset event system for new game
 function resetEventSystem() {
-  activeEvents = [];
-  eventCooldowns = {};
-  pendingEvents = [];
+  activeEvents.length = 0; // Clear array in place
+  Object.keys(eventCooldowns).forEach(key => delete eventCooldowns[key]); // Clear object in place
+  pendingEvents.length = 0; // Clear array in place
 }
 
 // Export functions for module use

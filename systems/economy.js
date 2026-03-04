@@ -339,11 +339,11 @@ export function wfAddWorker(groupKey) {
       hex.workers++;
       window.gameState.population.employed++;
       window.gameState.population.idle--;
-      window.mapDirty = true;
-      updateAllUI();
-      if (window.workforceActiveTab === 'workers') renderWorkersTab();
-      if (window.gameState.selectedHex) window.updateSidePanel(window.gameState.selectedHex);
-      window.render();
+      if (window.setMapDirty) window.setMapDirty(true);
+      if (window.updateAllUI) window.updateAllUI();
+      if (window.workforceActiveTab === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
+      if (window.gameState.selectedHex && window.updateSidePanel) window.updateSidePanel(window.gameState.selectedHex);
+      if (window.render) window.render();
       return;
     }
   }
@@ -361,11 +361,11 @@ export function wfRemoveWorker(groupKey) {
       g.hexes[i].workers--;
       window.gameState.population.employed--;
       window.gameState.population.idle++;
-      window.mapDirty = true;
-      updateAllUI();
-      if (window.workforceActiveTab === 'workers') renderWorkersTab();
-      if (window.gameState.selectedHex) window.updateSidePanel(window.gameState.selectedHex);
-      window.render();
+      if (window.setMapDirty) window.setMapDirty(true);
+      if (window.updateAllUI) window.updateAllUI();
+      if (window.workforceActiveTab === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
+      if (window.gameState.selectedHex && window.updateSidePanel) window.updateSidePanel(window.gameState.selectedHex);
+      if (window.render) window.render();
       return;
     }
   }

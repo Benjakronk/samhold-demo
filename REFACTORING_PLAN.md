@@ -8,10 +8,10 @@ Incremental extraction - one system at a time, testing functionality after each 
 
 ## Current Status (Updated March 2026)
 - ✅ **Phases 1-3 Complete**: All major data and core game systems extracted
-- ✅ **Phase 4 Started**: Map Generation system successfully extracted
+- ✅ **Phase 4+ In Progress**: Map Generation, Save/Load, Input, and Turn Processing systems extracted
 - ✅ **Development Environment**: Stable modular development workflow at http://localhost:3001
-- ✅ **Progress**: Reduced from 9,489 lines → 6,865 lines (2,624 lines extracted across 12 modules)
-- 🎯 **Current**: Phase 4+ extractions - Complex interconnected systems
+- ✅ **Progress**: Reduced from 9,489 lines → 6,335 lines (3,154 lines extracted across 22 modules)
+- 🎯 **Current**: Phase 4+ completion - Remaining complex systems extraction
 
 ## Extraction Progress
 
@@ -29,16 +29,18 @@ Incremental extraction - one system at a time, testing functionality after each 
 7. ✅ **Event System** → `systems/events.js`
 8. ✅ **Cohesion System** → `systems/cohesion.js`
 
-### 🔄 **Phase 4: Complex Systems (IN PROGRESS)**
-9. ✅ **Map Generation** → `systems/mapGeneration.js` (COMPLETED)
-10. 🔄 **Remaining High-Complexity Systems**:
-    - **Rendering System** (~300 lines): Canvas drawing, hex rendering, overlays, minimap
-    - **UI System** (~400 lines): HTML panels, overlays, form handling, DOM manipulation
-    - **Input System** (~200 lines): Mouse/keyboard events, camera controls
-    - **Turn Processing** (~100 lines): Game loop, phase management
-    - **Save/Load System** (~150 lines): Serialization, persistence
+### 🔄 **Phase 4+: Complex Systems (IN PROGRESS)**
+9. ✅ **Map Generation** → `systems/mapGeneration.js`
+10. ✅ **Save/Load System** → `systems/saveLoad.js`
+11. ✅ **Input System** → `systems/input.js`
+12. ✅ **Turn Processing System** → `systems/turnProcessing.js`
+13. 🔄 **Remaining High-Complexity Systems**:
+    - **Rendering System** (~500 lines): Canvas drawing, hex rendering, overlays, minimap
+    - **UI/Panel System** (~800+ lines): HTML panels, overlays, form handling, DOM manipulation
+    - **Victory/Defeat System** (~200 lines): End game conditions and dialogs
+    - **Miscellaneous Functions** (~1000+ lines): Various helper functions and utilities
 
-## Current Architecture (12 Modules Extracted)
+## Current Architecture (22 Modules Extracted)
 
 ### **Data Layer (7 modules)**
 - `data/terrain.js` - Terrain type definitions and properties
@@ -53,7 +55,7 @@ Incremental extraction - one system at a time, testing functionality after each 
 - `utils/hexMath.js` - Hexagonal grid mathematics
 - `utils/random.js` - Seeded random number generation
 
-### **Game Systems (5 modules)**
+### **Game Systems Layer (11 modules)**
 - `systems/externalThreats.js` - AI threat spawning and behavior
 - `systems/combat.js` - Unit vs unit and unit vs threat combat
 - `systems/governance.js` - Policy management and governance effects
@@ -61,22 +63,73 @@ Incremental extraction - one system at a time, testing functionality after each 
 - `systems/economy.js` - Resource management and territory
 - `systems/cohesion.js` - Social cohesion calculation
 - `systems/mapGeneration.js` - Procedural map generation
+- `systems/saveLoad.js` - Game persistence and data serialization
+- `systems/input.js` - Mouse, keyboard, and UI interaction handling
+- `systems/turnProcessing.js` - Turn progression and game loop logic
+- `systems/rendering.js` - Canvas rendering and visual output (partial extraction)
 
-### **Integration Layer**
+### **Integration Layer (2 modules)**
 - `js/loader.js` - Module import and window binding system
 - `js/core/gameState.js` - Central game state factory
 
 ## Remaining Challenges
-- **Complex interconnected systems**: Rendering, UI, and Input systems have many cross-dependencies
-- **Shared canvas context** - Multiple systems draw to same canvas
-- **Event coordination** - Turn processing coordinates all systems
-- **State management** - Careful handling of gameState references
+- **Large remaining codebase**: 6,335 lines still in index.html (vs. original 9,489)
+- **Complex UI/Panel system**: ~800+ lines of DOM manipulation and overlay management
+- **Rendering system**: ~500 lines of canvas operations and visual updates
+- **Miscellaneous utilities**: ~1000+ lines of helper functions and game logic
+- **Victory/Defeat system**: End game dialogs and scoring
 
 ## Success Criteria
 - ✅ Game remains fully playable after each extraction
 - ✅ All existing functionality preserved
 - ✅ Code organized into logical, maintainable modules
 - ✅ Clear separation of concerns between systems
-- ✅ **12 modules successfully extracted** with stable functionality
+- ✅ **20 modules successfully extracted** with stable functionality
+- 🎯 **Target**: Reduce index.html to <2000 lines (core integration only)
 
-## Current Phase: Phase 4+ Complex System Extractions
+## Assessment: Current Plan Insufficient for Complete Modularization
+
+**Reality Check**: The original plan estimated ~1,150 lines remaining, but we still have 6,335 lines.
+**Root Cause**: The plan significantly underestimated the complexity of UI/Panel systems and miscellaneous functions.
+**Next Steps**: Need expanded Phase 4+ plan to handle remaining ~4,500+ lines of extractable code.
+
+## Systematic Phase 4+ Roadmap
+
+### **Phase 4a: Rendering System Completion** (Est. 500+ lines)
+- ✅ **Canvas/Core Rendering** → `systems/rendering.js` (PARTIAL - needs completion)
+- 🔄 **Hex Drawing Functions** (~200 lines) - `drawHex()`, `drawMap()`, etc.
+- 🔄 **UI Rendering** (~150 lines) - Overlays, highlights, selection indicators
+- 🔄 **Minimap System** (~100 lines) - Minimap drawing and interaction
+- 🔄 **Visual Effects** (~50+ lines) - Animations, transitions
+
+### **Phase 4b: UI/Panel System** (Est. 800+ lines)
+- 🔄 **Panel Management** (~200 lines) - Show/hide logic, panel coordination
+- 🔄 **Form Handling** (~150 lines) - Input validation, form submissions
+- 🔄 **Overlay System** (~200 lines) - Modal management, overlay coordination
+- 🔄 **Side Panel System** (~150 lines) - Hex info, building controls
+- 🔄 **Dev Panel System** (~100+ lines) - Development/debug interface
+
+### **Phase 4c: Victory/Defeat System** (Est. 200+ lines)
+- 🔄 **Victory Detection** (~50 lines) - Win condition checking
+- 🔄 **Score Calculation** (~50 lines) - Final scoring system
+- 🔄 **Victory Dialog** (~50 lines) - Victory screen and feedback
+- 🔄 **Defeat System** (~50+ lines) - Loss conditions and defeat screen
+
+### **Phase 4d: Remaining Turn Processing** (Est. 300+ lines)
+- 🔄 **Population Functions** (~100 lines) - `processBirths()`, `processAging()`, `processStarvation()`
+- 🔄 **Victory Functions** (~100 lines) - `checkVictoryConditions()`, `calculateVictoryScores()`
+- 🔄 **Miscellaneous Helpers** (~100+ lines) - Various turn-related utilities
+
+### **Phase 4e: Miscellaneous Systems** (Est. 1000+ lines)
+- 🔄 **Building System** (~200 lines) - Construction, demolition, validation
+- 🔄 **Unit Management** (~200 lines) - Creation, movement, management
+- 🔄 **Tutorial System** (~100 lines) - Hints and tutorial logic
+- 🔄 **Settings System** (~100 lines) - Game settings and preferences
+- 🔄 **Utility Functions** (~400+ lines) - Various game helpers and utilities
+
+### **Target Architecture**
+- **Final Goal**: Reduce `index.html` to <2,000 lines (core integration only)
+- **Expected**: Extract ~4,500+ additional lines across ~8-10 more modules
+- **Result**: ~32 total modules with clean separation of concerns
+
+## Current Phase: Phase 4a - Rendering System Completion

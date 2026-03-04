@@ -4,8 +4,8 @@
 // Map configuration
 export const MAP_COLS = 20;
 export const MAP_ROWS = 16;
-export const HEX_SIZE = 32;
-export const MAP_PAD = 2; // hexes of padding around actual playable map
+export const HEX_SIZE = 48;
+export const MAP_PAD = 48; // pixel padding around map (same as HEX_SIZE)
 
 // Territory and population
 export const TERRITORY_RADIUS = 3; // hex radius for settlement territory

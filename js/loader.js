@@ -25,6 +25,10 @@ import * as Events from '../systems/events.js';
 import * as Economy from '../systems/economy.js';
 import * as Cohesion from '../systems/cohesion.js';
 import * as MapGeneration from '../systems/mapGeneration.js';
+import * as SaveLoad from '../systems/saveLoad.js';
+import * as Input from '../systems/input.js';
+import * as TurnProcessing from '../systems/turnProcessing.js';
+import * as Rendering from '../systems/rendering.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -139,6 +143,71 @@ window.generateRivers = MapGeneration.generateRivers;
 window.mkHex = MapGeneration.mkHex;
 window.weightedPick = MapGeneration.weightedPick;
 
+// Save/Load system
+window.initSaveLoad = SaveLoad.initSaveLoad;
+window.saveGameToSlot = SaveLoad.saveGameToSlot;
+window.confirmLoadGame = SaveLoad.confirmLoadGame;
+window.loadGameFromSlot = SaveLoad.loadGameFromSlot;
+window.openSaveLoadPanel = SaveLoad.openSaveLoadPanel;
+window.showSaveLoadPanel = SaveLoad.showSaveLoadPanel;
+window.closeSaveLoadPanel = SaveLoad.closeSaveLoadPanel;
+window.switchSaveLoadTab = SaveLoad.switchSaveLoadTab;
+window.performSave = SaveLoad.performSave;
+window.refreshSavesList = SaveLoad.refreshSavesList;
+window.refreshLoadList = SaveLoad.refreshLoadList;
+window.refreshSaveList = SaveLoad.refreshSaveList;
+window.populateSaveName = SaveLoad.populateSaveName;
+window.deleteSave = SaveLoad.deleteSave;
+
+// Input system
+window.initInput = Input.initInput;
+window.pageToCanvas = Input.pageToCanvas;
+window.minimapToCamera = Input.minimapToCamera;
+window.handleMinimapMouseDown = Input.handleMinimapMouseDown;
+window.handleContainerMouseDown = Input.handleContainerMouseDown;
+window.handleWindowMouseMove = Input.handleWindowMouseMove;
+window.handleWindowMouseUp = Input.handleWindowMouseUp;
+window.handleContainerWheel = Input.handleContainerWheel;
+window.handleKeyDown = Input.handleKeyDown;
+window.handleWindowResize = Input.handleWindowResize;
+window.handleScaleUp = Input.handleScaleUp;
+window.handleScaleDown = Input.handleScaleDown;
+window.handleCohesionBarClick = Input.handleCohesionBarClick;
+window.handlePopToggleClick = Input.handlePopToggleClick;
+window.setupEventListeners = Input.setupEventListeners;
+window.setupOverlayEventListeners = Input.setupOverlayEventListeners;
+window.resetInputState = Input.resetInputState;
+
+// Turn Processing system
+window.initTurnProcessing = TurnProcessing.initTurnProcessing;
+window.processTurn = TurnProcessing.processTurn;
+window.processUnitUpkeep = TurnProcessing.processUnitUpkeep;
+window.processBirths = TurnProcessing.processBirths;
+window.processAging = TurnProcessing.processAging;
+window.processStarvation = TurnProcessing.processStarvation;
+window.checkVictoryConditions = TurnProcessing.checkVictoryConditions;
+window.calculateVictoryScores = TurnProcessing.calculateVictoryScores;
+window.trackGovernanceChange = TurnProcessing.trackGovernanceChange;
+
+// Rendering system
+window.initRendering = Rendering.initRendering;
+window.pageToCanvas = Rendering.pageToCanvas;
+window.drawHexPath = Rendering.drawHexPath;
+window.drawHexStatic = Rendering.drawHexStatic;
+window.drawTerrainDetail = Rendering.drawTerrainDetail;
+window.renderMapToCache = Rendering.renderMapToCache;
+window.render = Rendering.render;
+window.drawOverlays = Rendering.drawOverlays;
+window.drawMovementRange = Rendering.drawMovementRange;
+window.drawUnits = Rendering.drawUnits;
+window.drawUnitsInTraining = Rendering.drawUnitsInTraining;
+window.drawThreats = Rendering.drawThreats;
+window.drawMinimap = Rendering.drawMinimap;
+window.minimapToCamera = Rendering.minimapToCamera;
+window.setDevRenderingFlags = Rendering.setDevRenderingFlags;
+window.updateCanvasRect = Rendering.updateCanvasRect;
+window.setMapDirty = Rendering.setMapDirty;
+
 // Game state factory
 window.createGameState = createGameState;
 
@@ -149,7 +218,7 @@ console.log('📦 Available data:', {
   units: Object.keys(UNIT_TYPES).length + ' types',
   threats: Object.keys(THREAT_TYPES).length + ' types'
 });
-console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion, Map Generation');
+console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion, Map Generation, Save/Load, Input, Turn Processing, Rendering');
 
 // Signal that modules are ready
 window.modulesReady = true;

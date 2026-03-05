@@ -33,6 +33,7 @@ import * as SidePanel from '../systems/ui/sidePanel.js';
 import * as OverlayManager from '../systems/ui/overlayManager.js';
 import * as DialogSystem from '../systems/ui/dialogSystem.js';
 import * as DevPanel from '../systems/ui/devPanel.js';
+import * as VictoryDefeat from '../systems/victoryDefeat.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -280,6 +281,24 @@ window.updateDevBadge = DevPanel.updateDevBadge;
 window.devToggleRiverVertices = DevPanel.devToggleRiverVertices;
 window.devToggleRiver = DevPanel.devToggleRiver;
 window.setCurrentSeed = DevPanel.setCurrentSeed;
+
+// Victory/Defeat system
+window.initVictoryDefeat = VictoryDefeat.initVictoryDefeat;
+window.checkVictoryConditions = VictoryDefeat.checkVictoryConditions;
+window.checkLossConditions = VictoryDefeat.checkLossConditions;
+window.calculateVictoryScores = VictoryDefeat.calculateVictoryScores;
+window.showDefeatSummary = VictoryDefeat.showDefeatSummary;
+window.getDefeatLesson = VictoryDefeat.getDefeatLesson;
+window.showPostGameSummary = VictoryDefeat.showPostGameSummary;
+window.generateCivilizationNarrative = VictoryDefeat.generateCivilizationNarrative;
+window.countBuildingsByType = VictoryDefeat.countBuildingsByType;
+window.getOverallRating = VictoryDefeat.getOverallRating;
+window.trackGovernanceChange = VictoryDefeat.trackGovernanceChange;
+window.updateEndTurnButton = VictoryDefeat.updateEndTurnButton;
+window.closeDefeatSummary = VictoryDefeat.closeDefeatSummary;
+window.continuePlay = VictoryDefeat.continuePlay;
+window.restartGame = VictoryDefeat.restartGame;
+window.VICTORY_TARGET_TURN = VictoryDefeat.VICTORY_TARGET_TURN;
 
 // Game state factory
 window.createGameState = createGameState;

@@ -11,7 +11,7 @@ Incremental extraction - one system at a time, testing functionality after each 
 - ✅ **Phase 4a Complete**: Rendering System fully extracted to modular architecture
 - ✅ **Phase 4b Complete**: UI/Panel System fully extracted (4 modules, ~1000+ lines)
 - ✅ **Development Environment**: Stable modular development workflow at http://localhost:3001
-- ✅ **Progress**: Reduced from 9,489 lines → ~4,300 lines (5,200+ lines extracted across 37 modules)
+- ✅ **Progress**: Reduced from 9,489 lines → 5,253 lines (4,236 lines extracted across 37 modules)
 - 🎯 **Current**: Phase 4c - Victory/Defeat System extraction
 
 ## Extraction Progress
@@ -85,11 +85,11 @@ Incremental extraction - one system at a time, testing functionality after each 
 - `js/core/gameState.js` - Central game state factory
 
 ## Remaining Challenges
-- **Large remaining codebase**: 6,335 lines still in index.html (vs. original 9,489)
-- **Complex UI/Panel system**: ~800+ lines of DOM manipulation and overlay management
-- **Rendering system**: ~500 lines of canvas operations and visual updates
-- **Miscellaneous utilities**: ~1000+ lines of helper functions and game logic
-- **Victory/Defeat system**: End game dialogs and scoring
+- **Large remaining codebase**: 5,253 lines still in index.html (vs. original 9,489)
+- **Victory/Defeat system**: ~200 lines of end game dialogs and scoring
+- **Miscellaneous utilities**: ~3000+ lines of helper functions and game logic
+- **Building/Unit systems**: ~1000+ lines of construction and unit management
+- **Settings/Tutorial systems**: ~500+ lines of configuration and guidance
 
 ## Success Criteria
 - ✅ Game remains fully playable after each extraction

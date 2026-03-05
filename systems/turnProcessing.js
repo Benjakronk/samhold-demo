@@ -271,7 +271,7 @@ function processAging(report) {
   }
 
   // Check for graduation to adult workforce
-  const workingAge = gameState.policies.workingAge;
+  const workingAge = gameState.governance.policies.workingAge;
   for (let i = gameState.childCohorts.length - 1; i >= 0; i--) {
     const cohort = gameState.childCohorts[i];
     if (cohort.age >= workingAge) {
@@ -318,73 +318,19 @@ function processStarvation(deficit, report) {
   }
 }
 
-// ---- VICTORY AND SCORING SYSTEM ----
-
+// Victory system now handled by modular victoryDefeat.js
+// Just call the modular victory system
 function checkVictoryConditions() {
-  // Only check at target turn
-  if (gameState.turn !== 200) return;
-
-  const scores = calculateVictoryScores();
-  const totalScore = Object.values(scores).reduce((sum, score) => sum + score, 0);
-
-  gameState.victoryScores = scores;
-  gameState.finalScore = totalScore;
-  gameState.gameEnded = true;
-
-  // Trigger victory dialog
-  setTimeout(() => {
-    if (window.showVictoryDialog) {
-      window.showVictoryDialog(scores, totalScore);
-    }
-  }, 1000);
-}
-
-function calculateVictoryScores() {
-  const scores = {
-    survival: 0,
-    prosperity: 0,
-    cohesion: 0,
-    legacy: 0,
-    resilience: 0,
-    adaptability: 0
-  };
-
-  // Survival (25 points max) - Population size
-  scores.survival = Math.min(25, Math.floor(gameState.population.total / 4));
-
-  // Prosperity (25 points max) - Resources and buildings
-  const totalResources = gameState.resources.food + gameState.resources.materials;
-  scores.prosperity = Math.min(25, Math.floor(totalResources / 20));
-
-  // Cohesion (25 points max) - Social unity
-  scores.cohesion = Math.min(25, Math.floor(gameState.cohesion.total / 4));
-
-  // Legacy (25 points max) - Buildings and infrastructure
-  let buildingCount = 0;
-  for (let r = 0; r < window.MAP_ROWS; r++) {
-    for (let c = 0; c < window.MAP_COLS; c++) {
-      const hex = gameState.map[r][c];
-      if (hex.building && hex.buildProgress <= 0) {
-        buildingCount++;
-      }
-    }
+  if (window.checkVictoryConditions) {
+    window.checkVictoryConditions();
   }
-  scores.legacy = Math.min(25, Math.floor(buildingCount * 2));
-
-  // Resilience (25 points max) - Surviving crises
-  const crisisEvents = gameState.completedEvents ?
-    gameState.completedEvents.filter(e => e.type === 'crisis').length : 0;
-  scores.resilience = Math.min(25, crisisEvents * 5);
-
-  // Adaptability (25 points max) - Governance changes
-  const governanceChanges = gameState.governanceChanges || 0;
-  scores.adaptability = Math.min(25, governanceChanges * 8);
-
-  return scores;
 }
 
+// Delegate to modular victory system
 function trackGovernanceChange() {
-  gameState.governanceChanges = (gameState.governanceChanges || 0) + 1;
+  if (window.trackGovernanceChange) {
+    window.trackGovernanceChange();
+  }
 }
 
 // Export functions for module use
@@ -396,7 +342,6 @@ export {
   processAging,
   processStarvation,
   checkVictoryConditions,
-  calculateVictoryScores,
   trackGovernanceChange
 };
 
@@ -410,7 +355,6 @@ if (typeof window !== 'undefined') {
     processAging,
     processStarvation,
     checkVictoryConditions,
-    calculateVictoryScores,
     trackGovernanceChange
   };
 }

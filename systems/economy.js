@@ -132,7 +132,7 @@ export function assignWorker(col, row) {
   hex.workers++;
   window.gameState.population.employed++;
   window.gameState.population.idle--;
-  window.mapDirty = true;
+  window.setMapDirty(true);
   updateAllUI();
   window.updateSidePanel(hex);
   window.render();
@@ -144,7 +144,7 @@ export function unassignWorker(col, row) {
   hex.workers--;
   window.gameState.population.employed--;
   window.gameState.population.idle++;
-  window.mapDirty = true;
+  window.setMapDirty(true);
   updateAllUI();
   window.updateSidePanel(hex);
   window.render();
@@ -260,6 +260,7 @@ export function getWorkforceGroups() {
 
 // Render workers tab in workforce overlay
 export function renderWorkersTab() {
+  console.log('Rendering workforce groups UI');
   const groups = getWorkforceGroups();
   const pop = window.gameState.population;
 
@@ -341,7 +342,7 @@ export function wfAddWorker(groupKey) {
       window.gameState.population.idle--;
       if (window.setMapDirty) window.setMapDirty(true);
       if (window.updateAllUI) window.updateAllUI();
-      if (window.workforceActiveTab === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
+      if (getActiveWorkforceTab() === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
       if (window.gameState.selectedHex && window.updateSidePanel) window.updateSidePanel(window.gameState.selectedHex);
       if (window.render) window.render();
       return;
@@ -363,7 +364,7 @@ export function wfRemoveWorker(groupKey) {
       window.gameState.population.idle++;
       if (window.setMapDirty) window.setMapDirty(true);
       if (window.updateAllUI) window.updateAllUI();
-      if (window.workforceActiveTab === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
+      if (getActiveWorkforceTab() === 'workers' && window.renderWorkersTab) window.renderWorkersTab();
       if (window.gameState.selectedHex && window.updateSidePanel) window.updateSidePanel(window.gameState.selectedHex);
       if (window.render) window.render();
       return;

@@ -24,38 +24,39 @@ export const UNIT_TYPES = {
     combat: 3, // combat strength
     abilities: ['combat', 'defend'],
     description: 'Defends settlements and fights external threats. Requires materials to equip.'
-  },
-  worker: {
-    name: 'Worker',
-    icon: '🔨',
-    cost: { population: 1, materials: 3 }, // basic tools
-    upkeep: { food: 1 },
-    training: 2, // basic skills training
-    movement: 1, // very slow
-    combat: 0, // no combat ability
-    abilities: ['build'],
-    description: 'Builds improvements on hexes. Slow but essential for expansion.'
-  },
-  elder: {
-    name: 'Elder',
-    icon: '👴',
-    cost: { population: 1, materials: 1 }, // minimal materials, more ceremonial
-    upkeep: { food: 1 },
-    training: 3, // wisdom and cultural training
-    movement: 1, // slow movement
-    combat: 0, // no combat ability
-    abilities: ['culture'],
-    description: 'Maintains cultural traditions and generates Identity. Loss is devastating to oral tradition.'
-  },
-  settler: {
-    name: 'Settler',
-    icon: '🚛',
-    cost: { population: 3, materials: 15 }, // high population and material cost
-    upkeep: { food: 4 }, // high food cost for multiple people
-    training: 5, // extensive preparation and organization
-    movement: 1, // very slow due to carrying supplies
-    combat: 1, // minimal defensive capability
-    abilities: ['found'],
-    description: 'Founds new settlements. Expansion splits population and dilutes cohesion.'
+  // MORE UNIT TYPES TO BE ADDED LATER
+  // },
+  // worker: {
+  //   name: 'Worker',
+  //   icon: '🔨',
+  //   cost: { population: 1, materials: 3 }, // basic tools
+  //   upkeep: { food: 1 },
+  //   training: 2, // basic skills training
+  //   movement: 1, // very slow
+  //   combat: 0, // no combat ability
+  //   abilities: ['build'],
+  //   description: 'Builds improvements on hexes. Slow but essential for expansion.'
+  // },
+  // elder: {
+  //   name: 'Elder',
+  //   icon: '👴',
+  //   cost: { population: 1, materials: 1 }, // minimal materials, more ceremonial
+  //   upkeep: { food: 1 },
+  //   training: 3, // wisdom and cultural training
+  //   movement: 1, // slow movement
+  //   combat: 0, // no combat ability
+  //   abilities: ['culture'],
+  //   description: 'Maintains cultural traditions and generates Identity. Loss is devastating to oral tradition.'
+  // },
+  // settler: {
+  //   name: 'Settler',
+  //   icon: '🚛',
+  //   cost: { population: 3, materials: 15 }, // high population and material cost
+  //   upkeep: { food: 4 }, // high food cost for multiple people
+  //   training: 5, // extensive preparation and organization
+  //   movement: 1, // very slow due to carrying supplies
+  //   combat: 1, // minimal defensive capability
+  //   abilities: ['found'],
+  //   description: 'Founds new settlements. Expansion splits population and dilutes cohesion.'
   }
 };

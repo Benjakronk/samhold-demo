@@ -135,6 +135,7 @@ let workforceActiveTab = 'workers';
 let governanceActiveTab = 'models';
 
 export function switchWorkforceTab(tab) {
+    console.log(`Switching workforce tab to: ${tab}`);
     workforceActiveTab = tab;
     document.querySelectorAll('.workforce-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.workforce-tab-panel').forEach(p => {
@@ -167,6 +168,7 @@ export function getActiveGovernanceTab() {
 
 // Event listener setup for overlay interactions
 function setupOverlayEventListeners() {
+    console.log('Setting up overlay event listeners');
     // Workforce overlay event listeners
     const wfCloseBtn = document.getElementById('wf-close');
     if (wfCloseBtn) {
@@ -238,10 +240,8 @@ function setupOverlayEventListeners() {
     }
 
     // Workforce tab event listeners
-    document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.workforce-tab').forEach(t => {
-            t.addEventListener('click', () => switchWorkforceTab(t.dataset.tab));
-        });
+    document.querySelectorAll('.workforce-tab').forEach(t => {
+        t.addEventListener('click', () => switchWorkforceTab(t.dataset.tab));
     });
 
     // Governance tab event listeners

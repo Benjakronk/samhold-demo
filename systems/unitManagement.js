@@ -1,0 +1,336 @@
+// Unit Management System for Samhold
+// Handles unit creation, training, movement, selection, and disbanding
+// Extracted from main game file for modular architecture
+
+let gameState = null;
+
+function initUnitManagement(gameStateRef) {
+  gameState = gameStateRef;
+}
+
+// ---- UNIT TRAINING ----
+
+function startUnitTraining(type, col, row) {
+  if (!window.UNIT_TYPES[type]) {
+    console.error(`Unknown unit type: ${type}`);
+    return null;
+  }
+
+  const unitType = window.UNIT_TYPES[type];
+
+  if (unitType.cost.population > gameState.population.idle) {
+    return null;
+  }
+  if (unitType.cost.materials > gameState.resources.materials) {
+    return null;
+  }
+
+  const existingUnit = gameState.units.find(u => u.col === col && u.row === row);
+  const existingTraining = gameState.unitsInTraining.find(t => t.col === col && t.row === row);
+  if (existingUnit || existingTraining) {
+    return null;
+  }
+
+  gameState.population.idle -= unitType.cost.population;
+  gameState.population.employed += unitType.cost.population;
+  gameState.resources.materials -= unitType.cost.materials;
+
+  const trainingUnit = {
+    type: type,
+    col: col,
+    row: row,
+    trainingProgress: unitType.training,
+    trainingNeeded: unitType.training
+  };
+
+  gameState.unitsInTraining.push(trainingUnit);
+  return trainingUnit;
+}
+
+function cancelUnitTraining(col, row) {
+  const trainingIndex = gameState.unitsInTraining.findIndex(t => t.col === col && t.row === row);
+  if (trainingIndex === -1) {
+    return false;
+  }
+
+  const training = gameState.unitsInTraining[trainingIndex];
+  const unitType = window.UNIT_TYPES[training.type];
+
+  gameState.population.employed -= unitType.cost.population;
+  gameState.population.idle += unitType.cost.population;
+
+  gameState.unitsInTraining.splice(trainingIndex, 1);
+
+  if (window.setMapDirty) window.setMapDirty(true);
+  window.updateAllUI();
+  if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+  if (window.render) window.render();
+
+  return true;
+}
+
+// ---- UNIT CREATION & DELETION ----
+
+function createUnit(type, col, row) {
+  if (!window.UNIT_TYPES[type]) {
+    console.error(`Unknown unit type: ${type}`);
+    return null;
+  }
+
+  const unitType = window.UNIT_TYPES[type];
+
+  if (unitType.cost.population > gameState.population.idle) {
+    return null;
+  }
+  if (unitType.cost.materials > gameState.resources.materials) {
+    return null;
+  }
+
+  const existingUnit = gameState.units.find(u => u.col === col && u.row === row);
+  if (existingUnit) {
+    return null;
+  }
+
+  const unit = {
+    id: gameState.nextUnitId++,
+    type: type,
+    col: col,
+    row: row,
+    movementLeft: unitType.movement,
+    health: 100,
+    experience: 0,
+    orders: null,
+    lastDamage: 0
+  };
+
+  gameState.population.idle -= unitType.cost.population;
+  gameState.population.employed += unitType.cost.population;
+  gameState.resources.materials -= unitType.cost.materials;
+
+  gameState.units.push(unit);
+
+  if (window.setMapDirty) window.setMapDirty(true);
+  return unit;
+}
+
+function deleteUnit(unitId) {
+  const unitIndex = gameState.units.findIndex(u => u.id === unitId);
+  if (unitIndex === -1) return;
+
+  const unit = gameState.units[unitIndex];
+  const unitType = window.UNIT_TYPES[unit.type];
+
+  const returnedPop = Math.floor(unitType.cost.population / 2);
+  gameState.population.idle += returnedPop;
+  gameState.population.employed -= unitType.cost.population;
+
+  gameState.units.splice(unitIndex, 1);
+  if (window.setMapDirty) window.setMapDirty(true);
+}
+
+// ---- UNIT QUERIES ----
+
+function getUnitsAt(col, row) {
+  return gameState.units.filter(u => u.col === col && u.row === row);
+}
+
+// ---- UNIT MOVEMENT ----
+
+function moveUnit(unitId, targetCol, targetRow) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (!unit) return false;
+
+  const unitType = window.UNIT_TYPES[unit.type];
+  const distance = window.cubeDistance(
+    window.offsetToCube(unit.col, unit.row),
+    window.offsetToCube(targetCol, targetRow)
+  );
+
+  if (distance > unit.movementLeft) return false;
+
+  if (targetCol < 0 || targetCol >= window.MAP_COLS || targetRow < 0 || targetRow >= window.MAP_ROWS) return false;
+
+  const targetHex = gameState.map[targetRow][targetCol];
+
+  if (!canUnitEnterHex(unit, targetHex, targetCol, targetRow)) return false;
+
+  unit.col = targetCol;
+  unit.row = targetRow;
+  unit.movementLeft -= distance;
+
+  if (unit.type === 'scout') {
+    window.revealArea(targetCol, targetRow, 2);
+  }
+
+  const nearbyThreats = gameState.externalThreats.filter(threat => {
+    const dist = window.cubeDistance(
+      window.offsetToCube(targetCol, targetRow),
+      window.offsetToCube(threat.col, threat.row)
+    );
+    return dist <= 1;
+  });
+
+  if (unitType.combat > 0 && nearbyThreats.length > 0) {
+    for (const threat of nearbyThreats) {
+      const combatResult = window.initiateCombat(unit, threat);
+      if (combatResult && combatResult.result !== 'no_combat') {
+        console.log(`Combat initiated: ${combatResult.message}`);
+
+        if (threat.health <= 0) {
+          const index = gameState.externalThreats.indexOf(threat);
+          if (index >= 0) gameState.externalThreats.splice(index, 1);
+        }
+        if (unit.health <= 0) {
+          const index = gameState.units.indexOf(unit);
+          if (index >= 0) {
+            const uType = window.UNIT_TYPES[unit.type];
+            gameState.units.splice(index, 1);
+            gameState.population.employed -= uType.cost.population;
+          }
+        }
+      }
+    }
+  }
+
+  if (window.setMapDirty) window.setMapDirty(true);
+  return true;
+}
+
+function resetUnitMovement() {
+  for (const unit of gameState.units) {
+    const unitType = window.UNIT_TYPES[unit.type];
+    unit.movementLeft = unitType.movement;
+    unit.lastDamage = 0;
+  }
+
+  for (const threat of gameState.externalThreats) {
+    threat.lastDamage = 0;
+  }
+}
+
+// ---- UNIT SELECTION ----
+
+function selectUnit(unitId) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (unit) {
+    gameState.selectedUnit = unit;
+    if (window.setMapDirty) window.setMapDirty(true);
+    return true;
+  }
+  return false;
+}
+
+function selectUnitForMovement(unitId) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (unit) {
+    gameState.selectedUnit = unit;
+    gameState.selectedHex = gameState.map[unit.row][unit.col];
+    if (window.setMapDirty) window.setMapDirty(true);
+    if (window.render) window.render();
+  }
+}
+
+function deselectUnit() {
+  gameState.selectedUnit = null;
+  if (window.setMapDirty) window.setMapDirty(true);
+}
+
+// ---- MOVEMENT CALCULATION ----
+
+function getValidMoveTargets(unit) {
+  if (!unit) return [];
+
+  const validTargets = [];
+
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const distance = window.cubeDistance(
+        window.offsetToCube(unit.col, unit.row),
+        window.offsetToCube(c, r)
+      );
+
+      if (distance <= unit.movementLeft && distance > 0) {
+        const targetHex = gameState.map[r][c];
+        const moveCost = calculateMoveCost(unit, c, r);
+
+        if (moveCost <= unit.movementLeft && canUnitEnterHex(unit, targetHex, c, r)) {
+          validTargets.push({ col: c, row: r, cost: moveCost });
+        }
+      }
+    }
+  }
+
+  return validTargets;
+}
+
+function getBlockedMoveTargets(unit) {
+  const blockedTargets = [];
+
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const distance = window.cubeDistance(
+        window.offsetToCube(unit.col, unit.row),
+        window.offsetToCube(c, r)
+      );
+
+      if (distance <= unit.movementLeft && distance > 0) {
+        const targetHex = gameState.map[r][c];
+        const moveCost = calculateMoveCost(unit, c, r);
+
+        if (moveCost <= unit.movementLeft && !canUnitEnterHex(unit, targetHex, c, r)) {
+          const existingUnit = gameState.units.find(u =>
+            u.id !== unit.id && u.col === c && u.row === r
+          );
+          if (existingUnit) {
+            blockedTargets.push({ col: c, row: r, cost: moveCost, reason: 'unit' });
+          } else {
+            blockedTargets.push({ col: c, row: r, cost: moveCost, reason: 'terrain' });
+          }
+        }
+      }
+    }
+  }
+
+  return blockedTargets;
+}
+
+function calculateMoveCost(unit, targetCol, targetRow) {
+  return window.cubeDistance(
+    window.offsetToCube(unit.col, unit.row),
+    window.offsetToCube(targetCol, targetRow)
+  );
+}
+
+function canUnitEnterHex(unit, hex, targetCol, targetRow) {
+  if (hex.terrain === 'ocean') return false;
+
+  if (hex.terrain === 'mountain') {
+    return unit.type === 'scout';
+  }
+
+  const existingUnit = gameState.units.find(u =>
+    u.id !== unit.id && u.col === targetCol && u.row === targetRow
+  );
+  if (existingUnit) return false;
+
+  return true;
+}
+
+// Export functions
+export {
+  initUnitManagement,
+  startUnitTraining,
+  cancelUnitTraining,
+  createUnit,
+  deleteUnit,
+  getUnitsAt,
+  moveUnit,
+  resetUnitMovement,
+  selectUnit,
+  selectUnitForMovement,
+  deselectUnit,
+  getValidMoveTargets,
+  getBlockedMoveTargets,
+  calculateMoveCost,
+  canUnitEnterHex
+};

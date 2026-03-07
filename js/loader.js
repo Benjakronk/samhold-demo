@@ -33,7 +33,14 @@ import * as SidePanel from '../systems/ui/sidePanel.js';
 import * as OverlayManager from '../systems/ui/overlayManager.js';
 import * as DialogSystem from '../systems/ui/dialogSystem.js';
 import * as DevPanel from '../systems/ui/devPanel.js';
+import * as UIUpdates from '../systems/ui/uiUpdates.js';
+import * as OverlayRenderers from '../systems/ui/overlayRenderers.js';
 import * as VictoryDefeat from '../systems/victoryDefeat.js';
+import * as UnitManagement from '../systems/unitManagement.js';
+import * as Territory from '../systems/territory.js';
+import * as Tutorial from '../systems/tutorial.js';
+import * as Settings from '../systems/settings.js';
+import * as BuildingActions from '../systems/buildingActions.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -259,6 +266,8 @@ window.isDialogOpen = DialogSystem.isDialogOpen;
 
 // Dev Panel System
 window.initDevPanel = DevPanel.initDevPanel;
+window.openDevOverlay = DevPanel.openDevOverlay;
+window.closeDevOverlay = DevPanel.closeDevOverlay;
 window.renderDevOverlay = DevPanel.renderDevOverlay;
 window.switchDevTab = DevPanel.switchDevTab;
 window.getActiveDevTab = DevPanel.getActiveDevTab;
@@ -281,6 +290,19 @@ window.updateDevBadge = DevPanel.updateDevBadge;
 window.devToggleRiverVertices = DevPanel.devToggleRiverVertices;
 window.devToggleRiver = DevPanel.devToggleRiver;
 window.setCurrentSeed = DevPanel.setCurrentSeed;
+window.getCurrentSeed = DevPanel.getCurrentSeed;
+window.toggleFogOfWar = DevPanel.toggleFogOfWar;
+window.adjustAdults = DevPanel.adjustAdults;
+window.forceGovernanceModel = DevPanel.forceGovernanceModel;
+window.adjustCohortByAge = DevPanel.adjustCohortByAge;
+window.setCohortCountByAge = DevPanel.setCohortCountByAge;
+window.devResetHints = DevPanel.devResetHints;
+window.devDisableHints = DevPanel.devDisableHints;
+window.devTestHint = DevPanel.devTestHint;
+window.devShowRandomHint = DevPanel.devShowRandomHint;
+window.isFogOfWarDisabled = DevPanel.isFogOfWarDisabled;
+window.getDevShowRiverVertices = DevPanel.getDevShowRiverVertices;
+window.getDevHighlightRivers = DevPanel.getDevHighlightRivers;
 
 // Victory/Defeat system
 window.initVictoryDefeat = VictoryDefeat.initVictoryDefeat;
@@ -299,6 +321,70 @@ window.closeDefeatSummary = VictoryDefeat.closeDefeatSummary;
 window.continuePlay = VictoryDefeat.continuePlay;
 window.restartGame = VictoryDefeat.restartGame;
 window.VICTORY_TARGET_TURN = VictoryDefeat.VICTORY_TARGET_TURN;
+
+// Unit Management system
+window.initUnitManagement = UnitManagement.initUnitManagement;
+window.startUnitTraining = UnitManagement.startUnitTraining;
+window.cancelUnitTraining = UnitManagement.cancelUnitTraining;
+window.createUnit = UnitManagement.createUnit;
+window.deleteUnit = UnitManagement.deleteUnit;
+window.getUnitsAt = UnitManagement.getUnitsAt;
+window.moveUnit = UnitManagement.moveUnit;
+window.resetUnitMovement = UnitManagement.resetUnitMovement;
+window.selectUnit = UnitManagement.selectUnit;
+window.selectUnitForMovement = UnitManagement.selectUnitForMovement;
+window.deselectUnit = UnitManagement.deselectUnit;
+window.getValidMoveTargets = UnitManagement.getValidMoveTargets;
+window.getBlockedMoveTargets = UnitManagement.getBlockedMoveTargets;
+window.calculateMoveCost = UnitManagement.calculateMoveCost;
+window.canUnitEnterHex = UnitManagement.canUnitEnterHex;
+
+// Overlay Renderers system
+window.initOverlayRenderers = OverlayRenderers.initOverlayRenderers;
+window.renderWorkforceOverlay = OverlayRenderers.renderWorkforceOverlay;
+window.renderUnitsTab = OverlayRenderers.renderUnitsTab;
+window.selectAndFocusUnit = OverlayRenderers.selectAndFocusUnit;
+window.renderGovernanceOverlay = OverlayRenderers.renderGovernanceOverlay;
+window.selectGovernanceModel = OverlayRenderers.selectGovernanceModel;
+window.openPopulationDetails = OverlayRenderers.openPopulationDetails;
+window.closePopulationDetails = OverlayRenderers.closePopulationDetails;
+window.renderPopulationDetails = OverlayRenderers.renderPopulationDetails;
+window.openGameMenu = OverlayRenderers.openGameMenu;
+window.closeGameMenu = OverlayRenderers.closeGameMenu;
+
+// UI Updates system
+window.initUIUpdates = UIUpdates.initUIUpdates;
+window.updateAllUI = UIUpdates.updateAllUI;
+window.updateCohesionDisplay = UIUpdates.updateCohesionDisplay;
+window.updateTurnDisplay = UIUpdates.updateTurnDisplay;
+window.showTurnSummary = UIUpdates.showTurnSummary;
+
+// Territory & Settlement system
+window.initTerritory = Territory.initTerritory;
+window.hexHasRiver = Territory.hexHasRiver;
+window.revealArea = Territory.revealArea;
+window.recalcTerritory = Territory.recalcTerritory;
+window.canFoundSettlement = Territory.canFoundSettlement;
+window.foundSettlement = Territory.foundSettlement;
+window.showSettlementFoundingConfirmation = Territory.showSettlementFoundingConfirmation;
+
+// Tutorial system
+window.initTutorial = Tutorial.initTutorial;
+window.showTutorialHint = Tutorial.showTutorialHint;
+window.showTutorialModal = Tutorial.showTutorialModal;
+window.closeTutorial = Tutorial.closeTutorial;
+
+// Settings & Notifications system
+window.initSettings = Settings.initSettings;
+window.openSettings = Settings.openSettings;
+window.returnToMainMenu = Settings.returnToMainMenu;
+window.showNotification = Settings.showNotification;
+
+// Building Actions system
+window.initBuildingActions = BuildingActions.initBuildingActions;
+window.handleHexClick = BuildingActions.handleHexClick;
+window.placeBuilding = BuildingActions.placeBuilding;
+window.demolishBuilding = BuildingActions.demolishBuilding;
 
 // Game state factory
 window.createGameState = createGameState;

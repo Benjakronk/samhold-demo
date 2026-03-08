@@ -745,7 +745,7 @@ export function toggleFogOfWar() {
 export function updateDevBadge() {
   const badge = document.getElementById('dev-badge');
   if (fogOfWarDisabled) {
-    badge.textContent = 'DEV \u2014 Full map revealed';
+    badge.textContent = 'DEV \u2014 Fog of war disabled';
     badge.style.display = '';
   } else {
     badge.textContent = 'DEV \u2014 Fog of war enabled';

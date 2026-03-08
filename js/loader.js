@@ -63,6 +63,7 @@ window.WORKING_AGE_MAX = CONSTANTS.WORKING_AGE_MAX;
 window.WORKING_AGE = CONSTANTS.WORKING_AGE;
 window.SEASONS = CONSTANTS.SEASONS;
 window.DEV_MODE = CONSTANTS.DEV_MODE;
+window.BASE_BIRTH_RATE = CONSTANTS.BASE_BIRTH_RATE;
 
 // Utility functions
 window.createRNG = createRNG;
@@ -174,7 +175,6 @@ window.deleteSave = SaveLoad.deleteSave;
 // Input system
 window.initInput = Input.initInput;
 window.pageToCanvas = Input.pageToCanvas;
-window.minimapToCamera = Input.minimapToCamera;
 window.handleMinimapMouseDown = Input.handleMinimapMouseDown;
 window.handleContainerMouseDown = Input.handleContainerMouseDown;
 window.handleWindowMouseMove = Input.handleWindowMouseMove;

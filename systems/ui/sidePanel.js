@@ -299,7 +299,7 @@ function hexHasFreshWater(hex) { return hex.hasRiver || hexAdjacentToLake(hex); 
 
 function isInTerritory(col, row) {
     if (!gameState) return false;
-    return gameState.settlements.some(s => cubeDistance(offsetToCube(col, row), offsetToCube(s.col, s.row)) <= 3);
+    return gameState.territory.has(`${col},${row}`);
 }
 
 function getHexYield(hex) {
@@ -315,7 +315,7 @@ function getHexYield(hex) {
     // Add building bonuses
     if (hex.building && hex.buildProgress === 0) {
         const building = BUILDINGS[hex.building];
-        const efficiency = hex.workers / building.maxWorkers;
+        const efficiency = building.maxWorkers > 0 ? hex.workers / building.maxWorkers : 0;
         food += Math.floor((building.foodBonus || 0) * efficiency);
         materials += Math.floor((building.materialBonus || 0) * efficiency);
 

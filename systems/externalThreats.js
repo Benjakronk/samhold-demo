@@ -21,7 +21,7 @@ export function spawnThreat(threatType, col, row) {
   };
 
   window.gameState.externalThreats.push(threat);
-  window.mapDirty = true;
+  if (window.setMapDirty) window.setMapDirty(true);
   return threat;
 }
 
@@ -103,7 +103,7 @@ export function processThreats(report) {
     }
   }
 
-  window.mapDirty = true;
+  if (window.setMapDirty) window.setMapDirty(true);
 }
 
 export function moveThreatTowardTarget(threat) {

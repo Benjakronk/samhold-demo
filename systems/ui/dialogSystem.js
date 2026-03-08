@@ -79,7 +79,7 @@ export function confirmTrainUnit(unitType, col, row) {
     const materialCost = unitData.cost.materials;
     const trainingTime = unitData.training;
 
-    showConfirmDialog(
+    showConfirmDialogNonDestructive(
         `Train ${unitData.name}`,
         `<p>Train a ${unitData.name} at this location?</p>
          <p><strong>Cost:</strong> ${popCost} population, ${materialCost} materials</p>
@@ -88,8 +88,11 @@ export function confirmTrainUnit(unitType, col, row) {
         'Train',
         'Cancel',
         () => {
-            if (window.trainUnit) {
-                window.trainUnit(unitType, col, row);
+            if (window.startUnitTraining) {
+                window.startUnitTraining(unitType, col, row);
+                if (window.updateAllUI) window.updateAllUI();
+                if (window.updateSidePanel) window.updateSidePanel(window.gameState && window.gameState.selectedHex);
+                if (window.render) window.render();
             }
         }
     );
@@ -106,7 +109,7 @@ export function confirmBuildBuilding(col, row, buildingType) {
     const buildTime = buildingData.buildTurns;
     const maxWorkers = buildingData.maxWorkers;
 
-    showConfirmDialog(
+    showConfirmDialogNonDestructive(
         `Build ${buildingData.name}`,
         `<p>Build a ${buildingData.name} at this location?</p>
          <p><strong>Cost:</strong> ${materialCost} materials</p>
@@ -116,8 +119,11 @@ export function confirmBuildBuilding(col, row, buildingType) {
         'Build',
         'Cancel',
         () => {
-            if (window.startBuilding) {
-                window.startBuilding(col, row, buildingType);
+            if (window.placeBuilding) {
+                window.placeBuilding(col, row, buildingType);
+                if (window.updateAllUI) window.updateAllUI();
+                if (window.updateSidePanel) window.updateSidePanel(window.gameState && window.gameState.selectedHex);
+                if (window.render) window.render();
             }
         }
     );

@@ -103,7 +103,7 @@ function loadGameFromSlot(slotName) {
 
     // Update UI to reflect loaded state
     window.updateAllUI();
-    window.mapDirty = true;
+    if (window.setMapDirty) window.setMapDirty(true);
     window.render();
 
     console.log('Game loaded successfully from slot:', slotName);
@@ -187,57 +187,74 @@ function performSave() {
 
 function refreshSavesList() {
   const saves = JSON.parse(localStorage.getItem('samhold_saves') || '{}');
-  const container = document.getElementById('saves-list');
+  const savesList = document.getElementById('saves-list');
+  savesList.innerHTML = '';
 
-  if (Object.keys(saves).length === 0) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-style:italic;text-align:center;padding:20px;">No saves found</div>';
+  const saveEntries = Object.entries(saves).sort((a, b) => b[1].timestamp - a[1].timestamp);
+
+  if (saveEntries.length === 0) {
+    savesList.innerHTML = '<div style="color: var(--text-dim); font-style: italic; text-align: center; padding: 20px;">No saved games</div>';
     return;
   }
 
-  container.innerHTML = Object.entries(saves)
-    .sort((a, b) => b[1].timestamp - a[1].timestamp)
-    .map(([name, data]) => {
-      const date = new Date(data.timestamp).toLocaleString();
-      const turn = data.gameState.turn || 0;
-      const season = ['Spring', 'Summer', 'Autumn', 'Winter'][data.gameState.season || 0];
+  saveEntries.forEach(([name, data]) => {
+    const item = document.createElement('div');
+    item.className = 'save-item';
 
-      return `
-        <div class="save-item">
-          <div class="save-info clickable" onclick="window.populateSaveName('${name}')">
-            <div class="save-name">${name}</div>
-            <div class="save-details">Turn ${turn} (${season}) • ${date}</div>
-          </div>
-          <button onclick="window.deleteSave('${name}')" style="color:var(--accent-red)">×</button>
+    const date = new Date(data.timestamp).toLocaleDateString();
+    const time = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    const turn = data.gameState.turn || 0;
+    const season = ['🌱 Spring', '☀️ Summer', '🍂 Autumn', '❄️ Winter'][data.gameState.season || 0];
+
+    item.innerHTML = `
+      <div class="save-item-content" onclick="window.populateSaveName('${name.replace(/'/g, "\\'")}')">
+        <div class="save-item-name">${name}</div>
+        <div class="save-item-info">
+          <span>Turn ${turn} (${season})</span>
+          <span>${date} ${time}</span>
         </div>
-      `;
-    }).join('');
+      </div>
+      <button class="save-delete-btn" onclick="event.stopPropagation(); window.deleteSave('${name.replace(/'/g, "\\'")}')" title="Delete save">Delete</button>
+    `;
+
+    savesList.appendChild(item);
+  });
 }
 
 function refreshLoadList() {
   const saves = JSON.parse(localStorage.getItem('samhold_saves') || '{}');
-  const container = document.getElementById('load-saves-list');
+  const loadList = document.getElementById('load-saves-list');
+  loadList.innerHTML = '';
 
-  if (Object.keys(saves).length === 0) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-style:italic;text-align:center;padding:20px;">No saves found</div>';
+  const saveEntries = Object.entries(saves).sort((a, b) => b[1].timestamp - a[1].timestamp);
+
+  if (saveEntries.length === 0) {
+    loadList.innerHTML = '<div style="color: var(--text-dim); font-style: italic; text-align: center; padding: 20px;">No saved games</div>';
     return;
   }
 
-  container.innerHTML = Object.entries(saves)
-    .sort((a, b) => b[1].timestamp - a[1].timestamp)
-    .map(([name, data]) => {
-      const date = new Date(data.timestamp).toLocaleString();
-      const turn = data.gameState.turn || 0;
-      const season = ['Spring', 'Summer', 'Autumn', 'Winter'][data.gameState.season || 0];
+  saveEntries.forEach(([name, data]) => {
+    const item = document.createElement('div');
+    item.className = 'save-item';
 
-      return `
-        <div class="save-item clickable" onclick="confirmLoadGame('${name}')">
-          <div class="save-info">
-            <div class="save-name">${name}</div>
-            <div class="save-details">Turn ${turn} (${season}) • ${date}</div>
-          </div>
+    const date = new Date(data.timestamp).toLocaleDateString();
+    const time = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    const turn = data.gameState.turn || 0;
+    const season = ['🌱 Spring', '☀️ Summer', '🍂 Autumn', '❄️ Winter'][data.gameState.season || 0];
+
+    item.innerHTML = `
+      <div class="save-item-content" onclick="window.confirmLoadGame('${name.replace(/'/g, "\\'")}')">
+        <div class="save-item-name">${name}</div>
+        <div class="save-item-info">
+          <span>Turn ${turn} (${season})</span>
+          <span>${date} ${time}</span>
         </div>
-      `;
-    }).join('');
+      </div>
+      <button class="save-delete-btn" onclick="event.stopPropagation(); window.deleteSave('${name.replace(/'/g, "\\'")}')" title="Delete save">Delete</button>
+    `;
+
+    loadList.appendChild(item);
+  });
 }
 
 function refreshSaveList() {

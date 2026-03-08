@@ -28,11 +28,11 @@ function processTurn() {
       if (hex.workers > 0) {
         hex.buildProgress = Math.max(0, hex.buildProgress - hex.workers);
         report.constructionWorkers += hex.workers;
+        if (window.setMapDirty) window.setMapDirty(true);
         if (hex.buildProgress <= 0) {
           report.buildingsCompleted.push({ name: window.BUILDINGS[hex.building].name, col: c, row: r });
           report.events.push(`${window.BUILDINGS[hex.building].icon} ${window.BUILDINGS[hex.building].name} completed at (${c},${r}).`);
           // Workers stay assigned — now they work the completed building
-          window.mapDirty = true;
         }
       }
     }
@@ -53,7 +53,7 @@ function processTurn() {
 
       // Remove from training queue
       gameState.unitsInTraining.splice(i, 1);
-      window.mapDirty = true;
+      if (window.setMapDirty) window.setMapDirty(true);
     }
   }
 

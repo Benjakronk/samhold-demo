@@ -170,7 +170,7 @@ export function processCombatPhase(report) {
   }
 
   if (combatResults.length > 0) {
-    window.mapDirty = true;
+    if (window.setMapDirty) window.setMapDirty(true);
   }
 }
 

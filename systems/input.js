@@ -15,8 +15,6 @@ let canvasRect = null;
 let minimapCanvas = null;
 let container = null;
 
-// Constants that will be imported from main
-let MM_W, MM_H;
 let canvasW, canvasH;
 
 // Initialize input system
@@ -25,8 +23,6 @@ function initInput(gameStateRef, canvasRectRef, minimapCanvasRef, containerRef, 
   canvasRect = canvasRectRef;
   minimapCanvas = minimapCanvasRef;
   container = containerRef;
-  MM_W = mmWidth;
-  MM_H = mmHeight;
   canvasW = canvasWidth;
   canvasH = canvasHeight;
 
@@ -41,22 +37,12 @@ function pageToCanvas(cx, cy) {
 
 // ---- MINIMAP FUNCTIONS ----
 
-function minimapToCamera(mmX, mmY) {
-  if (!gameState || !gameState.camera) return;
-
-  const mapPixelSize = window.getMapPixelSize();
-
-  // Convert minimap coordinates to camera position
-  gameState.camera.x = (mmX / MM_W) * mapPixelSize.width - canvasW / (2 * gameState.camera.zoom);
-  gameState.camera.y = (mmY / MM_H) * mapPixelSize.height - canvasH / (2 * gameState.camera.zoom);
-}
-
 // ---- MOUSE EVENT HANDLERS ----
 
 function handleMinimapMouseDown(e) {
   minimapDragging = true;
   const r = minimapCanvas.getBoundingClientRect();
-  minimapToCamera(e.clientX - r.left, e.clientY - r.top);
+  if (window.minimapToCamera) window.minimapToCamera(e.clientX - r.left, e.clientY - r.top);
   window.render();
   e.stopPropagation();
   e.preventDefault();
@@ -75,9 +61,9 @@ function handleWindowMouseMove(e) {
 
   if (minimapDragging) {
     const r = minimapCanvas.getBoundingClientRect();
-    minimapToCamera(
-      Math.max(0, Math.min(MM_W, e.clientX - r.left)),
-      Math.max(0, Math.min(MM_H, e.clientY - r.top))
+    if (window.minimapToCamera) window.minimapToCamera(
+      Math.max(0, Math.min(r.width, e.clientX - r.left)),
+      Math.max(0, Math.min(r.height, e.clientY - r.top))
     );
     window.render();
     return;
@@ -467,7 +453,6 @@ function resetInputState() {
 export {
   initInput,
   pageToCanvas,
-  minimapToCamera,
   handleMinimapMouseDown,
   handleContainerMouseDown,
   handleWindowMouseMove,
@@ -489,7 +474,6 @@ if (typeof window !== 'undefined') {
   window.Input = {
     initInput,
     pageToCanvas,
-    minimapToCamera,
     handleMinimapMouseDown,
     handleContainerMouseDown,
     handleWindowMouseMove,

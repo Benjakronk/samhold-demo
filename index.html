@@ -29,7 +29,7 @@
   </div>
 </div>
 
-<div id="dev-badge">DEV — Full map revealed</div>
+<div id="dev-badge">DEV - Mode</div>
 
 <div id="canvas-container"><canvas id="game-canvas"></canvas></div>
 
@@ -237,7 +237,7 @@
     </div>
 
     <div class="workforce-tab-panel" id="units-tab-panel">
-      <div class="units-summary" id="units-summary"></div>
+      <div class="wf-summary" id="units-summary"></div>
       <div id="units-management"></div>
     </div>
 
@@ -362,17 +362,7 @@
 // SAMHOLD — Phase 2: Core Economy
 // ============================================================
 
-const DEV_MODE = true;
-let fogOfWarDisabled = true; // Developer toggle for fog of war
-const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
-const HEX_SIZE = 48;
-const MAP_COLS = 20;
-const MAP_ROWS = 16;
-const TERRITORY_RADIUS = 3;
-let FOOD_PER_POP = 2; // food consumed per person per turn
-const FOOD_PER_CHILD = 1; // children consume half rations
-let BASE_BIRTH_RATE = 0.12; // slightly increased for better population growth dynamics
-let WORKING_AGE = 10; // policy slider: age when children join workforce (6-16)
+// Constants are defined in data/constants.js and exposed via js/loader.js as window.*
 
 // ---- DATA DEFINITIONS ----
 // Note: TERRAIN, BUILDINGS, UNIT_TYPES, THREAT_TYPES, and constants are now loaded from modules
@@ -439,6 +429,7 @@ const mapCtx = mapCanvas.getContext('2d');
 let mapDirty = true;
 
 function resizeCanvas() {
+  if (!window.HEX_SIZE) return; // modules not yet loaded
   const rect = container.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   canvas.width = Math.round(rect.width * dpr); canvas.height = Math.round(rect.height * dpr);
@@ -475,7 +466,7 @@ window.worldToScreen = worldToScreen;
 
 // ---- HEX DRAWING ----
 
-const MAP_PAD = HEX_SIZE;
+// MAP_PAD is defined in data/constants.js and exposed via window.MAP_PAD
 
 
 
@@ -785,6 +776,9 @@ function initGame(seed) {
     }
   }
 
+  // Generate rivers AFTER terrain diversity is in place so sources exist
+  generateRivers(gameState.map, MAP_COLS, MAP_ROWS, createRNG(seed + 1), gameState);
+
 
   // Place starting settlement
   gameState.map[sr][sc].building = 'settlement';
@@ -811,8 +805,29 @@ function initGame(seed) {
   gameState.population.employed = autoAssigned;
   gameState.population.idle = gameState.population.total - autoAssigned;
 
-  const fogDisabled = window.isFogOfWarDisabled ? window.isFogOfWarDisabled() : fogOfWarDisabled;
-  if (!fogDisabled) revealArea(sc, sr, 3);
+  const fogDisabled = window.isFogOfWarDisabled ? window.isFogOfWarDisabled() : false;
+  if (!fogDisabled) {
+    revealArea(sc, sr, 3);
+    // Reveal one hex beyond territory boundary
+    for (let r = 0; r < MAP_ROWS; r++) {
+      for (let c = 0; c < MAP_COLS; c++) {
+        if (window.isInTerritory(c, r)) {
+          gameState.map[r][c].revealed = true;
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const nr = r + dr;
+              const nc = c + dc;
+              if (nr >= 0 && nr < MAP_ROWS && nc >= 0 && nc < MAP_COLS) {
+                if (cubeDistance(offsetToCube(c, r), offsetToCube(nc, nr)) <= 1) {
+                  gameState.map[nr][nc].revealed = true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   const ms = getMapPixelSize();
   gameState.camera.x = ms.width / 2;

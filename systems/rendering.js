@@ -26,7 +26,7 @@ let canvasH = 0;
 // Dev panel variables for rendering control
 let devShowRiverVertices = false;
 let devHighlightRivers = new Set();
-let fogOfWarDisabled = true; // DEV_MODE typically sets this
+let fogOfWarDisabled = false;
 
 // Initialize rendering system
 function initRendering(gameStateRef, canvasElement, mapCanvasElement, minimapCanvasElement, canvasWidth, canvasHeight, canvasRectRef) {
@@ -208,20 +208,41 @@ function renderMapToCache() {
     for (let i = 0; i < pts.length - 1; i++) {
       const p0 = pts[i], p1 = pts[i + 1];
 
-      // Check if both endpoints of this river segment are in revealed hexes
+      // Fog of war: a segment is visible only if at least one of the 2 hexes
+      // that border it is revealed. River vertices sit exactly at hex corners,
+      // equidistant from 3 hex centers, so pixelToHex is ambiguous there.
+      // Instead, find the hexes adjacent to BOTH endpoints — those are the 2
+      // hexes sharing the edge the segment lies on.
       if (!fogOfWarDisabled) {
-        const hex0 = pixelToHex(p0.x, p0.y, CONSTANTS.HEX_SIZE);
-        const hex1 = pixelToHex(p1.x, p1.y, CONSTANTS.HEX_SIZE);
+        const size = CONSTANTS.HEX_SIZE;
+        const cols = CONSTANTS.MAP_COLS, rows = CONSTANTS.MAP_ROWS;
+        const threshold = size * 1.1;
 
-        // Skip this segment only if both endpoints are in unrevealed hexes
-        const hex0Revealed = (hex0.col >= 0 && hex0.col < CONSTANTS.MAP_COLS && hex0.row >= 0 && hex0.row < CONSTANTS.MAP_ROWS)
-          ? gameState.map[hex0.row][hex0.col].revealed : false;
-        const hex1Revealed = (hex1.col >= 0 && hex1.col < CONSTANTS.MAP_COLS && hex1.row >= 0 && hex1.row < CONSTANTS.MAP_ROWS)
-          ? gameState.map[hex1.row][hex1.col].revealed : false;
+        const nearKeys = (vx, vy) => {
+          const h = pixelToHex(vx, vy, size);
+          const keys = [];
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const c = h.col + dc, r = h.row + dr;
+              if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+              const hp = hexToPixel(c, r, size);
+              if (Math.hypot(vx - hp.x, vy - hp.y) <= threshold) keys.push(c * 10000 + r);
+            }
+          }
+          return keys;
+        };
 
-        if (!hex0Revealed && !hex1Revealed) {
-          continue; // Skip this river segment only if both endpoints are unrevealed
+        const near0 = nearKeys(p0.x, p0.y);
+        const near1Set = new Set(nearKeys(p1.x, p1.y));
+
+        let visible = false;
+        for (const key of near0) {
+          if (near1Set.has(key)) {
+            const c = Math.floor(key / 10000), r = key % 10000;
+            if (gameState.map[r][c].revealed) { visible = true; break; }
+          }
         }
+        if (!visible) continue;
       }
 
       const sk = (p0.key && p1.key) ? _segKey(p0.key, p1.key) : null;

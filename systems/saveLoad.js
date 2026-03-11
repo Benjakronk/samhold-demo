@@ -89,8 +89,29 @@ function loadGameFromSlot(slotName) {
       loadedGameState.riverSegmentCounts = new Map(loadedGameState.riverSegmentCounts);
     }
 
+    // Migrate missing fields for saves created before newer phases.
+    // Without this, Object.assign won't overwrite existing session data for absent keys.
+    if (!Array.isArray(loadedGameState.traditions)) loadedGameState.traditions = [];
+    if (!Array.isArray(loadedGameState.chronicle)) loadedGameState.chronicle = [];
+    if (!loadedGameState.culture) loadedGameState.culture = {};
+    const cultureDef = {
+      deathsOccurred: false, storytellers: 0, storyProgress: 0,
+      turnsWithoutStoryteller: 0, stories: [], sacredPlaces: [],
+      namedFeatures: [], sacredBondsAccumulator: 0
+    };
+    for (const [k, v] of Object.entries(cultureDef)) {
+      if (loadedGameState.culture[k] === undefined) {
+        loadedGameState.culture[k] = Array.isArray(v) ? [] : v;
+      }
+    }
+
     // Apply loaded state
     Object.assign(gameState, loadedGameState);
+
+    // Restore globals that live outside gameState
+    if (gameState.governance && gameState.governance.policies && gameState.governance.policies.workingAge != null) {
+      window.WORKING_AGE = gameState.governance.policies.workingAge;
+    }
 
     // Update seed
     if (saveData.currentSeed && setCurrentSeed) {
@@ -114,42 +135,22 @@ function loadGameFromSlot(slotName) {
 
 // ---- UI MANAGEMENT FUNCTIONS ----
 
-function openSaveLoadPanel(defaultTab = 'save') {
+function openSaveLoadPanel() {
   window.closeGameMenu();
-  showSaveLoadPanel(defaultTab);
+  showSaveLoadPanel();
 }
 
-function showSaveLoadPanel(defaultTab = 'save') {
+function showSaveLoadPanel() {
   document.getElementById('saveload-overlay').classList.add('visible');
   document.getElementById('game-menu-overlay').classList.remove('visible');
-  switchSaveLoadTab(defaultTab);
+  refreshSavesList();
 }
 
 function closeSaveLoadPanel() {
   document.getElementById('saveload-overlay').classList.remove('visible');
 }
 
-function switchSaveLoadTab(tab) {
-  // Remove active class from all tabs
-  document.querySelectorAll('.saveload-tab').forEach(t => t.classList.remove('active'));
-
-  // Add active class to selected tab
-  const activeTab = document.querySelector(`.saveload-tab[data-tab="${tab}"]`);
-  if (activeTab) activeTab.classList.add('active');
-
-  // Show appropriate content
-  const saveTab = document.getElementById('save-tab');
-  const loadTab = document.getElementById('load-tab');
-
-  if (saveTab) saveTab.style.display = tab === 'save' ? 'block' : 'none';
-  if (loadTab) loadTab.style.display = tab === 'load' ? 'block' : 'none';
-
-  if (tab === 'save') {
-    refreshSaveList();
-  } else if (tab === 'load') {
-    refreshLoadList();
-  }
-}
+function switchSaveLoadTab() {} // kept for compatibility
 
 function performSave() {
   const nameInput = document.getElementById('save-name-input');
@@ -180,6 +181,27 @@ function performSave() {
     }
   } catch (e) {
     console.error('Error during save:', e.message);
+  }
+}
+
+function performLoad() {
+  const nameInput = document.getElementById('save-name-input');
+  const saveName = nameInput.value.trim();
+
+  if (!saveName) {
+    window.showAlert('No Save Selected', '<p>Click a save entry to select it, then press Load.</p>');
+    return;
+  }
+
+  try {
+    const saves = JSON.parse(localStorage.getItem('samhold_saves') || '{}');
+    if (!saves[saveName]) {
+      window.showAlert('Save Not Found', `<p>No save named "${saveName}" exists.</p>`);
+      return;
+    }
+    confirmLoadGame(saveName);
+  } catch (e) {
+    console.error('Error during load:', e.message);
   }
 }
 
@@ -221,45 +243,9 @@ function refreshSavesList() {
   });
 }
 
-function refreshLoadList() {
-  const saves = JSON.parse(localStorage.getItem('samhold_saves') || '{}');
-  const loadList = document.getElementById('load-saves-list');
-  loadList.innerHTML = '';
+function refreshLoadList() { refreshSavesList(); } // kept for compatibility
 
-  const saveEntries = Object.entries(saves).sort((a, b) => b[1].timestamp - a[1].timestamp);
-
-  if (saveEntries.length === 0) {
-    loadList.innerHTML = '<div style="color: var(--text-dim); font-style: italic; text-align: center; padding: 20px;">No saved games</div>';
-    return;
-  }
-
-  saveEntries.forEach(([name, data]) => {
-    const item = document.createElement('div');
-    item.className = 'save-item';
-
-    const date = new Date(data.timestamp).toLocaleDateString();
-    const time = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-    const turn = data.gameState.turn || 0;
-    const season = ['🌱 Spring', '☀️ Summer', '🍂 Autumn', '❄️ Winter'][data.gameState.season || 0];
-
-    item.innerHTML = `
-      <div class="save-item-content" onclick="window.confirmLoadGame('${name.replace(/'/g, "\\'")}')">
-        <div class="save-item-name">${name}</div>
-        <div class="save-item-info">
-          <span>Turn ${turn} (${season})</span>
-          <span>${date} ${time}</span>
-        </div>
-      </div>
-      <button class="save-delete-btn" onclick="event.stopPropagation(); window.deleteSave('${name.replace(/'/g, "\\'")}')" title="Delete save">Delete</button>
-    `;
-
-    loadList.appendChild(item);
-  });
-}
-
-function refreshSaveList() {
-  refreshSavesList();
-}
+function refreshSaveList() { refreshSavesList(); }
 
 function populateSaveName(saveName) {
   const saveNameInput = document.getElementById('save-name-input');
@@ -295,6 +281,7 @@ export {
   closeSaveLoadPanel,
   switchSaveLoadTab,
   performSave,
+  performLoad,
   refreshSavesList,
   refreshLoadList,
   refreshSaveList,

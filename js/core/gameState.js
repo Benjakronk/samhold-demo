@@ -52,6 +52,18 @@ export function createGameState() {
     camera: { x: 0, y: 0, zoom: 1.0 },
     startHex: null,
     territory: new Set(), // "col,row" strings of controlled hexes
+    traditions: [], // active traditions: [{ id, established, timesPerformed, lastPerformed }]
+    culture: {
+      deathsOccurred: false, // tracks whether any deaths have occurred (for Remembrance unlock)
+      storytellers: 0,       // workers assigned to oral tradition / storytelling role
+      storyProgress: 0,      // fractional accumulator — reaches 1.0 when a new story is ready
+      turnsWithoutStoryteller: 0, // consecutive turns with 0 storytellers (triggers story loss after 4)
+      stories: [],           // [{ id, title, description, identityBonus, turn, year, season }]
+      sacredPlaces: [],      // [{ col, row, reason, name, established }]
+      namedFeatures: [],     // [{ type, col, row, riverId, name }]
+      sacredBondsAccumulator: 0 // fractional accumulator for passive Bonds from sacred places
+    },
+    chronicle: [], // narrative history log of the civilization
     lastTurnReport: null,
     units: [], // array of unit objects
     unitsInTraining: [], // array of units being trained: {type, col, row, trainingProgress, trainingNeeded}

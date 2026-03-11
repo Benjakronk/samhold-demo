@@ -79,7 +79,21 @@ function handleWindowMouseMove(e) {
   }
 
   const cs = pageToCanvas(e.clientX, e.clientY);
-  // Mouse cursor position tracking would go here if needed
+  const coordsEl = document.getElementById('coords-display');
+  if (coordsEl && cs.x >= 0 && cs.x <= canvasW && cs.y >= 0 && cs.y <= canvasH) {
+    const w = window.screenToWorld(cs.x, cs.y);
+    const h = window.pixelToHex(w.x, w.y, window.HEX_SIZE);
+    if (h.col >= 0 && h.col < window.MAP_COLS && h.row >= 0 && h.row < window.MAP_ROWS) {
+      const hex = gameState.map[h.row][h.col];
+      const rv = hex.hasRiver ? ' 🏞️' : '';
+      const TERRAIN = window.TERRAIN;
+      coordsEl.textContent = hex.revealed
+        ? `${TERRAIN[hex.terrain].icon} ${TERRAIN[hex.terrain].name}${rv} (${h.col},${h.row})`
+        : `Unexplored (${h.col},${h.row})`;
+    } else {
+      coordsEl.textContent = '—';
+    }
+  }
 }
 
 function handleWindowMouseUp(e) {

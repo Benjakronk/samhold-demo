@@ -33,15 +33,19 @@ export function initDevPanel(gameStateRef) {
     applyDevValues();
     const seedEl = document.getElementById('seed-input');
     const seed = seedEl ? (parseInt(seedEl.value) || currentSeed) : currentSeed;
-    const startFood = parseInt(document.getElementById('dev-start-food')?.value) || 200;
-    const startMats = parseInt(document.getElementById('dev-start-mats')?.value) || 50;
-    const startPop = parseInt(document.getElementById('dev-start-pop')?.value) || 25;
+    const startFoodEl = document.getElementById('dev-start-food');
+    const startMatsEl = document.getElementById('dev-start-mats');
+    const startPopEl = document.getElementById('dev-start-pop');
     closeDevOverlay();
-    window.initGame(seed);
-    gameState.resources.food = startFood;
-    gameState.resources.materials = startMats;
-    gameState.population.total = startPop;
-    gameState.population.idle = startPop - gameState.population.employed;
+    gameState = window.gameState = window.initGameCore(seed);
+    // Only apply Starting Conditions overrides if economy tab was active (elements exist)
+    if (startFoodEl) gameState.resources.food = parseInt(startFoodEl.value) || 200;
+    if (startMatsEl) gameState.resources.materials = parseInt(startMatsEl.value) || 50;
+    if (startPopEl) {
+      const startPop = parseInt(startPopEl.value) || 18;
+      gameState.population.total = startPop;
+      gameState.population.idle = startPop - gameState.population.employed;
+    }
     window.updateAllUI();
   });
 
@@ -152,7 +156,7 @@ export function renderDevTabContent() {
       devGroup('\u{1F3E0}', 'Starting Conditions', [
         devRow('Starting food', 'dev-start-food', 200),
         devRow('Starting materials', 'dev-start-mats', 50),
-        devRow('Starting pop', 'dev-start-pop', 25),
+        devRow('Starting pop', 'dev-start-pop', 18),
       ]) + `</div></div>`;
   } else if (devActiveTab === 'population') {
     html = `<div class="dev-grid-2col">
@@ -390,7 +394,7 @@ export function renderDevTabContent() {
     if (seedRegen) seedRegen.onclick = () => {
       const seed = parseInt(document.getElementById('seed-input').value) || 7743;
       closeDevOverlay();
-      window.initGame(seed);
+      gameState = window.gameState = window.initGameCore(seed);
     };
   }
 
@@ -399,6 +403,7 @@ export function renderDevTabContent() {
     const vertCheck = document.getElementById('dev-river-verts');
     if (vertCheck) vertCheck.onchange = () => {
       devShowRiverVertices = vertCheck.checked;
+      if (window.setDevRenderingFlags) window.setDevRenderingFlags(devShowRiverVertices, devHighlightRivers, fogOfWarDisabled);
       if (window.setMapDirty) window.setMapDirty(true);
       if (window.render) window.render();
     };
@@ -408,6 +413,7 @@ export function renderDevTabContent() {
         if (el.checked) devHighlightRivers.add(rid);
         else devHighlightRivers.delete(rid);
         el.closest('.dev-river-item').classList.toggle('active', el.checked);
+        if (window.setDevRenderingFlags) window.setDevRenderingFlags(devShowRiverVertices, devHighlightRivers, fogOfWarDisabled);
         if (window.setMapDirty) window.setMapDirty(true);
         if (window.render) window.render();
       };
@@ -527,7 +533,9 @@ function refreshPopulationControls() {
 
 export function applyDevValues() {
   const foodEl = document.getElementById('dev-food-per-pop');
-  if (foodEl) window.FOOD_PER_POP = parseInt(foodEl.value) || 2;
+  if (foodEl) { const v = parseInt(foodEl.value); window.FOOD_PER_POP = isNaN(v) ? 2 : v; }
+  const foodChildEl = document.getElementById('dev-food-per-child');
+  if (foodChildEl) { const v = parseInt(foodChildEl.value); window.FOOD_PER_CHILD = isNaN(v) ? 1 : v; }
 
   const birthRateEl = document.getElementById('dev-birth-rate');
   if (birthRateEl) window.BASE_BIRTH_RATE = parseFloat(birthRateEl.value) || 0.10;
@@ -571,7 +579,7 @@ export function applyDevValuesAndRestart() {
   const seedEl = document.getElementById('seed-input');
   const seed = seedEl ? (parseInt(seedEl.value) || currentSeed) : currentSeed;
   closeDevOverlay();
-  window.initGame(seed);
+  gameState = window.gameState = window.initGameCore(seed);
 }
 
 // ---- Dev event functions ----

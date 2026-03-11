@@ -143,6 +143,9 @@ export function processCombatPhase(report) {
       window.gameState.units.splice(index, 1);
       const unitType = window.UNIT_TYPES[deadUnit.type];
 
+      // Track deaths for tradition unlocks
+      if (window.gameState.culture) window.gameState.culture.deathsOccurred = true;
+
       // Death in combat - no population returns to idle (they died)
       window.gameState.population.employed -= unitType.cost.population;
 
@@ -150,9 +153,11 @@ export function processCombatPhase(report) {
       if (deadUnit.type === 'elder') {
         window.gameState.cohesion.identity = Math.max(0, window.gameState.cohesion.identity - 20);
         report.events.push(`💔 The loss of the Elder devastates cultural knowledge!`);
+        if (window.addChronicleEntry) window.addChronicleEntry('An Elder fell in battle. With their passing, stories and wisdom were lost that can never be recovered.', 'military');
       } else {
         window.gameState.cohesion.satisfaction = Math.max(0, window.gameState.cohesion.satisfaction - 5);
         window.gameState.cohesion.legitimacy = Math.max(0, window.gameState.cohesion.legitimacy - 3);
+        if (window.addChronicleEntry) window.addChronicleEntry(`A ${unitType.name} was lost in combat. The settlement mourns.`, 'military');
       }
     }
   }
@@ -166,6 +171,8 @@ export function processCombatPhase(report) {
       // Victory boosts morale
       window.gameState.cohesion.legitimacy = Math.min(100, window.gameState.cohesion.legitimacy + 8);
       window.gameState.cohesion.satisfaction = Math.min(100, window.gameState.cohesion.satisfaction + 5);
+      const threatName = window.THREAT_TYPES[deadThreat.type]?.name || 'threat';
+      if (window.addChronicleEntry) window.addChronicleEntry(`The ${threatName} were defeated. The people celebrated their defenders and felt safer in their land.`, 'military');
     }
   }
 

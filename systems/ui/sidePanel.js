@@ -156,39 +156,6 @@ export function updateSidePanel(hex) {
         html += `</div>`;
     }
 
-    // Show unit training options if in territory and on/adjacent to settlement
-    const nearSettlement = gameState.settlements.some(s =>
-        cubeDistance(offsetToCube(hex.col, hex.row), offsetToCube(s.col, s.row)) <= 1
-    );
-    if (inTerr && nearSettlement) {
-        html += `<div class="build-section">
-            <h4 onclick="toggleTrainingSection()" style="cursor: pointer;">Train Units <span class="section-toggle-hint">click to toggle</span></h4>
-            <div class="training-content collapsed" id="training-content">`;
-        for (const [key, unitType] of Object.entries(UNIT_TYPES)) {
-            const canAffordPop = gameState.population.idle >= unitType.cost.population;
-            const canAffordMaterials = gameState.resources.materials >= unitType.cost.materials;
-            const canTrain = canAffordPop && canAffordMaterials;
-
-            const costStr = `👥${unitType.cost.population} 🪵${unitType.cost.materials}`;
-            const reason = !canAffordPop ? `Need ${unitType.cost.population} idle population` :
-                        !canAffordMaterials ? `Need ${unitType.cost.materials} materials` : '';
-
-            html += `
-                <button class="build-btn${canTrain ? '' : ' disabled'}"
-                        ${canTrain ? `onclick="confirmTrainUnit('${key}', ${hex.col}, ${hex.row})"` : ''}
-                        ${!canTrain ? 'disabled' : ''}>
-                    <div class="bb-header">
-                        <span class="bb-icon">${unitType.icon}</span>
-                        <span class="bb-name">${unitType.name}</span>
-                        <span class="bb-cost">${costStr}</span>
-                    </div>
-                    <div class="bb-desc">${unitType.description}</div>
-                    ${!canTrain ? `<div class="bb-reason">${reason}</div>` : ''}
-                </button>`;
-        }
-        html += `</div></div>`;
-    }
-
     // Worker assignment controls
     if (inTerr && maxW > 0) {
         const canAdd = hex.workers < maxW && gameState.population.idle > 0;
@@ -263,10 +230,112 @@ export function updateSidePanel(hex) {
             </button>`;
         }
         if (buildHtml) {
-            html += `<div class="build-section"><h4>Build</h4>${buildHtml}</div>`;
-        } else if (hex.terrain === 'coast' || hex.terrain === 'lake' || hex.terrain === 'ocean') {
-            html += `<div class="build-section" style="opacity:0.6"><em>Water hex — build on adjacent land</em></div>`;
+            html += `<div class="build-section">
+                <h4 onclick="toggleBuildSection()" style="cursor: pointer;">Build <span class="section-toggle-hint">click to toggle</span></h4>
+                <div class="build-content collapsed" id="build-content">${buildHtml}</div>
+            </div>`;
         }
+    }
+
+    // Show unit training options if in territory and on/adjacent to settlement
+    const nearSettlement = gameState.settlements.some(s =>
+        cubeDistance(offsetToCube(hex.col, hex.row), offsetToCube(s.col, s.row)) <= 1
+    );
+    if (inTerr && nearSettlement) {
+        let trainHtml = '';
+        for (const [key, unitType] of Object.entries(UNIT_TYPES)) {
+            const canAffordPop = gameState.population.idle >= unitType.cost.population;
+            const canAffordMaterials = gameState.resources.materials >= unitType.cost.materials;
+            const canTrain = canAffordPop && canAffordMaterials;
+
+            const costStr = `👥${unitType.cost.population} 🪵${unitType.cost.materials}`;
+            const reason = !canAffordPop ? `Need ${unitType.cost.population} idle population` :
+                        !canAffordMaterials ? `Need ${unitType.cost.materials} materials` : '';
+
+            trainHtml += `
+                <button class="build-btn${canTrain ? '' : ' disabled'}"
+                        ${canTrain ? `onclick="confirmTrainUnit('${key}', ${hex.col}, ${hex.row})"` : ''}
+                        ${!canTrain ? 'disabled' : ''}>
+                    <div class="bb-header">
+                        <span class="bb-icon">${unitType.icon}</span>
+                        <span class="bb-name">${unitType.name}</span>
+                        <span class="bb-cost">${costStr}</span>
+                    </div>
+                    <div class="bb-desc">${unitType.description}</div>
+                    ${!canTrain ? `<div class="bb-reason">${reason}</div>` : ''}
+                </button>`;
+        }
+        html += `<div class="build-section">
+            <h4 onclick="toggleTrainingSection()" style="cursor: pointer;">Train Units <span class="section-toggle-hint">click to toggle</span></h4>
+            <div class="training-content collapsed" id="training-content">${trainHtml}</div>
+        </div>`;
+    }
+
+    // Sacred place and landscape naming (Phase 8D)
+    if (inTerr) {
+      const sacredPlace = window.getSacredPlace ? window.getSacredPlace(hex.col, hex.row) : null;
+      const hasRiver = hexHasRiver(hex);
+      const canNameTerrain = window.isNameableTerrain ? window.isNameableTerrain(hex.terrain) : false;
+
+      // All rivers touching this hex (may be >1 at lake/ridge/junction hexes)
+      const hexRivers = hasRiver && window.getRiversAtHex ? window.getRiversAtHex(hex.col, hex.row) : [];
+      const namedTerrain = canNameTerrain && window.getNamedFeature ? window.getNamedFeature(hex.col, hex.row) : null;
+
+      const reasons = { founding_site: '🏛️ Founding Site', battle_site: '⚔️ Battle Site', burial_ground: '🕯️ Burial Ground', spiritual_site: '✨ Spiritual Site', natural_wonder: '🌿 Natural Wonder' };
+      let cultureHtml = `<div class="build-section culture-section">`;
+
+      // Sacred place
+      if (sacredPlace) {
+        const label = sacredPlace.name ? `"${sacredPlace.name}"` : reasons[sacredPlace.reason];
+        cultureHtml += `<div class="sacred-place-display">
+          <span class="sacred-icon">⛩️</span>
+          <span class="sacred-label">${label}</span>
+          <span class="sacred-type">${reasons[sacredPlace.reason]}</span>
+        </div>`;
+      } else {
+        cultureHtml += `<button class="build-btn" onclick="confirmDesignateSacredPlace(${hex.col},${hex.row})">
+          <div class="bb-header"><span class="bb-icon">⛩️</span><span class="bb-name">Designate as Sacred</span></div>
+          <div class="bb-desc">Mark this place as culturally significant. Generates passive Bonds.</div>
+        </button>`;
+      }
+
+      // One entry per river touching this hex. Each river gets its own name/rename
+      // control so hexes with multiple rivers (lake, ridge, junction) all work.
+      for (const r of hexRivers) {
+        const namedRiver = window.getNamedRiver ? window.getNamedRiver(r.id) : null;
+        if (namedRiver) {
+          cultureHtml += `<div class="named-feature-display">
+            <span class="named-icon">🏞️</span>
+            <span class="named-label">"${namedRiver.name}"</span>
+            <button class="named-rename-btn" onclick="confirmNameRiver(${hex.col},${hex.row},${r.id})">Rename</button>
+          </div>`;
+        } else {
+          cultureHtml += `<button class="build-btn" onclick="confirmNameRiver(${hex.col},${hex.row},${r.id})">
+            <div class="bb-header"><span class="bb-icon">🏞️</span><span class="bb-name">Name this River</span></div>
+            <div class="bb-desc">Give this river a name. It will appear on the map as it is explored. Identity +1.</div>
+          </button>`;
+        }
+      }
+
+      // Terrain naming (independent of river)
+      if (canNameTerrain) {
+        const featureLabel = hex.terrain.charAt(0).toUpperCase() + hex.terrain.slice(1);
+        if (namedTerrain) {
+          cultureHtml += `<div class="named-feature-display">
+            <span class="named-icon">📌</span>
+            <span class="named-label">"${namedTerrain.name}"</span>
+            <button class="named-rename-btn" onclick="confirmNameFeature(${hex.col},${hex.row})">Rename</button>
+          </div>`;
+        } else {
+          cultureHtml += `<button class="build-btn" onclick="confirmNameFeature(${hex.col},${hex.row})">
+            <div class="bb-header"><span class="bb-icon">📌</span><span class="bb-name">Name this ${featureLabel}</span></div>
+            <div class="bb-desc">Give this place a name. Naming is an act of claiming. Identity +1.</div>
+          </button>`;
+        }
+      }
+
+      cultureHtml += `</div>`;
+      html += cultureHtml;
     }
 
     document.getElementById('hex-info-content').innerHTML = html;
@@ -359,4 +428,33 @@ function getHexNeighbors(col, row) {
     }
 
     return neighbors;
+}
+
+// ---- SIDEBAR SECTION TOGGLES ----
+
+export function toggleSocietySection() {
+    const section = document.getElementById('society-section');
+    section.classList.toggle('collapsed');
+    document.getElementById('cohesion-bar-container').classList.toggle('active', !section.classList.contains('collapsed'));
+}
+
+export function togglePopulationSection() {
+    const section = document.getElementById('labor-section');
+    section.classList.toggle('collapsed');
+    document.getElementById('pop-toggle').classList.toggle('active', !section.classList.contains('collapsed'));
+}
+
+export function toggleHexInfoSection() {
+    const section = document.getElementById('hex-info-section');
+    section.classList.toggle('collapsed');
+}
+
+export function toggleBuildSection() {
+    const content = document.getElementById('build-content');
+    if (content) content.classList.toggle('collapsed');
+}
+
+export function toggleTrainingSection() {
+    const content = document.getElementById('training-content');
+    if (content) content.classList.toggle('collapsed');
 }

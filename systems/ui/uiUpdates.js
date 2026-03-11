@@ -18,7 +18,7 @@ function updateAllUI() {
   document.getElementById('res-food').textContent = gameState.resources.food;
   document.getElementById('res-materials').textContent = gameState.resources.materials;
   document.getElementById('res-pop').textContent = gameState.population.total + window.getTotalChildren();
-  document.getElementById('res-knowledge').textContent = gameState.resources.knowledge;
+  document.getElementById('res-knowledge').textContent = Math.floor(gameState.resources.knowledge);
 
   const df = document.getElementById('delta-food');
   df.textContent = effectiveNetFood >= 0 ? `+${effectiveNetFood}` : `${effectiveNetFood}`;
@@ -27,8 +27,9 @@ function updateAllUI() {
   dm.textContent = inc.netMat >= 0 ? `+${inc.netMat}` : `${inc.netMat}`;
   dm.className = `delta ${inc.netMat > 0 ? 'delta-pos' : inc.netMat < 0 ? 'delta-neg' : 'delta-zero'}`;
 
-  gameState.population.employed = inc.laborUsed;
-  gameState.population.idle = Math.max(0, gameState.population.total - inc.laborUsed);
+  const storytellers = gameState.culture?.storytellers ?? 0;
+  gameState.population.employed = inc.laborUsed + storytellers;
+  gameState.population.idle = Math.max(0, gameState.population.total - inc.laborUsed - storytellers);
   const idleWarn = gameState.population.idle > 5 ? ' \u26A0\uFE0F' : '';
   document.getElementById('pop-display').textContent = `\u{1F465} ${gameState.population.total} adults \u00B7 \u{1F476} ${window.getTotalChildren()} children`;
 
@@ -49,7 +50,7 @@ function updateAllUI() {
   const totalChildren = window.getTotalChildren();
 
   const nextGraduation = gameState.childCohorts
-    .filter(c => c.age >= window.WORKING_AGE - 2)
+    .filter(c => c.age < window.WORKING_AGE)
     .sort((a, b) => b.age - a.age)[0];
   const graduationInfo = nextGraduation
     ? `<div class="hex-info-row"><span class="label">\u23F3 Next workers in</span><span class="value">${window.WORKING_AGE - nextGraduation.age} years (${nextGraduation.count})</span></div>`
@@ -101,8 +102,12 @@ function updateCohesionDisplay() {
   cohesionValueEl.textContent = total;
   cohesionValueEl.style.color = status.color;
 
+  // Compute projected next-turn deltas
+  const projected = window.previewCohesionDeltas ? window.previewCohesionDeltas() : c.lastUpdate;
+  const fmt = (d) => d !== 0 ? ` (${d > 0 ? '+' : ''}${Math.round(d)})` : '';
+
   const container = document.getElementById('cohesion-bar-container');
-  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${c.lastUpdate.identity !== 0 ? ` (${c.lastUpdate.identity > 0 ? '+' : ''}${Math.round(c.lastUpdate.identity)})` : ''}\nLegitimacy: ${c.legitimacy}${c.lastUpdate.legitimacy !== 0 ? ` (${c.lastUpdate.legitimacy > 0 ? '+' : ''}${Math.round(c.lastUpdate.legitimacy)})` : ''}\nSatisfaction: ${c.satisfaction}${c.lastUpdate.satisfaction !== 0 ? ` (${c.lastUpdate.satisfaction > 0 ? '+' : ''}${Math.round(c.lastUpdate.satisfaction)})` : ''}\nBonds: ${c.bonds}${c.lastUpdate.bonds !== 0 ? ` (${c.lastUpdate.bonds > 0 ? '+' : ''}${Math.round(c.lastUpdate.bonds)})` : ''}`;
+  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${fmt(projected.identity)}\nLegitimacy: ${c.legitimacy}${fmt(projected.legitimacy)}\nSatisfaction: ${c.satisfaction}${fmt(projected.satisfaction)}\nBonds: ${c.bonds}${fmt(projected.bonds)}`;
 
   for (const p of ['identity','legitimacy','satisfaction','bonds']) {
     const barEl = document.getElementById(`bar-${p}`);
@@ -111,7 +116,7 @@ function updateCohesionDisplay() {
       barEl.style.width = c[p]+'%';
       valEl.textContent = c[p];
 
-      const change = c.lastUpdate[p];
+      const change = projected[p];
       if (change !== 0) {
         valEl.textContent += ` (${change > 0 ? '+' : ''}${Math.round(change)})`;
         valEl.style.fontWeight = '700';
@@ -137,8 +142,8 @@ function showTurnSummary(report, seasonName, year) {
     <hr class="summary-divider">
     <div class="summary-row"><span class="s-label">\u{1F4E6} Food stockpile</span><span class="s-val">${gameState.resources.food}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F4E6} Materials stockpile</span><span class="s-val">${gameState.resources.materials}</span></div>
-    <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${report.popChange > 0 ? ' <span class="delta-pos">(+' + report.popChange + ')</span>' : report.popChange < 0 ? ' <span class="delta-neg">(' + report.popChange + ')</span>' : ''}</span></div>
-    <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}</span></div>
+    <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${(() => { const d = (report.graduated||0) - (report.adultDeaths||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
+    <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}${(() => { const d = (report.childBirths||0) - (report.childDeaths||0) - (report.graduated||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
   `;
 
   const allEvents = [...report.events];

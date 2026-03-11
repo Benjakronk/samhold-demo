@@ -10,6 +10,7 @@ import { GOVERNANCE_MODELS } from '../data/governance.js';
 import { EVENT_LIBRARY } from '../data/events.js';
 import * as CONSTANTS from '../data/constants.js';
 import { createGameState } from './core/gameState.js';
+import { initGameCore } from './core/initGame.js';
 import { createRNG } from '../utils/random.js';
 import {
   offsetToCube,
@@ -41,6 +42,8 @@ import * as Territory from '../systems/territory.js';
 import * as Tutorial from '../systems/tutorial.js';
 import * as Settings from '../systems/settings.js';
 import * as BuildingActions from '../systems/buildingActions.js';
+import * as Chronicle from '../systems/chronicle.js';
+import * as Culture from '../systems/culture.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -64,6 +67,8 @@ window.WORKING_AGE = CONSTANTS.WORKING_AGE;
 window.SEASONS = CONSTANTS.SEASONS;
 window.DEV_MODE = CONSTANTS.DEV_MODE;
 window.BASE_BIRTH_RATE = CONSTANTS.BASE_BIRTH_RATE;
+window.MM_W = CONSTANTS.MM_W;
+window.MM_H = CONSTANTS.MM_H;
 
 // Utility functions
 window.createRNG = createRNG;
@@ -133,6 +138,8 @@ window.unassignWorker = Economy.unassignWorker;
 window.getWorkforceGroups = Economy.getWorkforceGroups;
 window.renderWorkersTab = Economy.renderWorkersTab;
 window.wfAddWorker = Economy.wfAddWorker;
+window.wfInitiateBuild = Economy.wfInitiateBuild;
+window.findValidHexesForBuilding = Economy.findValidHexesForBuilding;
 window.wfRemoveWorker = Economy.wfRemoveWorker;
 window.openWorkforceOverlay = Economy.openWorkforceOverlay;
 window.hexHasFreshWater = Economy.hexHasFreshWater;
@@ -148,6 +155,7 @@ window.calculateShelterPoints = Cohesion.calculateShelterPoints;
 window.getCohesionStatus = Cohesion.getCohesionStatus;
 window.applyCohesionEffects = Cohesion.applyCohesionEffects;
 window.updateCohesionDisplay = Cohesion.updateCohesionDisplay;
+window.previewCohesionDeltas = Cohesion.previewCohesionDeltas;
 
 // Map Generation system
 window.generateMap = MapGeneration.generateMap;
@@ -166,6 +174,7 @@ window.showSaveLoadPanel = SaveLoad.showSaveLoadPanel;
 window.closeSaveLoadPanel = SaveLoad.closeSaveLoadPanel;
 window.switchSaveLoadTab = SaveLoad.switchSaveLoadTab;
 window.performSave = SaveLoad.performSave;
+window.performLoad = SaveLoad.performLoad;
 window.refreshSavesList = SaveLoad.refreshSavesList;
 window.refreshLoadList = SaveLoad.refreshLoadList;
 window.refreshSaveList = SaveLoad.refreshSaveList;
@@ -219,11 +228,17 @@ window.minimapToCamera = Rendering.minimapToCamera;
 window.setDevRenderingFlags = Rendering.setDevRenderingFlags;
 window.updateCanvasRect = Rendering.updateCanvasRect;
 window.setMapDirty = Rendering.setMapDirty;
+window.invalidateFeatureLabelCache = Rendering.invalidateFeatureLabelCache;
 
 // Side Panel system
 window.initSidePanel = SidePanel.initSidePanel;
 window.updateSidePanel = SidePanel.updateSidePanel;
 window.clearSidePanel = SidePanel.clearSidePanel;
+window.toggleSocietySection = SidePanel.toggleSocietySection;
+window.togglePopulationSection = SidePanel.togglePopulationSection;
+window.toggleHexInfoSection = SidePanel.toggleHexInfoSection;
+window.toggleBuildSection = SidePanel.toggleBuildSection;
+window.toggleTrainingSection = SidePanel.toggleTrainingSection;
 
 // Overlay Manager system
 window.initOverlayManager = OverlayManager.initOverlayManager;
@@ -249,6 +264,11 @@ window.getActiveWorkforceTab = OverlayManager.getActiveWorkforceTab;
 window.getActiveGovernanceTab = OverlayManager.getActiveGovernanceTab;
 window.isOverlayOpen = OverlayManager.isOverlayOpen;
 window.handleEscapeKey = OverlayManager.handleEscapeKey;
+window.togglePanelsMenu = OverlayManager.togglePanelsMenu;
+window.closePanelsMenu = OverlayManager.closePanelsMenu;
+window.toggleFeatureLabels = OverlayManager.toggleFeatureLabels;
+window.openCohesionOverlay = OverlayManager.openCohesionOverlay;
+window.closeCohesionOverlay = OverlayManager.closeCohesionOverlay;
 
 // Dialog System
 window.initDialogSystem = DialogSystem.initDialogSystem;
@@ -343,6 +363,7 @@ window.canUnitEnterHex = UnitManagement.canUnitEnterHex;
 window.initOverlayRenderers = OverlayRenderers.initOverlayRenderers;
 window.renderWorkforceOverlay = OverlayRenderers.renderWorkforceOverlay;
 window.renderUnitsTab = OverlayRenderers.renderUnitsTab;
+window.wfInitiateTrain = OverlayRenderers.wfInitiateTrain;
 window.selectAndFocusUnit = OverlayRenderers.selectAndFocusUnit;
 window.renderGovernanceOverlay = OverlayRenderers.renderGovernanceOverlay;
 window.selectGovernanceModel = OverlayRenderers.selectGovernanceModel;
@@ -351,6 +372,7 @@ window.closePopulationDetails = OverlayRenderers.closePopulationDetails;
 window.renderPopulationDetails = OverlayRenderers.renderPopulationDetails;
 window.openGameMenu = OverlayRenderers.openGameMenu;
 window.closeGameMenu = OverlayRenderers.closeGameMenu;
+window.renderCohesionOverlay = OverlayRenderers.renderCohesionOverlay;
 
 // UI Updates system
 window.initUIUpdates = UIUpdates.initUIUpdates;
@@ -379,15 +401,69 @@ window.initSettings = Settings.initSettings;
 window.openSettings = Settings.openSettings;
 window.returnToMainMenu = Settings.returnToMainMenu;
 window.showNotification = Settings.showNotification;
+window.applyUIScale = Settings.applyUIScale;
+
+// Chronicle system
+window.initChronicle = Chronicle.initChronicle;
+window.addChronicleEntry = Chronicle.addChronicleEntry;
+window.recordTurnInChronicle = Chronicle.recordTurnInChronicle;
+window.addGovernanceChronicle = Chronicle.addGovernanceChronicle;
+window.addFoundingEntry = Chronicle.addFoundingEntry;
+window.openChronicle = Chronicle.openChronicle;
+window.closeChronicle = Chronicle.closeChronicle;
+window.renderChronicleEntries = Chronicle.renderChronicleEntries;
+window.getChronicleNarrative = Chronicle.getChronicleNarrative;
+
+// Culture & Traditions system
+window.initCulture = Culture.initCulture;
+window.getScaledTraditionCost = Culture.getScaledTraditionCost;
+window.switchTraditionsTab = Culture.switchTraditionsTab;
+window.establishTradition = Culture.establishTradition;
+window.removeTradition = Culture.removeTradition;
+window.getTraditionRemovalPenalty = Culture.getTraditionRemovalPenalty;
+window.processTraditions = Culture.processTraditions;
+window.processTraditionTrigger = Culture.processTraditionTrigger;
+window.getAvailableTraditions = Culture.getAvailableTraditions;
+window.getActiveTraditions = Culture.getActiveTraditions;
+window.establishStarterTraditions = Culture.establishStarterTraditions;
+window.openTraditions = Culture.openTraditions;
+window.closeTraditions = Culture.closeTraditions;
+window.renderTraditionsPanel = Culture.renderTraditionsPanel;
+window.confirmEstablishTradition = Culture.confirmEstablishTradition;
+window.confirmChangeTradition = Culture.confirmChangeTradition;
+window.changeTradition = Culture.changeTradition;
+window.confirmRemoveTradition = Culture.confirmRemoveTradition;
+// Oral tradition / storytelling
+window.addStoryteller = Culture.addStoryteller;
+window.removeStoryteller = Culture.removeStoryteller;
+window.processStories = Culture.processStories;
+window.clampStorytellers = Culture.clampStorytellers;
+window.openStories = Culture.openStories;
+window.switchChronicleTab = Culture.switchChronicleTab;
+window.renderStoriesPanel = Culture.renderStoriesPanel;
+// Sacred places & landscape naming
+window.getSacredPlace = Culture.getSacredPlace;
+window.designateSacredPlace = Culture.designateSacredPlace;
+window.removeSacredDesignation = Culture.removeSacredDesignation;
+window.checkDesecration = Culture.checkDesecration;
+window.processSacredPlaces = Culture.processSacredPlaces;
+window.confirmDesignateSacredPlace = Culture.confirmDesignateSacredPlace;
+window.isNameableTerrain = Culture.isNameableTerrain;
+window.getNamedLake = Culture.getNamedLake;
+window.getNamedFeature = Culture.getNamedFeature;
+window.getNamedRiver = Culture.getNamedRiver;
+window.nameFeature = Culture.nameFeature;
+window.confirmNameFeature = Culture.confirmNameFeature;
+window.confirmNameLake = Culture.confirmNameLake;
+window.getRiversAtHex = Culture.getRiversAtHex;
+window.getRiverAtHex = Culture.getRiverAtHex;
+window.confirmNameRiver = Culture.confirmNameRiver;
 
 // Building Actions system
 window.initBuildingActions = BuildingActions.initBuildingActions;
 window.handleHexClick = BuildingActions.handleHexClick;
 window.placeBuilding = BuildingActions.placeBuilding;
 window.demolishBuilding = BuildingActions.demolishBuilding;
-
-// Game state factory
-window.createGameState = createGameState;
 
 console.log('✅ Phase 1 & 2 modules loaded: Data, utilities, and systems');
 console.log('📦 Available data:', {
@@ -398,14 +474,15 @@ console.log('📦 Available data:', {
 });
 console.log('⚔️ Systems loaded: External Threats, Combat, Governance, Events, Economy, Cohesion, Map Generation, Save/Load, Input, Turn Processing, Rendering');
 
+// Game state factory and init
+window.createGameState = createGameState;
+window.initGameCore = initGameCore;
+
 // Signal that modules are ready
 window.modulesReady = true;
 
 // Initialize the game now that all modules are loaded
-// The initGame function will create gameState if needed
 setTimeout(() => {
-  if (typeof window.initGame === 'function') {
-    window.initGame(7743); // Use default seed
-    console.log('🎯 Game initialized with modules');
-  }
+  window.gameState = initGameCore(7743);
+  console.log('🎯 Game initialized with modules');
 }, 100); // Small delay to ensure DOM and other scripts are ready

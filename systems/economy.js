@@ -5,8 +5,7 @@
 // Handles worker assignment, resource gathering, building operations, and workforce UI
 
 // ---- CONSTANTS ----
-let FOOD_PER_POP = 2; // food consumed per person per turn
-const FOOD_PER_CHILD = 1; // children consume half rations
+// FOOD_PER_POP and FOOD_PER_CHILD are read from window.* so dev panel changes take effect immediately
 let WORKING_AGE = 10; // policy slider: age when children join workforce (6-16)
 
 // ---- CORE WORKER FUNCTIONS ----
@@ -91,7 +90,17 @@ export function calculateIncome() {
   }, 0);
 
   const totalChildren = getTotalChildren();
-  const foodConsumed = window.gameState.population.total * FOOD_PER_POP + totalChildren * FOOD_PER_CHILD + constructionWorkers * FOOD_PER_POP + unitsInTraining * FOOD_PER_POP; // builders and trainees eat double
+  const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
+  const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
+  const popFoodConsumed = window.gameState.population.total * foodPerPop + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop; // builders and trainees eat double
+
+  // Unit upkeep food (deducted separately in processUnitUpkeep, but included here for accurate projections)
+  const unitFoodUpkeep = window.gameState.units.reduce((total, unit) => {
+    const upkeep = window.UNIT_TYPES[unit.type]?.upkeep?.food || 0;
+    return total + upkeep;
+  }, 0);
+
+  const foodConsumed = popFoodConsumed + unitFoodUpkeep;
 
   return {
     foodIncome,
@@ -132,10 +141,10 @@ export function assignWorker(col, row) {
   hex.workers++;
   window.gameState.population.employed++;
   window.gameState.population.idle--;
-  window.setMapDirty(true);
-  updateAllUI();
-  window.updateSidePanel(hex);
-  window.render();
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.updateAllUI) window.updateAllUI();
+  if (window.updateSidePanel) window.updateSidePanel(hex);
+  if (window.render) window.render();
 }
 
 export function unassignWorker(col, row) {
@@ -144,10 +153,10 @@ export function unassignWorker(col, row) {
   hex.workers--;
   window.gameState.population.employed--;
   window.gameState.population.idle++;
-  window.setMapDirty(true);
-  updateAllUI();
-  window.updateSidePanel(hex);
-  window.render();
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.updateAllUI) window.updateAllUI();
+  if (window.updateSidePanel) window.updateSidePanel(hex);
+  if (window.render) window.render();
 }
 
 // ---- HELPER FUNCTIONS ----
@@ -264,6 +273,7 @@ export function renderWorkersTab() {
   const groups = getWorkforceGroups();
   const pop = window.gameState.population;
 
+  const storytellers = window.gameState.culture?.storytellers ?? 0;
   document.getElementById('wf-summary').innerHTML =
     `Population: <strong>${pop.total}</strong> · ` +
     `Working: <strong>${pop.employed}</strong> · ` +
@@ -319,12 +329,159 @@ export function renderWorkersTab() {
     return html;
   }
 
-  let html = '';
+  // Cultural Roles section — storytellers
+  const storyCapacity = storytellers * 4;
+  const canAddStoryteller = pop.idle > 0;
+  const canRemoveStoryteller = storytellers > 0;
+  const storyCount = window.gameState.culture?.stories?.length ?? 0;
+  const storytellerSection = `<div class="wf-section">
+    <div class="wf-section-header">🎙️ Cultural Roles</div>
+    <div class="wf-group">
+      <div class="wf-group-header">
+        <span class="wf-group-icon">📖</span>
+        <span class="wf-group-name">Storytellers</span>
+        <span class="wf-group-count">${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'} preserved · capacity ${storyCapacity}</span>
+      </div>
+      <div class="wf-group-body">
+        <span class="wf-yield">${storyCount > 0 ? `Identity +${storyCount} (from oral tradition)` : 'No stories yet — assign storytellers to begin'}</span>
+        <div class="wf-workers">
+          <button class="wf-btn" ${canRemoveStoryteller ? '' : 'disabled'} onclick="removeStoryteller()">−</button>
+          <span class="wf-worker-count">${storytellers}</span>
+          <button class="wf-btn" ${canAddStoryteller ? '' : 'disabled'} onclick="addStoryteller()">+</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  let html = storytellerSection;
   html += renderSection('🔨 Construction', construction, 'No active builds.');
   html += renderSection('🏠 Improved', improved, 'No buildings yet.');
   html += renderSection('🌿 Unimproved', unimproved, 'No gatherable tiles.');
 
   document.getElementById('wf-groups').innerHTML = html;
+
+  // Also refresh build tab if its container exists in the DOM
+  if (document.getElementById('wf-build')) renderBuildSection();
+}
+
+// ---- QUICK-BUILD SECTION ----
+
+function hexAdjacentToWater(hex) {
+  for (let e = 0; e < 6; e++) {
+    const nb = window.hexNeighbor(hex.col, hex.row, e);
+    if (nb.col >= 0 && nb.col < window.MAP_COLS && nb.row >= 0 && nb.row < window.MAP_ROWS) {
+      const t = window.gameState.map[nb.row][nb.col].terrain;
+      if (t === 'coast' || t === 'ocean' || t === 'lake') return true;
+    }
+  }
+  return false;
+}
+
+function isValidHexForBuilding(hex, buildingKey) {
+  const bDef = window.BUILDINGS[buildingKey];
+  if (!bDef || bDef.onlyStart) return false;
+  if (hex.building) return false;
+  if (!window.gameState.territory.has(`${hex.col},${hex.row}`)) return false;
+
+  const terrainValid = bDef.validTerrain.includes(hex.terrain);
+  const riverValid = bDef.validOnRiver && hex.hasRiver;
+  const waterAdjValid = bDef.requiresAdjacentWater && terrainValid && hexAdjacentToWater(hex);
+
+  if (!terrainValid && !riverValid) return false;
+  if (bDef.requiresAdjacentWater && !waterAdjValid && !riverValid) return false;
+  return true;
+}
+
+function scoreHexForBuilding(hex, buildingKey) {
+  const bDef = window.BUILDINGS[buildingKey];
+  const terrain = window.TERRAIN[hex.terrain];
+  const freshWater = hexHasFreshWater(hex);
+  let score = (terrain.food || 0) + (terrain.materials || 0);
+  if (freshWater) score += 1;
+  score += (bDef.foodBonus || 0) + (bDef.materialBonus || 0);
+  if (freshWater && bDef.riverFoodBonus) score += bDef.riverFoodBonus;
+  return score;
+}
+
+export function findValidHexesForBuilding(buildingKey) {
+  const valid = [];
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = window.gameState.map[r][c];
+      if (isValidHexForBuilding(hex, buildingKey)) valid.push(hex);
+    }
+  }
+  valid.sort((a, b) => scoreHexForBuilding(b, buildingKey) - scoreHexForBuilding(a, buildingKey));
+  return valid;
+}
+
+export function wfInitiateBuild(buildingKey) {
+  const bDef = window.BUILDINGS[buildingKey];
+  if (!bDef) return;
+
+  const validHexes = findValidHexesForBuilding(buildingKey);
+  if (validHexes.length === 0) return;
+
+  const bestHex = validHexes[0];
+  const canAfford = window.gameState.resources.materials >= bDef.cost.materials;
+  if (!canAfford) return;
+
+  const freshWater = hexHasFreshWater(bestHex);
+  const maxFood = (bDef.foodBonus || 0) + (freshWater ? 1 : 0) + (freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0);
+  const maxMat = bDef.materialBonus || 0;
+  const yieldStr = [maxFood ? `🌾+${maxFood}` : '', maxMat ? `🪵+${maxMat}` : ''].filter(Boolean).join(' ');
+
+  window.showConfirmDialogNonDestructive(
+    `Build ${bDef.name}`,
+    `<p>Start construction of a <strong>${bDef.name}</strong> at the best available site (${bestHex.col},${bestHex.row})?</p>
+     <p><strong>Cost:</strong> 🪵${bDef.cost.materials} materials · <strong>Time:</strong> ${bDef.buildTurns} turns</p>
+     ${yieldStr ? `<p><strong>Max yield:</strong> ${yieldStr} (at full workers)</p>` : ''}
+     <p><em>${validHexes.length} valid site${validHexes.length !== 1 ? 's' : ''} available</em></p>`,
+    'Build',
+    'Cancel',
+    () => {
+      window.placeBuilding(bestHex.col, bestHex.row, buildingKey);
+      if (window.updateAllUI) window.updateAllUI();
+      if (window.renderWorkersTab) window.renderWorkersTab();
+      if (window.render) window.render();
+    }
+  );
+}
+
+function renderBuildSection() {
+  const container = document.getElementById('wf-build');
+  if (!container) return;
+
+  const materials = window.gameState.resources.materials;
+  let html = `<div class="wf-section-header">🏗️ Start Construction</div>`;
+  let anyAvailable = false;
+
+  for (const [key, bDef] of Object.entries(window.BUILDINGS)) {
+    if (bDef.onlyStart) continue;
+    const validHexes = findValidHexesForBuilding(key);
+    const count = validHexes.length;
+    const canAfford = materials >= bDef.cost.materials;
+    const enabled = count > 0 && canAfford;
+    if (count > 0) anyAvailable = true;
+
+    const reason = count === 0 ? 'No suitable terrain' : !canAfford ? `Need 🪵${bDef.cost.materials}` : '';
+
+    html += `<button class="wf-build-btn${enabled ? '' : ' disabled'}"
+      ${enabled ? `onclick="wfInitiateBuild('${key}')"` : 'disabled'}>
+      <span class="wf-build-icon">${bDef.icon}</span>
+      <span class="wf-build-info">
+        <span class="wf-build-name">${bDef.name}</span>
+        <span class="wf-build-meta">🪵${bDef.cost.materials} · ${bDef.buildTurns} turns · ${count} site${count !== 1 ? 's' : ''}</span>
+        ${reason ? `<span class="wf-build-reason">${reason}</span>` : ''}
+      </span>
+    </button>`;
+  }
+
+  if (!anyAvailable) {
+    html += `<div class="wf-empty-hint">No unimproved terrain available for construction.</div>`;
+  }
+
+  container.innerHTML = html;
 }
 
 // Add worker to workforce group
@@ -379,4 +536,4 @@ export function openWorkforceOverlay() {
 }
 
 // Export constants for external access
-export { FOOD_PER_POP, FOOD_PER_CHILD, WORKING_AGE };
+export { WORKING_AGE };

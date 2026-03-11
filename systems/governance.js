@@ -4,6 +4,8 @@
 export function changeGovernanceModel(newModel) {
   if (newModel === window.gameState.governance.model) return;
 
+  const oldModel = window.gameState.governance.model;
+
   // Major legitimacy hit for changing governance
   window.gameState.cohesion.legitimacy = Math.max(window.gameState.cohesion.legitimacy - 25, 10);
 
@@ -15,6 +17,9 @@ export function changeGovernanceModel(newModel) {
 
   // Track the change
   window.gameState.governance.lastChanged.model = window.gameState.turn;
+
+  // Record in Chronicle
+  if (window.addGovernanceChronicle) window.addGovernanceChronicle(oldModel, newModel);
 }
 
 export function adjustPolicy(policyName, newValue) {
@@ -41,6 +46,7 @@ export function getGovernanceModel() {
 export function adjustWorkingAge(delta) {
   const newAge = Math.max(6, Math.min(16, window.WORKING_AGE + delta));
   window.WORKING_AGE = newAge;
+  if (window.gameState) window.gameState.governance.policies.workingAge = newAge;
 
   // Update display if in governance panel
   const workingAgeDisplay = document.getElementById('working-age-value');
@@ -59,6 +65,19 @@ export function adjustWorkingAge(delta) {
   const popWorkingAgeDisplay = document.getElementById('pop-working-age-value');
   if (popWorkingAgeDisplay) {
     popWorkingAgeDisplay.textContent = newAge;
+  }
+
+  // Immediately graduate any cohorts now at or above the new working age
+  const gs = window.gameState;
+  if (gs && gs.childCohorts) {
+    for (let i = gs.childCohorts.length - 1; i >= 0; i--) {
+      const cohort = gs.childCohorts[i];
+      if (cohort.age >= newAge) {
+        gs.population.total += cohort.count;
+        gs.population.idle += cohort.count;
+        gs.childCohorts.splice(i, 1);
+      }
+    }
   }
 
   // Update policy summary

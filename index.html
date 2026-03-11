@@ -17,7 +17,22 @@
   <div class="resource-group"><div class="resource-icon" style="background:#5a5a5a;">🪵</div><span>Materials</span><span class="value" id="res-materials">50</span><span class="delta delta-zero" id="delta-materials"></span></div>
   <div class="resource-group topbar-toggle" id="pop-toggle" title="Toggle Labor panel"><div class="resource-icon" style="background:#4a6a4a;">👥</div><span>Population</span><span class="value" id="res-pop">25</span></div>
   <div class="resource-group"><div class="resource-icon" style="background:#4a5a7a;">📖</div><span>Knowledge</span><span class="value" id="res-knowledge">5</span></div>
-  <div id="cohesion-bar-container" class="topbar-toggle" title="Toggle Society panel">
+  <div id="panels-menu" class="panels-menu">
+    <button class="panels-menu-btn" onclick="togglePanelsMenu()" title="Open panels">☰ Panels</button>
+    <div class="panels-menu-dropdown" id="panels-menu-dropdown">
+      <div class="panels-menu-group">Workforce</div>
+      <button class="panels-menu-item" onclick="openWorkforceOverlay();closePanelsMenu()">👥 Workforce Management</button>
+      <button class="panels-menu-item" onclick="openGovernanceOverlay();closePanelsMenu()">⚖️ Governance & Policy</button>
+      <div class="panels-menu-group">Society</div>
+      <button class="panels-menu-item" onclick="openCohesionOverlay();closePanelsMenu()">🫂 Social Cohesion</button>
+      <button class="panels-menu-item" onclick="openTraditions();closePanelsMenu()">🎭 Traditions & Rituals</button>
+      <button class="panels-menu-item" onclick="openStories();closePanelsMenu()">📖 Oral Tradition</button>
+      <button class="panels-menu-item" onclick="openChronicle();closePanelsMenu()">📜 The Chronicle</button>
+      <div class="panels-menu-group">Population</div>
+      <button class="panels-menu-item" onclick="openPopulationDetails();closePanelsMenu()">🧑‍🤝‍🧑 Population Details</button>
+    </div>
+  </div>
+  <div id="cohesion-bar-container" class="topbar-toggle" title="Social Cohesion — click for details" onclick="openCohesionOverlay()" style="cursor:pointer">
     <span id="cohesion-label">Cohesion</span>
     <div id="cohesion-bar">
       <div class="cohesion-segment" id="seg-identity" style="background:var(--pillar-identity);width:25%"></div>
@@ -31,7 +46,14 @@
 
 <div id="dev-badge">DEV - Mode</div>
 
-<div id="canvas-container"><canvas id="game-canvas"></canvas></div>
+<!-- Font pre-warm: force GPU glyph rasterization at page load for Almendra italic variants.
+     Must use opacity (not visibility:hidden) — visibility:hidden skips paint so Chrome never
+     actually rasterizes the glyphs into the GPU atlas, causing first-use async rasterization
+     to race with compositor operations later and crash the Chrome GPU process on macOS. -->
+<span style="position:fixed;bottom:0;left:0;opacity:0.01;pointer-events:none;font-family:'Almendra',serif;font-style:italic;font-weight:400;font-size:15px;color:#c8e8f8;" aria-hidden="true">.</span>
+<span style="position:fixed;bottom:0;left:0;opacity:0.01;pointer-events:none;font-family:'Almendra',serif;font-style:italic;font-weight:700;font-size:15px;color:#c8e8f8;" aria-hidden="true">.</span>
+
+<div id="canvas-container"><canvas id="game-canvas"></canvas><div id="feature-labels-overlay"></div></div>
 
 <div id="side-panel">
   <div class="panel-section" id="hex-info-section">
@@ -69,6 +91,15 @@
 
     <button class="manage-workers-btn" onclick="openGovernanceOverlay()" style="margin-top:8px">
       ⚖️ Governance & Policy
+    </button>
+    <button class="manage-workers-btn" onclick="openTraditions()" style="margin-top:4px">
+      🎭 Traditions
+    </button>
+    <button class="manage-workers-btn" onclick="openStories()" style="margin-top:4px">
+      📖 Oral Tradition
+    </button>
+    <button class="manage-workers-btn" onclick="openChronicle()" style="margin-top:4px">
+      📜 The Chronicle
     </button>
   </div>
   <div class="panel-section collapsed" id="labor-section">
@@ -118,6 +149,7 @@
 </div>
 
 <canvas id="minimap"></canvas>
+<button id="labels-toggle-btn" class="active" onclick="toggleFeatureLabels()" title="Toggle place names">Aa</button>
 
 <div id="game-menu-overlay">
   <div class="game-menu-box">
@@ -136,6 +168,14 @@
     <h2>👥 Population Details</h2>
     <div id="population-details-content"></div>
     <button class="wf-close" id="population-close">Done</button>
+  </div>
+</div>
+
+<div id="cohesion-overlay">
+  <div class="cohesion-box">
+    <h2>🫂 Social Cohesion</h2>
+    <div id="cohesion-overlay-content" class="cohesion-scroll"></div>
+    <button class="wf-close" id="cohesion-close">Done</button>
   </div>
 </div>
 
@@ -165,28 +205,17 @@
 <div id="saveload-overlay">
   <div class="saveload-box">
     <h2>💾 Game Files</h2>
-    <div class="saveload-tabs">
-      <button class="saveload-tab active" data-tab="save">Save Game</button>
-      <button class="saveload-tab" data-tab="load">Load Game</button>
+    <div class="save-input-section">
+      <label for="save-name-input">Save Name:</label>
+      <input type="text" id="save-name-input" placeholder="Enter save name..." maxlength="30">
+      <div class="save-btn-row">
+        <button class="save-btn" onclick="performSave()">Save</button>
+        <button class="save-btn" onclick="performLoad()">Load</button>
+      </div>
     </div>
-    <div id="saveload-tab-content">
-      <div id="save-tab" class="saveload-tab-panel active">
-        <div class="save-input-section">
-          <label for="save-name-input">Save Name:</label>
-          <input type="text" id="save-name-input" placeholder="Enter save name..." maxlength="30">
-          <button class="save-btn" onclick="performSave()">Save</button>
-        </div>
-        <div class="saves-list-section">
-          <h3>Existing Saves</h3>
-          <div id="saves-list" class="saves-list"></div>
-        </div>
-      </div>
-      <div id="load-tab" class="saveload-tab-panel">
-        <div class="saves-list-section">
-          <h3>Select Save to Load</h3>
-          <div id="load-saves-list" class="saves-list"></div>
-        </div>
-      </div>
+    <div class="saves-list-section">
+      <h3>Saved Games</h3>
+      <div id="saves-list" class="saves-list"></div>
     </div>
     <button class="wf-close" id="saveload-close">Cancel</button>
   </div>
@@ -228,7 +257,9 @@
 
     <div class="workforce-tabs">
       <button class="workforce-tab active" data-tab="workers">👥 Workers</button>
+      <button class="workforce-tab" data-tab="build">🏗️ Build</button>
       <button class="workforce-tab" data-tab="units">⚔️ Units</button>
+      <button class="workforce-tab" data-tab="train">🗡️ Train</button>
     </div>
 
     <div class="workforce-tab-panel active" id="workers-tab-panel">
@@ -236,9 +267,17 @@
       <div id="wf-groups"></div>
     </div>
 
+    <div class="workforce-tab-panel" id="build-tab-panel">
+      <div id="wf-build"></div>
+    </div>
+
     <div class="workforce-tab-panel" id="units-tab-panel">
       <div class="wf-summary" id="units-summary"></div>
       <div id="units-management"></div>
+    </div>
+
+    <div class="workforce-tab-panel" id="train-tab-panel">
+      <div id="units-train"></div>
     </div>
 
     <button class="wf-close" id="wf-close">Done</button>
@@ -354,69 +393,65 @@
   </div>
 </div>
 
+<!-- Traditions overlay -->
+<div id="traditions-overlay">
+  <div class="traditions-box">
+    <h2>🎭 Traditions & Rituals</h2>
+    <div class="traditions-tabs">
+      <button class="traditions-tab active" data-tab="summary">📋 Active</button>
+      <button class="traditions-tab" data-tab="calendar">📅 Calendar</button>
+      <button class="traditions-tab" data-tab="establish">✨ Establish</button>
+    </div>
+    <div class="traditions-tab-panel active" id="traditions-summary-panel"></div>
+    <div class="traditions-tab-panel" id="traditions-calendar-panel"></div>
+    <div class="traditions-tab-panel" id="traditions-establish-panel"></div>
+    <button class="wf-close" id="traditions-close">Done</button>
+  </div>
+</div>
+
+<!-- Chronicle overlay -->
+<div id="chronicle-overlay">
+  <div class="chronicle-box">
+    <h2>📜 The Chronicle</h2>
+
+    <div class="chronicle-tabs">
+      <button class="chronicle-tab active" data-tab="log" onclick="switchChronicleTab('log')">📜 History Log</button>
+      <button class="chronicle-tab" data-tab="stories" onclick="switchChronicleTab('stories')">📖 Oral Tradition</button>
+    </div>
+
+    <div class="chronicle-tab-panel active" id="chronicle-log-panel">
+      <div id="chronicle-filters" class="chronicle-filters">
+        <button class="chronicle-filter" data-category="founding">🏠 Founding</button>
+        <button class="chronicle-filter" data-category="milestone">🏛️ Milestone</button>
+        <button class="chronicle-filter" data-category="event">📜 Event</button>
+        <button class="chronicle-filter" data-category="governance">⚖️ Governance</button>
+        <button class="chronicle-filter" data-category="crisis">⚠️ Crisis</button>
+        <button class="chronicle-filter" data-category="military">⚔️ Military</button>
+      </div>
+      <div class="chronicle-entries-scroll">
+        <div id="chronicle-entries"></div>
+      </div>
+    </div>
+
+    <div class="chronicle-tab-panel" id="chronicle-stories-panel">
+      <!-- Populated by renderStoriesPanel() -->
+    </div>
+
+    <button class="wf-close" id="chronicle-close">Done</button>
+  </div>
+</div>
+
 <!-- Load modular game data -->
 <script type="module" src="js/loader.js"></script>
 
 <script>
-// ============================================================
-// SAMHOLD — Phase 2: Core Economy
-// ============================================================
-
-// Constants are defined in data/constants.js and exposed via js/loader.js as window.*
-
-// ---- DATA DEFINITIONS ----
-// Note: TERRAIN, BUILDINGS, UNIT_TYPES, THREAT_TYPES, and constants are now loaded from modules
-// See js/loader.js and data/ directory for the extracted definitions
-
 // ---- GAME STATE ----
-// Game state will be created by the createGameState() factory function after modules load
+// Created by initGameCore() after modules load (var = window.gameState for module access)
 var gameState = null;
 
 // ---- CACHED CANVAS DIMS ----
 let canvasW = 0, canvasH = 0;
 let canvasRect = { left: 0, top: 0, width: 0, height: 0 };
-
-// ---- UTILITIES ----
-// Note: Hex math functions (offsetToCube, cubeDistance, hexToPixel, pixelToHex, hexNeighbor)
-// and RNG (createRNG) are now loaded from modules
-// See utils/hexMath.js and utils/random.js
-
-// ---- MAP GENERATION ----
-// hexHasRiver, hexAdjacentToLake, hexAdjacentToWater, hexHasFreshWater
-// extracted to systems/territory.js and systems/economy.js
-
-// ---- TERRITORY & SETTLEMENT ----
-// Extracted to systems/territory.js
-// Functions: revealArea, recalcTerritory, canFoundSettlement, foundSettlement, showSettlementFoundingConfirmation
-
-// ---- UNITS SYSTEM ----
-// Extracted to systems/unitManagement.js
-// Functions: startUnitTraining, cancelUnitTraining, createUnit, deleteUnit, getUnitsAt,
-// moveUnit, resetUnitMovement, selectUnit, selectUnitForMovement, deselectUnit,
-// getValidMoveTargets, getBlockedMoveTargets, calculateMoveCost, canUnitEnterHex
-
-// ---- EXTERNAL THREATS SYSTEM ----
-// Note: External Threats system moved to systems/externalThreats.js
-// Functions: spawnThreat, findRandomMapEdge, findNearestSettlement, processThreats,
-// moveThreatTowardTarget, attackSettlement, calculateDefensiveStrength, applyRaidDamage,
-// shouldSpawnThreat, checkThreatSpawning
-
-// ---- COMBAT SYSTEM ----
-// Extracted to systems/combat.js
-// Functions: initiateCombat, resolveCombat, checkForCombatOpportunities,
-// findUnitsInRange, processCombatPhase, canUnitAttackThreat
-
-// ---- ECONOMY: WORKER SYSTEM ----
-// Extracted to systems/economy.js
-// Functions: getMaxWorkers, getHexYield, calculateIncome, clampWorkers, assignWorker, unassignWorker
-
-// ---- BIRTH & AGING SYSTEM ----
-// Extracted to systems/turnProcessing.js
-// Functions: processBirths, processAging, getTotalChildren, processStarvation
-
-// ---- GOVERNANCE, EVENTS, COHESION ----
-// Extracted to data/governance.js, systems/events.js, systems/cohesion.js, systems/governance.js
-
 
 // ---- CANVAS SETUP ----
 const container = document.getElementById('canvas-container');
@@ -427,6 +462,7 @@ const minimapCtx = minimapCanvas.getContext('2d');
 const mapCanvas = document.createElement('canvas');
 const mapCtx = mapCanvas.getContext('2d');
 let mapDirty = true;
+window.mapCanvas = mapCanvas;
 
 function resizeCanvas() {
   if (!window.HEX_SIZE) return; // modules not yet loaded
@@ -449,6 +485,7 @@ function resizeCanvas() {
 }
 
 function getMapPixelSize() { const w = Math.sqrt(3)*HEX_SIZE, h = 2*HEX_SIZE; return { width: w*(MAP_COLS+0.5), height: h*0.75*(MAP_ROWS-1)+h }; }
+window.getMapPixelSize = getMapPixelSize;
 
 // ---- TRANSFORMS ----
 function worldToScreen(wx, wy) {
@@ -464,473 +501,8 @@ function screenToWorld(sx, sy) {
 window.screenToWorld = screenToWorld;
 window.worldToScreen = worldToScreen;
 
-// ---- HEX DRAWING ----
-
-// MAP_PAD is defined in data/constants.js and exposed via window.MAP_PAD
-
-
-
-
-
-
-
-
-
-// ---- MINIMAP ----
-const MM_W = 180, MM_H = 135;
-
-
-
-
-
-// ---- INPUT / BUILD ----
-// Extracted to systems/buildingActions.js
-// Functions: handleHexClick, placeBuilding, demolishBuilding
-
-// ---- RESOURCE & UI UPDATES ----
-// Extracted to systems/ui/uiUpdates.js
-// Functions: updateAllUI, updateCohesionDisplay, updateTurnDisplay, showTurnSummary
-
-document.getElementById('summary-ok').addEventListener('click', () => {
-  document.getElementById('turn-summary').classList.remove('visible');
-
-  // Process events after turn summary is closed
-  if (gameState.pendingEventCheck) {
-    gameState.pendingEventCheck = false;
-    // Small delay to ensure turn summary is fully closed
-    setTimeout(() => {
-      window.EventSystem.processActiveEvents();
-    }, 50);
-  }
-});
-
-// ---- OVERLAY BLOCKING ----
-
-// ---- END TURN ----
-document.getElementById('end-turn-btn').addEventListener('click', () => {
-  // Block turn progression if game has ended
-  if (gameState.gameEnded) {
-    return;
-  }
-
-  // Block turn progression if any overlay is open (except turn summary)
-  if (isAnyOverlayOpen()) {
-    return;
-  }
-
-  const report = processTurn();
-
-  // Capture current season/year for summary BEFORE advancing
-  const summarySeasonName = SEASONS[gameState.season];
-  const summaryYear = gameState.year;
-
-  gameState.turn++;
-  gameState.season = (gameState.season + 1) % 4;
-  if (gameState.season === 0) gameState.year++;
-
-  // Reset unit movement for new turn
-  resetUnitMovement();
-
-  updateTurnDisplay();
-  updateAllUI();
-
-  if (gameState.selectedHex) updateSidePanel(gameState.selectedHex);
-
-  if (window.render) window.render();
-  showTurnSummary(report, summarySeasonName, summaryYear);
-
-  // Show tutorial hints for early turns (after a brief delay)
-  if (gameState.turn <= 15) {
-    setTimeout(() => showTutorialHint(), 1500);
-  }
-
-  // Events will be processed when turn summary is closed
-  gameState.pendingEventCheck = true;
-});
-
-// ---- KEYBOARD ----
-
-// ---- WORKFORCE/UNITS/GOVERNANCE OVERLAYS ----
-// Extracted to systems/ui/overlayRenderers.js
-// Functions: getWorkforceGroups, renderWorkforceOverlay, renderUnitsTab, selectAndFocusUnit,
-// renderGovernanceOverlay, selectGovernanceModel, openPopulationDetails, closePopulationDetails,
-// renderPopulationDetails, openGameMenu, closeGameMenu
-
-
-// ---- GOVERNANCE, POPULATION DETAILS, GAME MENU ----
-// Extracted to systems/ui/overlayRenderers.js
-
-// Wire up event listeners for overlays
-document.getElementById('population-close').addEventListener('click', () => {
-  closePopulationDetails();
-});
-
-document.getElementById('population-details-overlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('population-details-overlay')) {
-    closePopulationDetails();
-  }
-});
-
-document.getElementById('game-menu-close').addEventListener('click', () => {
-  closeGameMenu();
-});
-
-document.getElementById('game-menu-overlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('game-menu-overlay')) {
-    closeGameMenu();
-  }
-});
-
-// Dev panel functions extracted to systems/ui/devPanel.js
-// Event listeners wired in initDevPanel()
-
-
-function getMaxUIScale() {
-  const maxPanelWidth = window.innerWidth * 0.35;
-  const maxScale = maxPanelWidth / 300;
-  const maxBarHeight = window.innerHeight * 0.3;
-  const maxScaleV = maxBarHeight / 56;
-  return Math.min(Math.floor(Math.min(maxScale, maxScaleV) * 100), 160);
-}
-
-function clampTopBar(uiScale) {
-  const bar = document.getElementById('top-bar');
-  let tbScale = uiScale;
-  bar.style.zoom = tbScale;
-  // Reduce until content fits without overflow (2px tolerance)
-  while (bar.scrollWidth > bar.clientWidth + 2 && tbScale > 0.8) {
-    tbScale = Math.round((tbScale - 0.05) * 100) / 100;
-    bar.style.zoom = tbScale;
-  }
-  document.documentElement.style.setProperty('--topbar-scale', tbScale);
-  return tbScale;
-}
-
-function applyUIScale(percent) {
-  const maxPercent = getMaxUIScale();
-  percent = Math.max(80, Math.min(percent, maxPercent));
-  const scale = percent / 100;
-  document.documentElement.style.setProperty('--ui-scale', scale);
-  clampTopBar(scale);
-  const slider = document.getElementById('ui-scale-slider');
-  slider.value = percent;
-  slider.max = maxPercent;
-  document.getElementById('ui-scale-val').textContent = percent + '%';
-  document.getElementById('scale-up').disabled = percent >= maxPercent;
-  document.getElementById('scale-down').disabled = percent <= 80;
-  requestAnimationFrame(() => { resizeCanvas(); if (window.render) window.render(); });
-  try { localStorage.setItem('samhold-ui-scale', percent); } catch(e) {}
-}
-
-document.getElementById('ui-scale-slider').addEventListener('input', (e) => {
-  applyUIScale(parseInt(e.target.value));
-});
-
-document.getElementById('scale-up').addEventListener('click', () => {
-  applyUIScale(parseInt(document.getElementById('ui-scale-slider').value) + 5);
-});
-
-document.getElementById('scale-down').addEventListener('click', () => {
-  applyUIScale(parseInt(document.getElementById('ui-scale-slider').value) - 5);
-});
-
-window.addEventListener('resize', () => {
-  applyUIScale(parseInt(document.getElementById('ui-scale-slider').value));
-});
-
-try {
-  const saved = localStorage.getItem('samhold-ui-scale');
-  if (saved) applyUIScale(parseInt(saved));
-} catch(e) {}
-
-// Initialize hint toggle state
-try {
-  const hintsDisabled = localStorage.getItem('samhold_tutorial_disabled') === 'true';
-  document.getElementById('hints-toggle').checked = !hintsDisabled;
-} catch(e) {}
-
-// Add hint toggle event listener
-document.getElementById('hints-toggle').addEventListener('change', (e) => {
-  try {
-    localStorage.setItem('samhold_tutorial_disabled', e.target.checked ? 'false' : 'true');
-  } catch(err) {}
-});
-
-// Helper functions for sidebar header clicks
-function toggleSocietySection() {
-  const section = document.getElementById('society-section');
-  section.classList.toggle('collapsed');
-  document.getElementById('cohesion-bar-container').classList.toggle('active', !section.classList.contains('collapsed'));
-}
-
-function togglePopulationSection() {
-  const section = document.getElementById('labor-section');
-  section.classList.toggle('collapsed');
-  document.getElementById('pop-toggle').classList.toggle('active', !section.classList.contains('collapsed'));
-}
-
-function toggleHexInfoSection() {
-  const section = document.getElementById('hex-info-section');
-  section.classList.toggle('collapsed');
-}
-
-function toggleTrainingSection() {
-  const content = document.getElementById('training-content');
-  if (content) {
-    content.classList.toggle('collapsed');
-  }
-}
-
-// confirmTrainUnit and confirmBuildBuilding extracted to systems/ui/dialogSystem.js
-
-// Expose UI functions needed by onclick attributes and modules
-window.applyUIScale = applyUIScale;
+// Expose canvas functions needed by modules
 window.resizeCanvas = resizeCanvas;
-window.toggleSocietySection = toggleSocietySection;
-window.togglePopulationSection = togglePopulationSection;
-window.toggleHexInfoSection = toggleHexInfoSection;
-window.toggleTrainingSection = toggleTrainingSection;
-
-// ---- INIT ----
-function initGame(seed) {
-  seed = Math.floor(seed) || 7743;
-  if (window.setCurrentSeed) window.setCurrentSeed(seed);
-
-  // Initialize game state if it's null (for modular version)
-  if (gameState === null) {
-    gameState = window.createGameState();
-    console.log('🎮 Game state created in initGame');
-  }
-
-  // Initialize modules that need gameState early (before map generation)
-  if (window.initTerritory) window.initTerritory(gameState);
-  if (window.initUnitManagement) window.initUnitManagement(gameState);
-  if (window.initBuildingActions) window.initBuildingActions(gameState);
-
-  // Reset game state
-  gameState.turn = 1; gameState.year = 1; gameState.season = 0;
-  gameState.resources = { food: 200, materials: 50, knowledge: 5 };
-  gameState.population = { total: 18, idle: 18, employed: 0 }; // Reduced adults
-  gameState.cohesion = {
-    identity: 60,
-    legitimacy: 70,
-    satisfaction: 65,
-    bonds: 55,
-    total: 62, // will be calculated properly on first turn
-    lastUpdate: { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 }
-  };
-  gameState.governance = {
-    model: 'tribalCouncil', // start with tribal council for small group
-    policies: {
-      freedom: 50,        // balanced initial state
-      mercy: 50,
-      tradition: 50,
-    },
-    modelChangeTimer: 0,
-    lastChanged: { model: 0, policies: { freedom: 0, mercy: 0, tradition: 0 } }
-  };
-
-  // Initialize with strategically interesting child cohorts
-  gameState.childCohorts = [
-    { age: 8, count: 3 },  // 2 years until working age (at default 10)
-    { age: 6, count: 2 },  // 4 years until working age
-    { age: 2, count: 2 }   // 8 years until working age
-  ];
-  gameState.birthAccumulator = 0.0;
-
-  gameState.map = []; gameState.settlements = []; gameState.rivers = []; gameState.riverSegmentCounts = new Map();
-  gameState.selectedHex = null; gameState.startHex = null;
-  gameState.territory = new Set(); gameState.lastTurnReport = null;
-
-  resizeCanvas();
-  gameState.map = generateMap(MAP_COLS, MAP_ROWS, seed);
-
-  // Find grassland start near center
-  let sc = Math.floor(MAP_COLS/2), sr = Math.floor(MAP_ROWS/2);
-  outer: for (let r = 0; r < 4; r++)
-    for (let row = sr-r; row <= sr+r; row++)
-      for (let col = sc-r; col <= sc+r; col++)
-        if (row >= 0 && row < MAP_ROWS && col >= 0 && col < MAP_COLS && gameState.map[row][col].terrain === 'grassland')
-          { sc = col; sr = row; break outer; }
-
-  gameState.startHex = { col: sc, row: sr };
-
-  // Ensure terrain diversity near start — place at least one of each key type
-  // within territory radius so all building types are testable
-  const diversify = [
-    { terrain: 'forest', dr: -1, dc: 1 },
-    { terrain: 'hills', dr: -2, dc: 0 },
-    { terrain: 'wetland', dr: 0, dc: -2 },
-    { terrain: 'desert', dr: -1, dc: -1 },
-    { terrain: 'mountain', dr: 2, dc: 1 },
-  ];
-  for (const d of diversify) {
-    const nr = sr + d.dr, nc = sc + d.dc;
-    if (nr >= 0 && nr < MAP_ROWS && nc >= 0 && nc < MAP_COLS) {
-      const hex = gameState.map[nr][nc];
-      // Only replace if it's grassland (don't overwrite already-diverse terrain)
-      if (hex.terrain === 'grassland') {
-        hex.terrain = d.terrain;
-        hex.variation = Math.random();
-      }
-    }
-  }
-
-  // Generate rivers AFTER terrain diversity is in place so sources exist
-  generateRivers(gameState.map, MAP_COLS, MAP_ROWS, createRNG(seed + 1), gameState);
-
-
-  // Place starting settlement
-  gameState.map[sr][sc].building = 'settlement';
-  gameState.map[sr][sc].buildProgress = 0;
-  gameState.settlements.push({ col: sc, row: sr });
-  recalcTerritory();
-
-  // Auto-assign gatherers to nearby grassland hexes to give starting food income
-  let autoAssigned = 0;
-  const targetAssign = 10; // assign 10 gatherers at start
-  for (let radius = 1; radius <= TERRITORY_RADIUS && autoAssigned < targetAssign; radius++) {
-    for (let r = 0; r < MAP_ROWS && autoAssigned < targetAssign; r++) {
-      for (let c = 0; c < MAP_COLS && autoAssigned < targetAssign; c++) {
-        if (cubeDistance(offsetToCube(c,r), offsetToCube(sc,sr)) !== radius) continue;
-        const hex = gameState.map[r][c];
-        if (!isInTerritory(c, r) || hex.building) continue;
-        if (TERRAIN[hex.terrain].food >= 2) { // prioritize food-producing terrain
-          hex.workers = 1;
-          autoAssigned++;
-        }
-      }
-    }
-  }
-  gameState.population.employed = autoAssigned;
-  gameState.population.idle = gameState.population.total - autoAssigned;
-
-  const fogDisabled = window.isFogOfWarDisabled ? window.isFogOfWarDisabled() : false;
-  if (!fogDisabled) {
-    revealArea(sc, sr, 3);
-    // Reveal one hex beyond territory boundary
-    for (let r = 0; r < MAP_ROWS; r++) {
-      for (let c = 0; c < MAP_COLS; c++) {
-        if (window.isInTerritory(c, r)) {
-          gameState.map[r][c].revealed = true;
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const nr = r + dr;
-              const nc = c + dc;
-              if (nr >= 0 && nr < MAP_ROWS && nc >= 0 && nc < MAP_COLS) {
-                if (cubeDistance(offsetToCube(c, r), offsetToCube(nc, nr)) <= 1) {
-                  gameState.map[nr][nc].revealed = true;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  const ms = getMapPixelSize();
-  gameState.camera.x = ms.width / 2;
-  gameState.camera.y = ms.height / 2;
-
-  // Calculate initial cohesion values
-  calculateCohesion();
-
-  // Initialize Save/Load system
-  if (window.initSaveLoad) {
-    window.initSaveLoad(
-      gameState,
-      () => window.getCurrentSeed ? window.getCurrentSeed() : 7743,
-      (newSeed) => { if (window.setCurrentSeed) window.setCurrentSeed(newSeed); }
-    );
-  }
-
-  // Initialize Input system
-  if (window.initInput) {
-    const canvasRect = canvas.getBoundingClientRect();
-    window.initInput(
-      gameState,
-      canvasRect,
-      minimapCanvas,
-      container,
-      MM_W,
-      MM_H,
-      canvasW,
-      canvasH
-    );
-    console.log('🎮 Input system initialized');
-  }
-
-  // Initialize Turn Processing system
-  if (window.initTurnProcessing) {
-    window.initTurnProcessing(gameState);
-    console.log('🎮 Turn Processing system initialized');
-  }
-
-  // Ensure proper canvas sizing before initializing rendering
-  resizeCanvas();
-
-  // Initialize rendering system
-  if (window.initRendering) {
-    window.initRendering(gameState, canvas, mapCanvas, minimapCanvas, canvasW, canvasH, canvasRect);
-    console.log('🎮 Rendering system initialized');
-  }
-
-  // Initialize UI systems
-  if (window.initSidePanel) {
-    window.initSidePanel(gameState);
-    console.log('🎮 Side panel system initialized');
-  }
-
-  if (window.initOverlayManager) {
-    window.initOverlayManager(gameState);
-    console.log('🎮 Overlay manager system initialized');
-  }
-
-  if (window.initDialogSystem) {
-    window.initDialogSystem(gameState);
-    console.log('🎮 Dialog system initialized');
-  }
-
-  if (window.initDevPanel) {
-    window.initDevPanel(gameState);
-    console.log('🎮 Dev panel system initialized');
-  }
-
-  if (window.initUIUpdates) {
-    window.initUIUpdates(gameState);
-    console.log('UI updates system initialized');
-  }
-
-  if (window.initOverlayRenderers) {
-    window.initOverlayRenderers(gameState);
-    console.log('Overlay renderers system initialized');
-  }
-
-  if (window.initVictoryDefeat) {
-    window.initVictoryDefeat(gameState);
-    console.log('Victory/defeat system initialized');
-  }
-
-  if (window.initTutorial) {
-    window.initTutorial(gameState);
-    console.log('Tutorial system initialized');
-  }
-
-  if (window.initSettings) {
-    window.initSettings();
-    console.log('Settings & notifications system initialized');
-  }
-
-  updateTurnDisplay();
-  updateAllUI();
-  if (!DEV_MODE) document.getElementById('dev-badge').style.display = 'none';
-  else updateDevBadge();
-  if (window.render) window.render();
-}
-
-// Game initialization is now handled by the module loader after all modules are ready
-// requestAnimationFrame(() => { requestAnimationFrame(() => initGame()); });
 </script>
 </body>
 </html>

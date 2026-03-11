@@ -9,6 +9,22 @@ export function initDialogSystem(gameStateRef) {
     setupDialogEventListeners();
 }
 
+// Hide/show the map feature-labels overlay so it is never composited
+// simultaneously with the confirm dialog. This prevents a Chrome GPU process
+// crash (macOS Metal) that occurs when the overlay and the dialog compositor
+// layers are both active at the same time.
+function hideLabelsOverlay() {
+    const ov = document.getElementById('feature-labels-overlay');
+    if (ov) ov.style.display = 'none';
+}
+function showLabelsOverlay() {
+    const ov = document.getElementById('feature-labels-overlay');
+    if (ov) ov.style.display = '';
+    // Invalidate label cache and re-render so labels reappear immediately.
+    if (window.invalidateFeatureLabelCache) window.invalidateFeatureLabelCache();
+    if (window.render) window.render();
+}
+
 // Core confirmation dialog with custom styling
 export function showConfirmDialog(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
     document.getElementById('confirm-title').textContent = title;
@@ -16,7 +32,12 @@ export function showConfirmDialog(title, bodyHtml, okLabel, cancelLabel, onConfi
     document.getElementById('confirm-ok').textContent = okLabel;
     document.getElementById('confirm-cancel').textContent = cancelLabel;
     const dialog = document.getElementById('confirm-dialog');
-    dialog.classList.add('visible');
+    // Hide overlay first, then wait one frame before showing the dialog.
+    // This prevents the overlay removal and dialog compositor-layer creation
+    // from being batched into the same Metal command flush on Skia Graphite,
+    // which crashes the GPU process on Intel Mac (crbug.com/841755 area).
+    hideLabelsOverlay();
+    requestAnimationFrame(() => dialog.classList.add('visible'));
 
     const okBtn = document.getElementById('confirm-ok');
     const cancelBtn = document.getElementById('confirm-cancel');
@@ -27,8 +48,10 @@ export function showConfirmDialog(title, bodyHtml, okLabel, cancelLabel, onConfi
         cancelBtn.replaceWith(cancelBtn.cloneNode(true));
     }
 
-    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
-    document.getElementById('confirm-cancel').addEventListener('click', cleanup);
+    // showLabelsOverlay() is called AFTER onConfirm() so the render it triggers
+    // sees any feature names added by the confirm action (e.g. naming a hex).
+    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); showLabelsOverlay(); });
+    document.getElementById('confirm-cancel').addEventListener('click', () => { cleanup(); showLabelsOverlay(); });
 }
 
 // Wrapper for standard confirm dialog with default labels
@@ -49,7 +72,11 @@ export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancel
     okBtn.classList.add('primary');
 
     const dialog = document.getElementById('confirm-dialog');
-    dialog.classList.add('visible');
+    // Hide overlay first, then wait one frame before showing the dialog.
+    // Prevents overlay removal + dialog compositor-layer creation from
+    // being batched into the same Metal flush on Skia Graphite/Intel Mac.
+    hideLabelsOverlay();
+    requestAnimationFrame(() => dialog.classList.add('visible'));
 
     const cancelBtn = document.getElementById('confirm-cancel');
 
@@ -62,8 +89,10 @@ export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancel
         cancelBtn.replaceWith(cancelBtn.cloneNode(true));
     }
 
-    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
-    document.getElementById('confirm-cancel').addEventListener('click', cleanup);
+    // showLabelsOverlay() is called AFTER onConfirm() so the render it triggers
+    // sees any feature names added by the confirm action (e.g. naming a hex).
+    document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); showLabelsOverlay(); });
+    document.getElementById('confirm-cancel').addEventListener('click', () => { cleanup(); showLabelsOverlay(); });
 }
 
 // Game-specific confirmation dialogs
@@ -226,6 +255,7 @@ export function closeDialog() {
     const dialog = document.getElementById('confirm-dialog');
     if (dialog) {
         dialog.classList.remove('visible');
+        showLabelsOverlay();
     }
 }
 

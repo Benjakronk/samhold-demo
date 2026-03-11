@@ -20,6 +20,9 @@ export function isAnyOverlayOpen() {
         'settings-overlay',
         'saveload-overlay',
         'dev-overlay',
+        'chronicle-overlay',
+        'traditions-overlay',
+        'cohesion-overlay',
         'event-dialog',
         'confirm-dialog'
     ];
@@ -54,6 +57,9 @@ export function closeAllOverlays() {
         'settings-overlay',
         'saveload-overlay',
         'dev-overlay',
+        'chronicle-overlay',
+        'traditions-overlay',
+        'cohesion-overlay',
         'event-dialog',
         'confirm-dialog'
     ];
@@ -118,6 +124,18 @@ export function closeGameMenuOverlay() {
     closeOverlay('game-menu-overlay');
 }
 
+// Cohesion overlay management
+export function openCohesionOverlay() {
+    if (window.renderCohesionOverlay) {
+        window.renderCohesionOverlay();
+    }
+    openOverlay('cohesion-overlay');
+}
+
+export function closeCohesionOverlay() {
+    closeOverlay('cohesion-overlay');
+}
+
 // Dev overlay management
 export function openDevOverlay() {
     if (window.renderDevOverlay) {
@@ -147,6 +165,10 @@ export function switchWorkforceTab(tab) {
         window.renderWorkersTab();
     } else if (tab === 'units' && window.renderUnitsTab) {
         window.renderUnitsTab();
+    } else if (tab === 'build' && window.renderWorkersTab) {
+        window.renderWorkersTab(); // renders wf-build section
+    } else if (tab === 'train' && window.renderUnitsTab) {
+        window.renderUnitsTab(); // renders units-train section
     }
 }
 
@@ -200,12 +222,27 @@ function setupOverlayEventListeners() {
     }
 
     // Population details overlay event listeners
+    const popCloseBtn = document.getElementById('population-close');
+    if (popCloseBtn) {
+        popCloseBtn.addEventListener('click', () => {
+            if (window.closePopulationDetails) window.closePopulationDetails();
+        });
+    }
+
     const popDetailsOverlay = document.getElementById('population-details-overlay');
     if (popDetailsOverlay) {
         popDetailsOverlay.addEventListener('click', (e) => {
             if (e.target === popDetailsOverlay) {
-                closePopulationDetailsOverlay();
+                if (window.closePopulationDetails) window.closePopulationDetails();
             }
+        });
+    }
+
+    // Game menu close button
+    const gameMenuCloseBtn = document.getElementById('game-menu-close');
+    if (gameMenuCloseBtn) {
+        gameMenuCloseBtn.addEventListener('click', () => {
+            if (window.closeGameMenu) window.closeGameMenu();
         });
     }
 
@@ -224,7 +261,29 @@ function setupOverlayEventListeners() {
     if (gameMenuOverlay) {
         gameMenuOverlay.addEventListener('click', (e) => {
             if (e.target === gameMenuOverlay) {
-                closeGameMenuOverlay();
+                if (window.closeGameMenu) window.closeGameMenu();
+            }
+        });
+    }
+
+    // Cohesion overlay event listeners
+    const cohesionCloseBtn = document.getElementById('cohesion-close');
+    if (cohesionCloseBtn) {
+        cohesionCloseBtn.addEventListener('click', closeCohesionOverlay);
+    }
+    const cohesionOverlay = document.getElementById('cohesion-overlay');
+    if (cohesionOverlay) {
+        cohesionOverlay.addEventListener('click', (e) => {
+            if (e.target === cohesionOverlay) closeCohesionOverlay();
+        });
+    }
+
+    // Traditions overlay event listeners
+    const traditionsOverlay = document.getElementById('traditions-overlay');
+    if (traditionsOverlay) {
+        traditionsOverlay.addEventListener('click', (e) => {
+            if (e.target === traditionsOverlay) {
+                if (window.closeTraditions) window.closeTraditions();
             }
         });
     }
@@ -238,6 +297,11 @@ function setupOverlayEventListeners() {
             }
         });
     }
+
+    // Panels dropdown: close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#panels-menu')) closePanelsMenu();
+    });
 
     // Workforce tab event listeners
     document.querySelectorAll('.workforce-tab').forEach(t => {
@@ -258,9 +322,31 @@ export function isOverlayOpen(overlayId) {
     return overlay && overlay.classList.contains('visible');
 }
 
+// ---- PANELS DROPDOWN MENU ----
+
+export function togglePanelsMenu() {
+    document.getElementById('panels-menu')?.classList.toggle('open');
+}
+
+export function toggleFeatureLabels() {
+    window.featureLabelsVisible = window.featureLabelsVisible !== false ? false : true;
+    const btn = document.getElementById('labels-toggle-btn');
+    if (btn) btn.classList.toggle('active', window.featureLabelsVisible !== false);
+    if (window.invalidateFeatureLabelCache) window.invalidateFeatureLabelCache();
+    if (window.render) window.render();
+}
+
+export function closePanelsMenu() {
+    document.getElementById('panels-menu')?.classList.remove('open');
+}
+
 // Handle ESC key to close overlays
 export function handleEscapeKey() {
-    if (isOverlayOpen('dev-overlay')) {
+    if (isOverlayOpen('traditions-overlay')) {
+        window.closeTraditions();
+    } else if (isOverlayOpen('chronicle-overlay')) {
+        window.closeChronicle();
+    } else if (isOverlayOpen('dev-overlay')) {
         closeDevOverlay();
     } else if (isOverlayOpen('governance-overlay')) {
         closeGovernanceOverlay();
@@ -268,6 +354,8 @@ export function handleEscapeKey() {
         closeWorkforceOverlay();
     } else if (isOverlayOpen('population-details-overlay')) {
         closePopulationDetailsOverlay();
+    } else if (isOverlayOpen('cohesion-overlay')) {
+        closeCohesionOverlay();
     } else if (isOverlayOpen('settings-overlay')) {
         closeSettingsOverlay();
     } else if (isOverlayOpen('game-menu-overlay')) {

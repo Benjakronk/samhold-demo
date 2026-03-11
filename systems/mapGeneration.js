@@ -19,7 +19,7 @@ function weightedPick(rng) {
 }
 
 function mkHex(col, row, terrain, rng) {
-  return { col, row, terrain, variation: rng(), building: null, buildProgress: 0, revealed: fogOfWarDisabled, workers: 0, hasRiver: false, lakeCluster: -1 };
+  return { col, row, terrain, variation: rng(), building: null, buildProgress: 0, revealed: fogOfWarDisabled, workers: 0, hasRiver: false, riverIds: [], lakeCluster: -1 };
 }
 
 // Main map generation function — faithful to original
@@ -272,6 +272,7 @@ function generateRivers(map, cols, rows, rng, gameState) {
     }
 
     map[src.row][src.col].hasRiver = true;
+    if (!map[src.row][src.col].riverIds.includes(ri)) map[src.row][src.col].riverIds.push(ri);
 
     // Walk vertex to vertex
     const pathKeys = [bestStartKey];
@@ -383,7 +384,10 @@ function generateRivers(map, cols, rows, rng, gameState) {
       const pV = vGraph.get(prevKey), cV = vGraph.get(curKey);
       for (const h1 of pV.hexes)
         for (const h2 of cV.hexes)
-          if (h1.col === h2.col && h1.row === h2.row) map[h1.row][h1.col].hasRiver = true;
+          if (h1.col === h2.col && h1.row === h2.row) {
+            map[h1.row][h1.col].hasRiver = true;
+            if (!map[h1.row][h1.col].riverIds.includes(ri)) map[h1.row][h1.col].riverIds.push(ri);
+          }
 
       // Terminate at coast
       if (touchesCoast(cV)) { reachedTerminus = true; break; }
@@ -394,7 +398,10 @@ function generateRivers(map, cols, rows, rng, gameState) {
         if (sourceCluster >= 0) for (const c of termClusters) { if (c === sourceCluster) { isSrcCluster = true; break; } }
         if (!isSrcCluster) {
           reachedTerminus = true;
-          for (const lh of cV.hexes) if (map[lh.row][lh.col].terrain === 'lake') map[lh.row][lh.col].hasRiver = true;
+          for (const lh of cV.hexes) if (map[lh.row][lh.col].terrain === 'lake') {
+            map[lh.row][lh.col].hasRiver = true;
+            if (!map[lh.row][lh.col].riverIds.includes(ri)) map[lh.row][lh.col].riverIds.push(ri);
+          }
           break;
         }
       }
@@ -402,6 +409,18 @@ function generateRivers(map, cols, rows, rng, gameState) {
       if (allRiverVerts.has(curKey) && step >= 3) { reachedTerminus = true; mergedIntoExisting = true; break; }
       // Terminate at map edge
       if (isMapEdge(cV) && step >= 8) { reachedTerminus = true; break; }
+    }
+
+    // Discard degenerate rivers that never left their source vertex (0 segments).
+    // These occur when the starting vertex has no valid outward candidates
+    // (e.g. surrounded by already-used river verts or all-uphill neighbours).
+    // Undo the hasRiver / riverIds marks on the source hex so it is not left
+    // with a stale reference to a river that has no drawable path.
+    if (pathKeys.length < 2) {
+      map[src.row][src.col].hasRiver = false;
+      map[src.row][src.col].riverIds = map[src.row][src.col].riverIds.filter(id => id !== ri);
+      ri--; // don't consume this river index; reuse it for the next attempt
+      continue;
     }
 
     // Record vertices

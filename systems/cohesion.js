@@ -42,13 +42,57 @@ export function calculateCohesion() {
   // Weighted average: 70% average, 30% minimum (lowest pillar has significant drag)
   window.gameState.cohesion.total = Math.round((avgPillars * 0.7) + (minPillar * 0.3));
 
-  // Track changes for UI display
+  // Track changes for UI display (used by post-turn summary tooltips)
   window.gameState.cohesion.lastUpdate = {
     identity: window.gameState.cohesion.identity - prev.identity,
     legitimacy: window.gameState.cohesion.legitimacy - prev.legitimacy,
     satisfaction: window.gameState.cohesion.satisfaction - prev.satisfaction,
     bonds: window.gameState.cohesion.bonds - prev.bonds
   };
+}
+
+/**
+ * Preview the cohesion deltas that would occur next turn, without mutating state.
+ * Used by the UI to show projected changes (like food delta in the top bar).
+ */
+export function previewCohesionDeltas() {
+  const c = window.gameState.cohesion;
+  const gs = window.gameState;
+
+  const savedPillars = {
+    identity: c.identity,
+    legitimacy: c.legitimacy,
+    satisfaction: c.satisfaction,
+    bonds: c.bonds
+  };
+  const savedFood = gs.resources.food;
+
+  // Project food to next turn so satisfaction uses the food level it will actually see
+  if (window.calculateIncome) {
+    const inc = window.calculateIncome();
+    gs.resources.food = Math.max(0, savedFood + inc.netFood);
+  }
+
+  calculateSatisfactionPillar();
+  calculateIdentityPillar();
+  calculateLegitimacyPillar();
+  calculateBondsPillar();
+
+  const deltas = {
+    identity: c.identity - savedPillars.identity,
+    legitimacy: c.legitimacy - savedPillars.legitimacy,
+    satisfaction: c.satisfaction - savedPillars.satisfaction,
+    bonds: c.bonds - savedPillars.bonds
+  };
+
+  // Restore everything
+  c.identity = savedPillars.identity;
+  c.legitimacy = savedPillars.legitimacy;
+  c.satisfaction = savedPillars.satisfaction;
+  c.bonds = savedPillars.bonds;
+  gs.resources.food = savedFood;
+
+  return deltas;
 }
 
 /**
@@ -60,31 +104,38 @@ export function calculateSatisfactionPillar() {
   let satisfaction = window.gameState.cohesion.satisfaction;
   const currentModel = GOVERNANCE_MODELS[window.gameState.governance.model];
 
-  // Food satisfaction - most immediate factor
+  // Food satisfaction - based on sustainability, not raw stockpile size
   const totalChildren = getTotalChildren();
   const totalFoodNeed = (window.gameState.population.total * window.FOOD_PER_POP) + (totalChildren * window.FOOD_PER_CHILD);
-  const foodRatio = window.gameState.resources.food / Math.max(1, totalFoodNeed);
+  const stockpile = window.gameState.resources.food;
+  const netFood = window.calculateIncome ? window.calculateIncome().netFood : 0;
 
-  if (foodRatio >= 1.5) {
-    // Abundant food - +8 per turn toward 80
+  // Turns of food remaining at current net consumption rate
+  const turnsOfFood = (netFood >= 0) ? Infinity : stockpile / Math.abs(netFood);
+
+  if (netFood >= 0 && stockpile >= totalFoodNeed) {
+    // Truly sustainable: income covers needs and have a buffer → thriving
     satisfaction = Math.min(80, satisfaction + 8);
-  } else if (foodRatio >= 1.2) {
-    // Good surplus - +4 per turn toward 70
+  } else if (netFood >= 0) {
+    // Self-sustaining but nearly empty stockpile → stable
     satisfaction = Math.min(70, satisfaction + 4);
-  } else if (foodRatio >= 1.0) {
-    // Adequate - slow growth toward 60
-    satisfaction = Math.min(60, satisfaction + 2);
-  } else if (foodRatio >= 0.8) {
-    // Shortage - moderate decline
-    satisfaction = Math.max(0, satisfaction - 6);
+  } else if (turnsOfFood > 8) {
+    // Draining slowly — over 8 turns of buffer, people sense no immediate threat
+    satisfaction = Math.min(65, satisfaction + 1);
+  } else if (turnsOfFood > 4) {
+    // 4–8 turns left — noticeable worry sets in
+    satisfaction = Math.max(0, satisfaction - 4);
+  } else if (turnsOfFood > 2) {
+    // 2–4 turns left — genuine fear, morale suffers
+    satisfaction = Math.max(0, satisfaction - 8);
   } else {
-    // Severe shortage/starvation - rapid decline
-    satisfaction = Math.max(0, satisfaction - 12);
+    // Under 2 turns or actively starving — crisis
+    satisfaction = Math.max(0, satisfaction - 14);
   }
 
   // Working Age policy effects on satisfaction
   if (totalChildren > 0) {
-    const isStarving = window.gameState.resources.food < totalFoodNeed;
+    const isStarving = stockpile < totalFoodNeed;
     if (window.WORKING_AGE < 10) {
       // Low working age - children working
       const penalty = Math.abs(10 - window.WORKING_AGE); // 1-4 based on how far below 10
@@ -435,9 +486,14 @@ export function updateCohesionDisplay() {
   cohesionValueEl.textContent = total;
   cohesionValueEl.style.color = status.color;
 
-  // Add tooltip with breakdown and status
+  // Compute projected next-turn deltas for display
+  const projected = previewCohesionDeltas();
+
+  const fmt = (val, d) => d !== 0 ? ` (${d > 0 ? '+' : ''}${Math.round(d)})` : '';
+
+  // Add tooltip with breakdown and projected changes
   const container = document.getElementById('cohesion-bar-container');
-  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${c.lastUpdate.identity !== 0 ? ` (${c.lastUpdate.identity > 0 ? '+' : ''}${Math.round(c.lastUpdate.identity)})` : ''}\nLegitimacy: ${c.legitimacy}${c.lastUpdate.legitimacy !== 0 ? ` (${c.lastUpdate.legitimacy > 0 ? '+' : ''}${Math.round(c.lastUpdate.legitimacy)})` : ''}\nSatisfaction: ${c.satisfaction}${c.lastUpdate.satisfaction !== 0 ? ` (${c.lastUpdate.satisfaction > 0 ? '+' : ''}${Math.round(c.lastUpdate.satisfaction)})` : ''}\nBonds: ${c.bonds}${c.lastUpdate.bonds !== 0 ? ` (${c.lastUpdate.bonds > 0 ? '+' : ''}${Math.round(c.lastUpdate.bonds)})` : ''}`;
+  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${fmt(c.identity, projected.identity)}\nLegitimacy: ${c.legitimacy}${fmt(c.legitimacy, projected.legitimacy)}\nSatisfaction: ${c.satisfaction}${fmt(c.satisfaction, projected.satisfaction)}\nBonds: ${c.bonds}${fmt(c.bonds, projected.bonds)}`;
 
   // Update sidebar detail bars
   for (const p of ['identity','legitimacy','satisfaction','bonds']) {
@@ -447,8 +503,8 @@ export function updateCohesionDisplay() {
       barEl.style.width = c[p]+'%';
       valEl.textContent = c[p];
 
-      // Add change indicator
-      const change = c.lastUpdate[p];
+      // Show projected next-turn change
+      const change = projected[p];
       if (change !== 0) {
         valEl.textContent += ` (${change > 0 ? '+' : ''}${Math.round(change)})`;
         valEl.style.fontWeight = '700';

@@ -143,6 +143,8 @@ export function moveThreatTowardTarget(threat) {
     threat.col = bestMove.col;
     threat.row = bestMove.row;
     threat.movementLeft--;
+    // Check if the threat has moved onto a sacred place
+    if (window.checkDesecration) window.checkDesecration(bestMove.col, bestMove.row, null);
     return true;
   }
 
@@ -254,6 +256,7 @@ export function checkThreatSpawning(report) {
     if (threat) {
       const threatTypeData = window.THREAT_TYPES[threatType];
       report.events.push(`⚠️ ${threatTypeData.name} ${threatTypeData.icon} spotted on the horizon! They appear hostile.`);
+      if (window.addChronicleEntry) window.addChronicleEntry(`${threatTypeData.name} were spotted approaching from the wilderness. The people brace for conflict.`, 'military');
     }
   }
 }

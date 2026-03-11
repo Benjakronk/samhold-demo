@@ -127,6 +127,24 @@ function drawHexStatic(hex, size) {
     }
   }
 
+  // Sacred place marker — golden inner glow, edges to center
+  const sacredPlace = window.getSacredPlace?.(hex.col, hex.row);
+  if (sacredPlace) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.25, dx, dy, size * 1.0);
+    grd.addColorStop(0, 'rgba(220,185,60,0)');
+    grd.addColorStop(0.6, 'rgba(220,185,60,0.18)');
+    grd.addColorStop(1, 'rgba(255,210,80,0.55)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
+  // Named terrain feature label is drawn in screen-space in drawFeatureLabels()
+  // so that font size stays legible regardless of zoom level.
+
   // Worker indicator (dots below center)
   if (hex.workers > 0) {
     mapCtx.globalAlpha = 1.0;
@@ -275,8 +293,21 @@ function renderMapToCache() {
   // River vertex debug markers
   if (devShowRiverVertices) {
     for (const river of gameState.rivers) {
-      if (river.path.length < 2) continue;
       if (devHighlightRivers.size > 0 && !devHighlightRivers.has(river.id)) continue;
+
+      // Show degenerate (0-segment) rivers as a distinct red X so they are visible
+      if (river.path.length < 2) {
+        const src = river.path[0];
+        if (!src) continue;
+        const sx = src.x + CONSTANTS.MAP_PAD, sy = src.y + CONSTANTS.MAP_PAD;
+        mapCtx.strokeStyle = '#ff0000';
+        mapCtx.lineWidth = 3;
+        mapCtx.beginPath();
+        mapCtx.moveTo(sx - 7, sy - 7); mapCtx.lineTo(sx + 7, sy + 7);
+        mapCtx.moveTo(sx + 7, sy - 7); mapCtx.lineTo(sx - 7, sy + 7);
+        mapCtx.stroke();
+        continue;
+      }
 
       const src = river.path[0];
       const end = river.path[river.path.length - 1];
@@ -402,6 +433,128 @@ function renderMapToCache() {
   mapDirty = false;
 }
 
+// ---- FEATURE LABELS (screen-space, fixed font size) ----
+
+// Returns the world-space midpoint of the revealed portion of a river,
+// using the same vertex-proximity fog-of-war check as the river renderer.
+function getRiverRevealedMidpoint(river) {
+  const pts = river.path;
+  if (pts.length < 2) return null;
+  const size = CONSTANTS.HEX_SIZE;
+  const threshold = size * 1.1;
+  const cols = CONSTANTS.MAP_COLS, rows = CONSTANTS.MAP_ROWS;
+
+  const nearHexKeys = (vx, vy) => {
+    const h = pixelToHex(vx, vy, size);
+    const keys = [];
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const c = h.col + dc, r = h.row + dr;
+        if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+        const hp = hexToPixel(c, r, size);
+        if (Math.hypot(vx - hp.x, vy - hp.y) <= threshold) keys.push(c * 10000 + r);
+      }
+    }
+    return keys;
+  };
+
+  const revealedSegIdx = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1];
+    const near0 = nearHexKeys(p0.x, p0.y);
+    const near1Set = new Set(nearHexKeys(p1.x, p1.y));
+    let visible = false;
+    for (const key of near0) {
+      if (near1Set.has(key)) {
+        const c = Math.floor(key / 10000), r = key % 10000;
+        if (gameState.map[r]?.[c]?.revealed) { visible = true; break; }
+      }
+    }
+    if (visible) revealedSegIdx.push(i);
+  }
+
+  if (revealedSegIdx.length === 0) return null;
+  const midIdx = revealedSegIdx[Math.floor(revealedSegIdx.length / 2)];
+  const p0 = pts[midIdx], p1 = pts[midIdx + 1];
+  return { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+}
+
+// Updates the HTML overlay with feature labels positioned over the canvas.
+// Using HTML elements instead of canvas text avoids Chrome GPU crashes that occur
+// when Canvas 2D web-font rendering and CSS compositor layers interact.
+// Cache key prevents 60fps DOM churn: only update when camera or features change.
+let _featureLabelCacheKey = null;
+function drawFeatureLabels() {
+  const overlay = document.getElementById('feature-labels-overlay');
+  if (!overlay || !gameState?.culture || !window.worldToScreen) return;
+
+  // Hidden by player toggle — clear overlay and bail
+  if (window.featureLabelsVisible === false) {
+    if (overlay.innerHTML !== '') { overlay.innerHTML = ''; _featureLabelCacheKey = null; }
+    return;
+  }
+
+  const cam = gameState.camera;
+  const features = gameState.culture.namedFeatures ?? [];
+  const featureNames = features.map(f => f.name).join('\x00');
+  const cacheKey = `${cam.x.toFixed(1)},${cam.y.toFixed(1)},${cam.zoom.toFixed(3)}\x00${featureNames}`;
+  if (cacheKey === _featureLabelCacheKey) return;
+  _featureLabelCacheKey = cacheKey;
+
+  // Font size scales inversely with zoom so names stay readable when zoomed out.
+  // Clamped to keep labels legible at all zoom levels.
+  const fontSize = Math.round(Math.max(24, Math.min(42, 20 / cam.zoom)));
+  const sizeStyle = `font-size:${fontSize}px`;
+
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let html = '';
+
+  // Terrain feature names (non-lake, non-river)
+  for (const feature of features) {
+    if (feature.type === 'river') continue;
+    // Lakes are rendered separately at cluster centroid
+    if (feature.type === 'lake' && feature.lakeCluster != null) continue;
+    const hex = gameState.map[feature.row]?.[feature.col];
+    if (!hex?.revealed) continue;
+    const wp = hexToPixel(feature.col, feature.row, CONSTANTS.HEX_SIZE);
+    const sp = window.worldToScreen(wp.x, wp.y);
+    const offset = CONSTANTS.HEX_SIZE * cam.zoom * 0.3;
+    html += `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y + offset}px;${sizeStyle}">${esc(feature.name)}</span>`;
+  }
+
+  // Lake names — one label per cluster at centroid of all revealed lake hexes
+  for (const feature of features) {
+    if (feature.type !== 'lake' || feature.lakeCluster == null) continue;
+    let sumX = 0, sumY = 0, count = 0;
+    for (let r = 0; r < gameState.map.length; r++) {
+      const row = gameState.map[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const h = row[c];
+        if (h?.terrain === 'lake' && h.lakeCluster === feature.lakeCluster && h.revealed) {
+          const wp = hexToPixel(c, r, CONSTANTS.HEX_SIZE);
+          sumX += wp.x; sumY += wp.y; count++;
+        }
+      }
+    }
+    if (count === 0) continue;
+    const sp = window.worldToScreen(sumX / count, sumY / count);
+    html += `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(feature.name)}</span>`;
+  }
+
+  // River names — at midpoint of revealed portion
+  for (const river of (gameState.rivers ?? [])) {
+    const named = window.getNamedRiver?.(river.id);
+    if (!named) continue;
+    const mid = getRiverRevealedMidpoint(river);
+    if (!mid) continue;
+    const sp = window.worldToScreen(mid.x, mid.y);
+    html += `<span class="map-river-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(named.name)}</span>`;
+  }
+
+  overlay.innerHTML = html;
+}
+
 // ---- MAIN RENDER FUNCTION ----
 
 function render() {
@@ -411,6 +564,7 @@ function render() {
   const cam = gameState.camera;
   const so = window.worldToScreen(-CONSTANTS.MAP_PAD, -CONSTANTS.MAP_PAD);
   ctx.drawImage(mapCanvas, 0, 0, mapCanvas.width, mapCanvas.height, so.x, so.y, mapCanvas.width * cam.zoom, mapCanvas.height * cam.zoom);
+  drawFeatureLabels();
   drawOverlays();
   drawMinimap();
 }
@@ -418,6 +572,8 @@ function render() {
 // ---- OVERLAY RENDERING ----
 
 function drawOverlays() {
+  ctx.save();
+
   // Draw movement range indicators first
   drawMovementRange();
 
@@ -439,6 +595,8 @@ function drawOverlays() {
     drawHexPath(ctx, sp.x, sp.y, ds + 2); ctx.strokeStyle = 'rgba(201,168,76,0.25)'; ctx.lineWidth = 6; ctx.stroke();
     drawHexPath(ctx, sp.x, sp.y, ds - 1); ctx.strokeStyle = '#c9a84c'; ctx.lineWidth = 3; ctx.stroke();
   }
+
+  ctx.restore();
 }
 
 function drawMovementRange() {
@@ -809,6 +967,13 @@ function setMapDirty(dirty) {
   mapDirty = dirty;
 }
 
+// Force the feature-label cache key to be null so that drawFeatureLabels()
+// rebuilds the overlay HTML on the next render() call. Used after the confirm
+// dialog hides the overlay (display:none) and then restores it.
+function invalidateFeatureLabelCache() {
+  _featureLabelCacheKey = null;
+}
+
 // Export functions for module use
 export {
   initRendering,
@@ -827,7 +992,8 @@ export {
   minimapToCamera,
   setDevRenderingFlags,
   updateCanvasRect,
-  setMapDirty
+  setMapDirty,
+  invalidateFeatureLabelCache
 };
 
 // For browser compatibility, attach to window if available
@@ -849,6 +1015,7 @@ if (typeof window !== 'undefined') {
     minimapToCamera,
     setDevRenderingFlags,
     updateCanvasRect,
-    setMapDirty
+    setMapDirty,
+    invalidateFeatureLabelCache
   };
 }

@@ -49,6 +49,44 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
+// ---- UI SCALE ----
+
+function getMaxUIScale() {
+  const maxPanelWidth = window.innerWidth * 0.35;
+  const maxScale = maxPanelWidth / 300;
+  const maxBarHeight = window.innerHeight * 0.3;
+  const maxScaleV = maxBarHeight / 56;
+  return Math.min(Math.floor(Math.min(maxScale, maxScaleV) * 100), 160);
+}
+
+function clampTopBar(uiScale) {
+  const bar = document.getElementById('top-bar');
+  let tbScale = uiScale;
+  bar.style.zoom = tbScale;
+  while (bar.scrollWidth > bar.clientWidth + 2 && tbScale > 0.8) {
+    tbScale = Math.round((tbScale - 0.05) * 100) / 100;
+    bar.style.zoom = tbScale;
+  }
+  document.documentElement.style.setProperty('--topbar-scale', tbScale);
+  return tbScale;
+}
+
+function applyUIScale(percent) {
+  const maxPercent = getMaxUIScale();
+  percent = Math.max(80, Math.min(percent, maxPercent));
+  const scale = percent / 100;
+  document.documentElement.style.setProperty('--ui-scale', scale);
+  clampTopBar(scale);
+  const slider = document.getElementById('ui-scale-slider');
+  slider.value = percent;
+  slider.max = maxPercent;
+  document.getElementById('ui-scale-val').textContent = percent + '%';
+  document.getElementById('scale-up').disabled = percent >= maxPercent;
+  document.getElementById('scale-down').disabled = percent <= 80;
+  requestAnimationFrame(() => { window.resizeCanvas(); if (window.render) window.render(); });
+  try { localStorage.setItem('samhold-ui-scale', percent); } catch(e) {}
+}
+
 // Inject CSS animations for notifications
 function initSettings() {
   const style = document.createElement('style');
@@ -87,16 +125,46 @@ function initSettings() {
     }
   });
 
-  // Tab switching
-  document.querySelectorAll('.saveload-tab').forEach(t => {
-    t.onclick = () => window.switchSaveLoadTab(t.dataset.tab);
-  });
-
   // Save input enter key support
   document.getElementById('save-name-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       window.performSave();
     }
+  });
+
+  // UI Scale controls
+  document.getElementById('ui-scale-slider').addEventListener('input', (e) => {
+    applyUIScale(parseInt(e.target.value));
+  });
+
+  document.getElementById('scale-up').addEventListener('click', () => {
+    applyUIScale(parseInt(document.getElementById('ui-scale-slider').value) + 5);
+  });
+
+  document.getElementById('scale-down').addEventListener('click', () => {
+    applyUIScale(parseInt(document.getElementById('ui-scale-slider').value) - 5);
+  });
+
+  window.addEventListener('resize', () => {
+    applyUIScale(parseInt(document.getElementById('ui-scale-slider').value));
+  });
+
+  // Restore saved UI scale
+  try {
+    const saved = localStorage.getItem('samhold-ui-scale');
+    if (saved) applyUIScale(parseInt(saved));
+  } catch(e) {}
+
+  // Hint toggle state
+  try {
+    const hintsDisabled = localStorage.getItem('samhold_tutorial_disabled') === 'true';
+    document.getElementById('hints-toggle').checked = !hintsDisabled;
+  } catch(e) {}
+
+  document.getElementById('hints-toggle').addEventListener('change', (e) => {
+    try {
+      localStorage.setItem('samhold_tutorial_disabled', e.target.checked ? 'false' : 'true');
+    } catch(err) {}
   });
 }
 
@@ -104,5 +172,8 @@ export {
   initSettings,
   openSettings,
   returnToMainMenu,
-  showNotification
+  showNotification,
+  applyUIScale,
+  getMaxUIScale,
+  clampTopBar
 };

@@ -9,12 +9,57 @@ let mapDirty = null;
 // Initialize turn processing system
 function initTurnProcessing(gameStateRef) {
   gameState = gameStateRef;
+  setupTurnEventListeners();
+}
+
+function setupTurnEventListeners() {
+  document.getElementById('summary-ok').addEventListener('click', () => {
+    document.getElementById('turn-summary').classList.remove('visible');
+
+    // Process events after turn summary is closed
+    if (gameState.pendingEventCheck) {
+      gameState.pendingEventCheck = false;
+      setTimeout(() => {
+        window.EventSystem.processActiveEvents();
+      }, 50);
+    }
+  });
+
+  document.getElementById('end-turn-btn').addEventListener('click', () => {
+    if (gameState.gameEnded) return;
+    if (window.isAnyOverlayOpen()) return;
+
+    const report = processTurn();
+
+    // Capture current season/year for summary BEFORE advancing
+    const summarySeasonName = window.SEASONS[gameState.season];
+    const summaryYear = gameState.year;
+
+    gameState.turn++;
+    gameState.season = (gameState.season + 1) % 4;
+    if (gameState.season === 0) gameState.year++;
+
+    window.resetUnitMovement();
+    window.updateTurnDisplay();
+    window.updateAllUI();
+
+    if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+    if (window.render) window.render();
+    window.showTurnSummary(report, summarySeasonName, summaryYear);
+
+    // Show tutorial hints for early turns
+    if (gameState.turn <= 15) {
+      setTimeout(() => window.showTutorialHint(), 1500);
+    }
+
+    gameState.pendingEventCheck = true;
+  });
 }
 
 // ---- CORE TURN PROCESSING ----
 
 function processTurn() {
-  const report = { events: [], foodIncome: 0, matIncome: 0, foodConsumed: 0, popChange: 0, buildingsCompleted: [], winterCost: 0, constructionWorkers: 0 };
+  const report = { events: [], foodIncome: 0, matIncome: 0, foodConsumed: 0, buildingsCompleted: [], winterCost: 0, constructionWorkers: 0, childBirths: 0, graduated: 0, adultDeaths: 0, childDeaths: 0 };
   const inc = window.calculateIncome();
 
   report.foodIncome = inc.foodIncome;
@@ -108,9 +153,30 @@ function processTurn() {
   // Process pending events (delayed consequences)
   window.processPendingEvents();
 
+  // Process traditions (fire due traditions, pay costs, apply cohesion bonuses)
+  if (window.processTraditions) window.processTraditions(report);
+
+  // Process oral tradition (storytellers compose/lose stories)
+  if (window.processStories) window.processStories(report);
+
+  // Process sacred places (passive Bonds bonus)
+  if (window.processSacredPlaces) window.processSacredPlaces(report);
+
   // Calculate cohesion system (includes Working Age effects)
   window.calculateCohesion();
   window.applyCohesionEffects();
+
+  // DEBUG: log food and satisfaction state after turn processing
+  {
+    const inc = window.calculateIncome();
+    const projSatisfaction = window.previewCohesionDeltas ? window.previewCohesionDeltas() : null;
+    const projFood = gameState.resources.food + inc.netFood;
+    console.log(
+      `[Turn ${gameState.turn}] Food: ${gameState.resources.food} (projected next: ${projFood}, Δ: ${inc.netFood > 0 ? '+' : ''}${inc.netFood})` +
+      ` | Satisfaction: ${gameState.cohesion.satisfaction}` +
+      (projSatisfaction ? ` (projected Δ: ${projSatisfaction.satisfaction > 0 ? '+' : ''}${Math.round(projSatisfaction.satisfaction)})` : '')
+    );
+  }
 
   // Process external threats (movement and spawning)
   window.processThreats(report);
@@ -147,12 +213,16 @@ function processTurn() {
 
   // Update labor tracking from actual worker assignments
   const labInc = window.calculateIncome();
-  gameState.population.employed = labInc.laborUsed;
-  gameState.population.idle = Math.max(0, gameState.population.total - labInc.laborUsed);
+  const storytellers = gameState.culture?.storytellers ?? 0;
+  gameState.population.employed = labInc.laborUsed + storytellers;
+  gameState.population.idle = Math.max(0, gameState.population.total - labInc.laborUsed - storytellers);
 
   report.netFood = inc.netFood;
   report.netMat = inc.netMat;
   gameState.lastTurnReport = report;
+
+  // Record notable events in the Chronicle
+  if (window.recordTurnInChronicle) window.recordTurnInChronicle(report);
 
   // Check for victory conditions at target turn
   checkVictoryConditions();
@@ -260,7 +330,7 @@ function processBirths(report) {
     }
 
     report.events.push(`👶 ${wholeBirths} children were born this season.`);
-    report.popChange += wholeBirths;
+    report.childBirths += wholeBirths;
   }
 }
 
@@ -271,14 +341,18 @@ function processAging(report) {
   }
 
   // Check for graduation to adult workforce
-  const workingAge = gameState.governance.policies.workingAge;
+  const workingAge = window.WORKING_AGE;
   for (let i = gameState.childCohorts.length - 1; i >= 0; i--) {
     const cohort = gameState.childCohorts[i];
     if (cohort.age >= workingAge) {
       // Graduate to adult population
       gameState.population.total += cohort.count;
+      gameState.population.idle += cohort.count;
       report.events.push(`🎓 ${cohort.count} children joined the workforce.`);
-      report.popChange += cohort.count;
+      report.graduated += cohort.count;
+
+      // Fire Coming-of-Age tradition if active
+      if (window.processTraditionTrigger) window.processTraditionTrigger('graduation', report);
 
       // Remove from child cohorts
       gameState.childCohorts.splice(i, 1);
@@ -290,6 +364,9 @@ function processStarvation(deficit, report) {
   const starvePerFood = 2; // 2 people die per 1 food deficit
   let totalDeaths = Math.min(deficit * starvePerFood, gameState.population.total);
 
+  // Track deaths for tradition unlocks
+  if (totalDeaths > 0 && gameState.culture) gameState.culture.deathsOccurred = true;
+
   // Protect sole survivor
   if (gameState.population.total - totalDeaths < 1) {
     totalDeaths = Math.max(0, gameState.population.total - 1);
@@ -297,11 +374,16 @@ function processStarvation(deficit, report) {
 
   // Children die first (youngest first)
   let remainingDeaths = totalDeaths;
-  for (let i = 0; i < gameState.childCohorts.length && remainingDeaths > 0; i++) {
-    const cohort = gameState.childCohorts[i];
+  const sortedByAge = [...gameState.childCohorts].sort((a, b) => a.age - b.age);
+  for (const cohort of sortedByAge) {
+    if (remainingDeaths <= 0) break;
     const childDeaths = Math.min(remainingDeaths, cohort.count);
     cohort.count -= childDeaths;
+    report.childDeaths += childDeaths;
     remainingDeaths -= childDeaths;
+    if (childDeaths > 0) {
+      report.events.push(`☠️ ${childDeaths} children (age ${cohort.age}) died from starvation.`);
+    }
   }
 
   // Remove empty cohorts
@@ -310,12 +392,13 @@ function processStarvation(deficit, report) {
   // Then adults die
   if (remainingDeaths > 0) {
     gameState.population.total -= remainingDeaths;
+    gameState.population.idle = Math.max(0, gameState.population.idle - remainingDeaths);
+    report.adultDeaths += remainingDeaths;
+    report.events.push(`☠️ ${remainingDeaths} adults died from starvation.`);
   }
 
-  if (totalDeaths > 0) {
-    report.events.push(`☠️ ${totalDeaths} people died from starvation.`);
-    report.popChange -= totalDeaths;
-  }
+  // Ensure storytellers don't exceed remaining population
+  if (window.clampStorytellers) window.clampStorytellers();
 }
 
 // Victory system now handled by modular victoryDefeat.js

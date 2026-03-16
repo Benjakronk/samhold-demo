@@ -82,6 +82,7 @@ function updateAllUI() {
   `;
 
   updateCohesionDisplay();
+  updateValuesDisplay();
   window.updatePolicySummary();
 }
 
@@ -127,6 +128,44 @@ function updateCohesionDisplay() {
   }
 }
 
+function updateValuesDisplay() {
+  const el = document.getElementById('values-display');
+  if (!el) return;
+
+  const recognized = window.getRecognizedValues ? window.getRecognizedValues() : [];
+  const tracking = window.getValueTrackingStatus ? window.getValueTrackingStatus() : [];
+
+  if (recognized.length === 0 && tracking.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+
+  let html = '<div class="values-container">';
+  html += '<div class="values-header">Shared Values</div>';
+
+  for (const v of recognized) {
+    const strengthPips = Math.min(5, Math.round(v.strength));
+    const pips = '●'.repeat(strengthPips) + '○'.repeat(5 - strengthPips);
+    html += `<div class="value-item recognized" title="${v.def.description}">
+      <span class="value-icon">${v.def.icon}</span>
+      <span class="value-name">${v.def.name}</span>
+      <span class="value-strength">${pips}</span>
+    </div>`;
+  }
+
+  for (const t of tracking) {
+    const pct = Math.round(t.progress * 100);
+    html += `<div class="value-item emerging" title="${t.def.description} (${t.turnsInZone}/${t.turnsNeeded} turns)">
+      <span class="value-icon" style="opacity:0.5">${t.def.icon}</span>
+      <span class="value-name" style="opacity:0.6">${t.def.name}</span>
+      <div class="value-progress-bar"><div class="value-progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function updateTurnDisplay() {
   document.getElementById('turn-display').textContent = `Year ${gameState.year} \u2014 ${window.SEASONS[gameState.season]}`;
 }
@@ -139,6 +178,7 @@ function showTurnSummary(report, seasonName, year) {
     <div class="summary-row"><span class="s-label">\u{1F33E} Food harvested</span><span class="s-val delta-pos">+${report.foodIncome}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F37D}\uFE0F Food consumed</span><span class="s-val delta-neg">-${report.foodConsumed}</span></div>
     <div class="summary-row"><span class="s-label">\u{1FAB5} Materials gathered</span><span class="s-val delta-pos">+${report.matIncome}</span></div>
+    ${report.matUpkeep ? `<div class="summary-row"><span class="s-label">🪵 Materials consumed</span><span class="s-val delta-neg">-${report.matUpkeep}</span></div>` : ''}
     <hr class="summary-divider">
     <div class="summary-row"><span class="s-label">\u{1F4E6} Food stockpile</span><span class="s-val">${gameState.resources.food}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F4E6} Materials stockpile</span><span class="s-val">${gameState.resources.materials}</span></div>
@@ -169,6 +209,7 @@ export {
   initUIUpdates,
   updateAllUI,
   updateCohesionDisplay,
+  updateValuesDisplay,
   updateTurnDisplay,
   showTurnSummary
 };

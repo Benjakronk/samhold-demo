@@ -793,6 +793,11 @@ function selectEventChoice(eventData, choice) {
     activeEvents.splice(eventIndex, 1);
   }
 
+  // Unlock spiritual_site sacred site prereq if this event qualifies
+  if (eventData.spiritualUnlock && gameState.culture) {
+    gameState.culture.spiritualEventFired = true;
+  }
+
   // Show resolution feedback before closing dialog
   showEventResolution(eventData.title, choice.text, feedback);
 

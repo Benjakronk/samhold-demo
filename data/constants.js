@@ -2,13 +2,13 @@
 // Core constants and configuration values for the Samhold game
 
 // Map configuration
-export const MAP_COLS = 30;
-export const MAP_ROWS = 24;
+export const MAP_COLS = 20;
+export const MAP_ROWS = 16;
 export const HEX_SIZE = 64; // pixel size of hexes (used for rendering and calculations)
 export const MAP_PAD = 64; // pixel padding around map (same as HEX_SIZE)
 
 // Territory and population
-export const TERRITORY_RADIUS = 5; // hex radius for settlement territory
+export const TERRITORY_RADIUS = 2; // hex radius for settlement territory
 export const FOOD_PER_POP = 2; // food consumed per adult per turn
 export const FOOD_PER_CHILD = 1; // food consumed per child per turn
 export const BASE_BIRTH_RATE = 0.12; // slightly increased for better population growth dynamics

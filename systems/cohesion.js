@@ -85,6 +85,35 @@ export function previewCohesionDeltas() {
     bonds: c.bonds - savedPillars.bonds
   };
 
+  // Tradition effects: project which traditions fire next turn and their cohesion impact
+  if (window.projectTraditionDeltas) {
+    const trad = window.projectTraditionDeltas();
+    deltas.identity     += trad.identity;
+    deltas.legitimacy   += trad.legitimacy;
+    deltas.satisfaction += trad.satisfaction;
+    deltas.bonds        += trad.bonds;
+  }
+
+  // Sacred sites grant bonds via a fractional accumulator (processSacredPlaces).
+  // Project how much the accumulator advances next turn and whether it tips over.
+  const sacredBDef = window.BUILDINGS?.sacred_site;
+  if (sacredBDef && gs.map) {
+    let upkeepLeft = gs.resources.materials;
+    let projectedAccum = gs.culture?.sacredSiteBondsAccumulator || 0;
+    for (const row of gs.map) {
+      for (const hex of row) {
+        if (hex.building === 'sacred_site' && hex.buildProgress <= 0 && hex.workers > 0) {
+          const upkeep = sacredBDef.upkeepMaterials * hex.workers;
+          if (upkeepLeft >= upkeep) {
+            upkeepLeft -= upkeep;
+            projectedAccum += sacredBDef.bondsYield * hex.workers;
+          }
+        }
+      }
+    }
+    deltas.bonds += Math.floor(projectedAccum);
+  }
+
   // Restore everything
   c.identity = savedPillars.identity;
   c.legitimacy = savedPillars.legitimacy;

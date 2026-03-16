@@ -93,12 +93,34 @@ function loadGameFromSlot(slotName) {
     // Without this, Object.assign won't overwrite existing session data for absent keys.
     if (!Array.isArray(loadedGameState.traditions)) loadedGameState.traditions = [];
     if (!Array.isArray(loadedGameState.chronicle)) loadedGameState.chronicle = [];
+    if (!loadedGameState.governance?.policies?.rationPriority) {
+      if (loadedGameState.governance?.policies) loadedGameState.governance.policies.rationPriority = 'people';
+    }
+    if (!Array.isArray(loadedGameState.values)) loadedGameState.values = [];
+    if (!loadedGameState.valueTracking) {
+      loadedGameState.valueTracking = {
+        freedom: { zone: null, turnsInZone: 0 },
+        mercy: { zone: null, turnsInZone: 0 },
+        tradition: { zone: null, turnsInZone: 0 },
+        workingAge: { zone: null, turnsInZone: 0 },
+        rationPriority: { zone: null, turnsInZone: 0 }
+      };
+    }
     if (!loadedGameState.culture) loadedGameState.culture = {};
     const cultureDef = {
-      deathsOccurred: false, storytellers: 0, storyProgress: 0,
-      turnsWithoutStoryteller: 0, stories: [], sacredPlaces: [],
-      namedFeatures: [], sacredBondsAccumulator: 0
+      deathsOccurred: false, battleOccurred: false, spiritualEventFired: false,
+      storytellers: 0, storyProgress: 0, turnsWithoutStoryteller: 0, stories: [],
+      sacredSiteBondsAccumulator: 0,
+      sacredSiteBuilt: { founding_site: false, burial_ground: false, battle_site: false, spiritual_site: false, natural_wonder: false },
+      namedFeatures: [],
+      namedRegions: [],
+      nextRegionId: 1
     };
+    // Migrate old sacredPlaces array — no longer used, discard silently
+    if (loadedGameState.culture) {
+      delete loadedGameState.culture.sacredPlaces;
+      delete loadedGameState.culture.sacredBondsAccumulator;
+    }
     for (const [k, v] of Object.entries(cultureDef)) {
       if (loadedGameState.culture[k] === undefined) {
         loadedGameState.culture[k] = Array.isArray(v) ? [] : v;

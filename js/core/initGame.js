@@ -241,6 +241,11 @@ export function initGameCore(seed) {
     console.log('🎭 Culture system initialized');
   }
 
+  if (window.initValues) {
+    window.initValues(gameState);
+    console.log('🧭 Values system initialized');
+  }
+
   window.updateTurnDisplay();
   window.updateAllUI();
   if (!DEV_MODE) document.getElementById('dev-badge').style.display = 'none';

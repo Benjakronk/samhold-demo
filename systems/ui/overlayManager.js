@@ -22,6 +22,7 @@ export function isAnyOverlayOpen() {
         'dev-overlay',
         'chronicle-overlay',
         'traditions-overlay',
+        'values-overlay',
         'cohesion-overlay',
         'event-dialog',
         'confirm-dialog'
@@ -59,6 +60,7 @@ export function closeAllOverlays() {
         'dev-overlay',
         'chronicle-overlay',
         'traditions-overlay',
+        'values-overlay',
         'cohesion-overlay',
         'event-dialog',
         'confirm-dialog'
@@ -278,6 +280,18 @@ function setupOverlayEventListeners() {
         });
     }
 
+    // Values overlay event listeners
+    const valuesCloseBtn = document.getElementById('values-close');
+    if (valuesCloseBtn) {
+        valuesCloseBtn.addEventListener('click', () => { if (window.closeValuesOverlay) window.closeValuesOverlay(); });
+    }
+    const valuesOverlay = document.getElementById('values-overlay');
+    if (valuesOverlay) {
+        valuesOverlay.addEventListener('click', (e) => {
+            if (e.target === valuesOverlay && window.closeValuesOverlay) window.closeValuesOverlay();
+        });
+    }
+
     // Traditions overlay event listeners
     const traditionsOverlay = document.getElementById('traditions-overlay');
     if (traditionsOverlay) {
@@ -336,13 +350,23 @@ export function toggleFeatureLabels() {
     if (window.render) window.render();
 }
 
+export function toggleRegionView() {
+    window.regionViewVisible = window.regionViewVisible ? false : true;
+    const btn = document.getElementById('region-toggle-btn');
+    if (btn) btn.classList.toggle('active', window.regionViewVisible);
+    if (window.setMapDirty) window.setMapDirty(true);
+    if (window.render) window.render();
+}
+
 export function closePanelsMenu() {
     document.getElementById('panels-menu')?.classList.remove('open');
 }
 
 // Handle ESC key to close overlays
 export function handleEscapeKey() {
-    if (isOverlayOpen('traditions-overlay')) {
+    if (isOverlayOpen('values-overlay')) {
+        if (window.closeValuesOverlay) window.closeValuesOverlay();
+    } else if (isOverlayOpen('traditions-overlay')) {
         window.closeTraditions();
     } else if (isOverlayOpen('chronicle-overlay')) {
         window.closeChronicle();

@@ -128,6 +128,26 @@ function deleteUnit(unitId) {
   if (window.setMapDirty) window.setMapDirty(true);
 }
 
+// Voluntarily disband a unit — full population returns to idle workforce
+function disbandUnit(unitId) {
+  const unitIndex = gameState.units.findIndex(u => u.id === unitId);
+  if (unitIndex === -1) return;
+
+  const unit = gameState.units[unitIndex];
+  const unitType = window.UNIT_TYPES[unit.type];
+
+  gameState.population.employed -= unitType.cost.population;
+  gameState.population.idle += unitType.cost.population;
+
+  gameState.units.splice(unitIndex, 1);
+
+  if (gameState.selectedUnit?.id === unitId) window.deselectUnit();
+  if (window.setMapDirty) window.setMapDirty(true);
+  window.updateAllUI();
+  if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+  if (window.render) window.render();
+}
+
 // ---- UNIT QUERIES ----
 
 function getUnitsAt(col, row) {
@@ -158,9 +178,8 @@ function moveUnit(unitId, targetCol, targetRow) {
   unit.row = targetRow;
   unit.movementLeft -= distance;
 
-  if (unit.type === 'scout') {
-    window.revealArea(targetCol, targetRow, 2);
-  }
+  const visionRadius = unitType.vision ?? 1;
+  window.revealArea(targetCol, targetRow, visionRadius);
 
   const nearbyThreats = gameState.externalThreats.filter(threat => {
     const dist = window.cubeDistance(
@@ -186,6 +205,7 @@ function moveUnit(unitId, targetCol, targetRow) {
             const uType = window.UNIT_TYPES[unit.type];
             gameState.units.splice(index, 1);
             gameState.population.employed -= uType.cost.population;
+            gameState.population.total -= uType.cost.population;
           }
         }
       }
@@ -224,6 +244,7 @@ function selectUnitForMovement(unitId) {
   const unit = gameState.units.find(u => u.id === unitId);
   if (unit) {
     gameState.selectedUnit = unit;
+    gameState.unitInteractionMode = 'move';
     gameState.selectedHex = gameState.map[unit.row][unit.col];
     if (window.setMapDirty) window.setMapDirty(true);
     if (window.render) window.render();
@@ -232,7 +253,88 @@ function selectUnitForMovement(unitId) {
 
 function deselectUnit() {
   gameState.selectedUnit = null;
+  gameState.unitInteractionMode = null;
   if (window.setMapDirty) window.setMapDirty(true);
+}
+
+// Activate action mode for a specific unit (called from sidebar action buttons)
+function activateActionMode(unitId) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (!unit) return;
+  gameState.selectedUnit = unit;
+  gameState.unitInteractionMode = 'action';
+  gameState.selectedHex = gameState.map[unit.row][unit.col];
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.updateSidePanel) window.updateSidePanel(gameState.selectedHex);
+  if (window.render) window.render();
+}
+
+// Set interaction mode for the currently selected unit
+function setUnitMode(mode) {
+  gameState.unitInteractionMode = mode;
+  if (mode === null) gameState.selectedUnit = null;
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.render) window.render();
+}
+
+// Returns action targets for a unit based on its type.
+// Each target: { col, row, type: 'attack', threat }
+function getValidActionTargets(unit) {
+  const targets = [];
+  if (!unit) return targets;
+
+  // Warriors can attack adjacent threats without moving
+  if (unit.type === 'warrior' && unit.movementLeft > 0) {
+    for (const threat of gameState.externalThreats) {
+      const dist = window.cubeDistance(
+        window.offsetToCube(unit.col, unit.row),
+        window.offsetToCube(threat.col, threat.row)
+      );
+      if (dist <= 1) {
+        targets.push({ col: threat.col, row: threat.row, type: 'attack', threat });
+      }
+    }
+  }
+
+  return targets;
+}
+
+// Returns true if the unit has any available action targets
+function hasUnitActions(unit) {
+  return getValidActionTargets(unit).length > 0;
+}
+
+// Execute a unit action on a target hex (called from hex click in action mode)
+function executeUnitAction(unit, col, row) {
+  const targets = getValidActionTargets(unit);
+  const target = targets.find(t => t.col === col && t.row === row);
+  if (!target) return false;
+
+  if (target.type === 'attack') {
+    const combatResult = window.initiateCombat(unit, target.threat);
+    // Attacking costs all remaining movement
+    unit.movementLeft = 0;
+
+    if (target.threat.health <= 0) {
+      const idx = gameState.externalThreats.indexOf(target.threat);
+      if (idx >= 0) gameState.externalThreats.splice(idx, 1);
+    }
+    if (unit.health <= 0) {
+      const idx = gameState.units.indexOf(unit);
+      if (idx >= 0) {
+        const uType = window.UNIT_TYPES[unit.type];
+        gameState.units.splice(idx, 1);
+        gameState.population.employed -= uType.cost.population;
+        gameState.population.total -= uType.cost.population;
+      }
+    }
+
+    deselectUnit();
+    if (window.setMapDirty) window.setMapDirty(true);
+    return true;
+  }
+
+  return false;
 }
 
 // ---- MOVEMENT CALCULATION ----
@@ -323,14 +425,20 @@ export {
   cancelUnitTraining,
   createUnit,
   deleteUnit,
+  disbandUnit,
   getUnitsAt,
   moveUnit,
   resetUnitMovement,
   selectUnit,
   selectUnitForMovement,
   deselectUnit,
+  setUnitMode,
+  activateActionMode,
   getValidMoveTargets,
   getBlockedMoveTargets,
+  getValidActionTargets,
+  hasUnitActions,
+  executeUnitAction,
   calculateMoveCost,
   canUnitEnterHex
 };

@@ -133,6 +133,8 @@ export function processCombatPhase(report) {
       if (deadThreat && !threatsToRemove.includes(deadThreat)) {
         threatsToRemove.push(deadThreat);
       }
+      // Track that a battle has occurred (unlocks battle_site sacred site)
+      if (window.gameState.culture) window.gameState.culture.battleOccurred = true;
     }
   }
 
@@ -146,8 +148,9 @@ export function processCombatPhase(report) {
       // Track deaths for tradition unlocks
       if (window.gameState.culture) window.gameState.culture.deathsOccurred = true;
 
-      // Death in combat - no population returns to idle (they died)
+      // Death in combat — person is gone permanently
       window.gameState.population.employed -= unitType.cost.population;
+      window.gameState.population.total -= unitType.cost.population;
 
       // Loss affects cohesion differently based on unit type
       if (deadUnit.type === 'elder') {

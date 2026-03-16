@@ -44,6 +44,7 @@ import * as Settings from '../systems/settings.js';
 import * as BuildingActions from '../systems/buildingActions.js';
 import * as Chronicle from '../systems/chronicle.js';
 import * as Culture from '../systems/culture.js';
+import * as Values from '../systems/values.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -239,6 +240,7 @@ window.togglePopulationSection = SidePanel.togglePopulationSection;
 window.toggleHexInfoSection = SidePanel.toggleHexInfoSection;
 window.toggleBuildSection = SidePanel.toggleBuildSection;
 window.toggleTrainingSection = SidePanel.toggleTrainingSection;
+window.toggleCultureSection = SidePanel.toggleCultureSection;
 
 // Overlay Manager system
 window.initOverlayManager = OverlayManager.initOverlayManager;
@@ -267,6 +269,7 @@ window.handleEscapeKey = OverlayManager.handleEscapeKey;
 window.togglePanelsMenu = OverlayManager.togglePanelsMenu;
 window.closePanelsMenu = OverlayManager.closePanelsMenu;
 window.toggleFeatureLabels = OverlayManager.toggleFeatureLabels;
+window.toggleRegionView = OverlayManager.toggleRegionView;
 window.openCohesionOverlay = OverlayManager.openCohesionOverlay;
 window.closeCohesionOverlay = OverlayManager.closeCohesionOverlay;
 
@@ -348,13 +351,19 @@ window.startUnitTraining = UnitManagement.startUnitTraining;
 window.cancelUnitTraining = UnitManagement.cancelUnitTraining;
 window.createUnit = UnitManagement.createUnit;
 window.deleteUnit = UnitManagement.deleteUnit;
+window.disbandUnit = UnitManagement.disbandUnit;
 window.getUnitsAt = UnitManagement.getUnitsAt;
 window.moveUnit = UnitManagement.moveUnit;
 window.resetUnitMovement = UnitManagement.resetUnitMovement;
 window.selectUnit = UnitManagement.selectUnit;
 window.selectUnitForMovement = UnitManagement.selectUnitForMovement;
 window.deselectUnit = UnitManagement.deselectUnit;
+window.setUnitMode = UnitManagement.setUnitMode;
+window.activateActionMode = UnitManagement.activateActionMode;
 window.getValidMoveTargets = UnitManagement.getValidMoveTargets;
+window.getValidActionTargets = UnitManagement.getValidActionTargets;
+window.hasUnitActions = UnitManagement.hasUnitActions;
+window.executeUnitAction = UnitManagement.executeUnitAction;
 window.getBlockedMoveTargets = UnitManagement.getBlockedMoveTargets;
 window.calculateMoveCost = UnitManagement.calculateMoveCost;
 window.canUnitEnterHex = UnitManagement.canUnitEnterHex;
@@ -378,6 +387,7 @@ window.renderCohesionOverlay = OverlayRenderers.renderCohesionOverlay;
 window.initUIUpdates = UIUpdates.initUIUpdates;
 window.updateAllUI = UIUpdates.updateAllUI;
 window.updateCohesionDisplay = UIUpdates.updateCohesionDisplay;
+window.updateValuesDisplay = UIUpdates.updateValuesDisplay;
 window.updateTurnDisplay = UIUpdates.updateTurnDisplay;
 window.showTurnSummary = UIUpdates.showTurnSummary;
 
@@ -422,6 +432,7 @@ window.establishTradition = Culture.establishTradition;
 window.removeTradition = Culture.removeTradition;
 window.getTraditionRemovalPenalty = Culture.getTraditionRemovalPenalty;
 window.processTraditions = Culture.processTraditions;
+window.projectTraditionDeltas = Culture.projectTraditionDeltas;
 window.processTraditionTrigger = Culture.processTraditionTrigger;
 window.getAvailableTraditions = Culture.getAvailableTraditions;
 window.getActiveTraditions = Culture.getActiveTraditions;
@@ -441,13 +452,11 @@ window.clampStorytellers = Culture.clampStorytellers;
 window.openStories = Culture.openStories;
 window.switchChronicleTab = Culture.switchChronicleTab;
 window.renderStoriesPanel = Culture.renderStoriesPanel;
-// Sacred places & landscape naming
-window.getSacredPlace = Culture.getSacredPlace;
-window.designateSacredPlace = Culture.designateSacredPlace;
-window.removeSacredDesignation = Culture.removeSacredDesignation;
+// Sacred sites & landscape naming
+window.getSacredSiteReasonStatus = Culture.getSacredSiteReasonStatus;
 window.checkDesecration = Culture.checkDesecration;
 window.processSacredPlaces = Culture.processSacredPlaces;
-window.confirmDesignateSacredPlace = Culture.confirmDesignateSacredPlace;
+window.confirmBuildSacredSite = Culture.confirmBuildSacredSite;
 window.isNameableTerrain = Culture.isNameableTerrain;
 window.getNamedLake = Culture.getNamedLake;
 window.getNamedFeature = Culture.getNamedFeature;
@@ -458,6 +467,23 @@ window.confirmNameLake = Culture.confirmNameLake;
 window.getRiversAtHex = Culture.getRiversAtHex;
 window.getRiverAtHex = Culture.getRiverAtHex;
 window.confirmNameRiver = Culture.confirmNameRiver;
+// Region system
+window.getRegionColor = Culture.getRegionColor;
+window.getRegionOwner = Culture.getRegionOwner;
+window.getRegionAt = Culture.getRegionAt;
+window.canFoundRegion = Culture.canFoundRegion;
+window.foundRegion = Culture.foundRegion;
+window.showRegionFoundingConfirmation = Culture.showRegionFoundingConfirmation;
+window.processRegions = Culture.processRegions;
+
+// Values system
+window.initValues = Values.initValues;
+window.processValues = Values.processValues;
+window.getRecognizedValues = Values.getRecognizedValues;
+window.getValueTrackingStatus = Values.getValueTrackingStatus;
+window.openValuesOverlay = Values.openValuesOverlay;
+window.closeValuesOverlay = Values.closeValuesOverlay;
+window.VALUE_DEFINITIONS = Values.VALUE_DEFINITIONS;
 
 // Building Actions system
 window.initBuildingActions = BuildingActions.initBuildingActions;

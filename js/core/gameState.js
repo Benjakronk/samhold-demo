@@ -32,6 +32,7 @@ export function createGameState() {
         freedom: 50,        // 0-100: Control ←→ Freedom
         mercy: 50,          // 0-100: Severity ←→ Mercy
         tradition: 50,      // 0-100: Innovation ←→ Tradition
+        rationPriority: 'people', // 'people' | 'military' | 'equal'
         // workingAge is global variable WORKING_AGE, not in policies
       },
       modelChangeTimer: 0,  // turns remaining for governance change transition
@@ -48,20 +49,39 @@ export function createGameState() {
     rivers: [], // list of { id, path, reachedTerminus, mergedIntoExisting }
     riverSegmentCounts: new Map(), // segment key -> traversal count for tributary width
     selectedHex: null,
-    selectedUnit: null, // currently selected unit for movement
+    selectedUnit: null,          // currently selected unit
+    unitInteractionMode: null,   // null | 'move' | 'action'
     camera: { x: 0, y: 0, zoom: 1.0 },
     startHex: null,
     territory: new Set(), // "col,row" strings of controlled hexes
     traditions: [], // active traditions: [{ id, established, timesPerformed, lastPerformed }]
     culture: {
-      deathsOccurred: false, // tracks whether any deaths have occurred (for Remembrance unlock)
+      deathsOccurred: false,      // tracks whether any deaths have occurred
+      battleOccurred: false,      // tracks whether any combat has occurred (for battle_site prereq)
+      spiritualEventFired: false, // tracks whether a qualifying event has fired (for spiritual_site prereq)
       storytellers: 0,       // workers assigned to oral tradition / storytelling role
       storyProgress: 0,      // fractional accumulator — reaches 1.0 when a new story is ready
       turnsWithoutStoryteller: 0, // consecutive turns with 0 storytellers (triggers story loss after 4)
       stories: [],           // [{ id, title, description, identityBonus, turn, year, season }]
-      sacredPlaces: [],      // [{ col, row, reason, name, established }]
+      sacredSiteBondsAccumulator: 0, // fractional accumulator for bonds from tended sacred sites
+      sacredSiteBuilt: {     // tracks which sacred site reasons have been built (one per reason)
+        founding_site: false,
+        burial_ground: false,
+        battle_site: false,
+        spiritual_site: false,
+        natural_wonder: false
+      },
       namedFeatures: [],     // [{ type, col, row, riverId, name }]
-      sacredBondsAccumulator: 0 // fractional accumulator for passive Bonds from sacred places
+      namedRegions: [],      // [{ id, name, centerCol, centerRow, hexes: ["col,row",...], strength, foundedYear, foundedSeason }]
+      nextRegionId: 1,       // auto-incrementing region ID counter
+    },
+    values: [],    // recognized shared values: [{ id, turnsHeld, strength }]
+    valueTracking: {
+      freedom: { zone: null, turnsInZone: 0 },
+      mercy: { zone: null, turnsInZone: 0 },
+      tradition: { zone: null, turnsInZone: 0 },
+      workingAge: { zone: null, turnsInZone: 0 },
+      rationPriority: { zone: null, turnsInZone: 0 }
     },
     chronicle: [], // narrative history log of the civilization
     lastTurnReport: null,

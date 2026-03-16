@@ -59,11 +59,12 @@ function setupTurnEventListeners() {
 // ---- CORE TURN PROCESSING ----
 
 function processTurn() {
-  const report = { events: [], foodIncome: 0, matIncome: 0, foodConsumed: 0, buildingsCompleted: [], winterCost: 0, constructionWorkers: 0, childBirths: 0, graduated: 0, adultDeaths: 0, childDeaths: 0 };
+  const report = { events: [], foodIncome: 0, matIncome: 0, matUpkeep: 0, foodConsumed: 0, buildingsCompleted: [], winterCost: 0, constructionWorkers: 0, childBirths: 0, graduated: 0, adultDeaths: 0, childDeaths: 0 };
   const inc = window.calculateIncome();
 
   report.foodIncome = inc.foodIncome;
   report.matIncome = inc.matIncome;
+  report.matUpkeep = inc.matUpkeep;
   report.foodConsumed = inc.foodConsumed;
 
   // Advance construction based on assigned workers
@@ -102,12 +103,12 @@ function processTurn() {
     }
   }
 
-  // Apply resource income
-  gameState.resources.food += inc.netFood;
+  // Apply food income and material income
+  gameState.resources.food += inc.foodIncome;
   gameState.resources.materials += inc.netMat;
   if (gameState.resources.materials < 0) gameState.resources.materials = 0;
 
-  // Winter penalty — BEFORE starvation check
+  // Winter penalty — applied before food consumption
   if (window.SEASONS[gameState.season] === 'Winter') {
     let baseCost = Math.ceil(gameState.population.total * 0.5);
 
@@ -119,7 +120,6 @@ function processTurn() {
       }
     }
 
-    // Reduce winter cost (clamped to minimum of 0)
     const winterCost = Math.max(0, Math.ceil(baseCost * (1 - totalReduction)));
     gameState.resources.food -= winterCost;
     report.winterCost = winterCost;
@@ -131,15 +131,44 @@ function processTurn() {
     }
   }
 
-  // Starvation check (now catches both normal deficit AND winter penalty)
-  if (gameState.resources.food < 0) {
-    const deficit = Math.abs(gameState.resources.food);
-    processStarvation(deficit, report);
-    gameState.resources.food = 0;
-  }
+  // Priority-ordered food consumption
+  const rationPriority = gameState.governance?.policies?.rationPriority ?? 'people';
 
-  // Unit upkeep and effects
-  processUnitUpkeep(report);
+  if (rationPriority === 'military') {
+    // Units eat first, then population absorbs any remaining shortfall
+    processUnitUpkeep(report);
+    gameState.resources.food -= inc.popFoodConsumed;
+    if (gameState.resources.food < 0) {
+      processStarvation(Math.abs(gameState.resources.food), report);
+      gameState.resources.food = 0;
+    }
+  } else if (rationPriority === 'equal') {
+    // Proportional cuts — compare total available (stockpile + income - winter) to total needed
+    const totalNeeded = inc.popFoodConsumed + inc.unitFoodUpkeep;
+    const totalAvailable = gameState.resources.food; // already stockpile + income - winterCost
+    if (totalAvailable >= totalNeeded) {
+      // Enough for everyone
+      gameState.resources.food -= totalNeeded;
+    } else {
+      // Shortage — split proportionally between population and units
+      const shortage = totalNeeded - totalAvailable;
+      gameState.resources.food = 0;
+      if (totalNeeded > 0) {
+        const popShortage = Math.round((inc.popFoodConsumed / totalNeeded) * shortage);
+        const unitShortage = shortage - popShortage;
+        if (popShortage > 0) processStarvation(popShortage, report);
+        if (unitShortage > 0) processUnitStarvation(unitShortage, report);
+      }
+    }
+  } else {
+    // People first (default) — population eats, then units take from what remains
+    gameState.resources.food -= inc.popFoodConsumed;
+    if (gameState.resources.food < 0) {
+      processStarvation(Math.abs(gameState.resources.food), report);
+      gameState.resources.food = 0;
+    }
+    processUnitUpkeep(report);
+  }
 
   // Birth system - fractional accumulator produces whole children
   processBirths(report);
@@ -161,6 +190,12 @@ function processTurn() {
 
   // Process sacred places (passive Bonds bonus)
   if (window.processSacredPlaces) window.processSacredPlaces(report);
+
+  // Process named regions (strength accumulation, expansion, decay)
+  if (window.processRegions) window.processRegions(report);
+
+  // Process shared values (crystallization, violation, bonuses)
+  if (window.processValues) window.processValues(report);
 
   // Calculate cohesion system (includes Working Age effects)
   window.calculateCohesion();
@@ -234,15 +269,15 @@ function processTurn() {
 
 function processUnitUpkeep(report) {
   let totalFoodCost = 0;
-  const unitsLost = [];
+
+  const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
 
   for (const unit of gameState.units) {
     const unitType = window.UNIT_TYPES[unit.type];
 
-    // Calculate upkeep cost
-    if (unitType.upkeep.food) {
-      totalFoodCost += unitType.upkeep.food;
-    }
+    // Charge population food share + unit-specific upkeep (population share moved here from
+    // popFoodConsumed so that priority ordering correctly separates civilian from military food)
+    totalFoodCost += (unitType.cost.population || 0) * foodPerPop + (unitType.upkeep.food || 0);
 
     // Apply special unit effects
     if (unit.type === 'elder' && unit.health >= 50) {
@@ -252,42 +287,64 @@ function processUnitUpkeep(report) {
   }
 
   // Pay upkeep costs
+  let hadShortage = false;
   if (totalFoodCost > 0) {
     if (gameState.resources.food >= totalFoodCost) {
       gameState.resources.food -= totalFoodCost;
       report.events.push(`🍖 Units consumed ${totalFoodCost} food for upkeep.`);
     } else {
-      // Not enough food - units suffer
+      hadShortage = true;
       const shortage = totalFoodCost - gameState.resources.food;
       gameState.resources.food = 0;
 
-      // Randomly affect units based on shortage
-      const unitsToAffect = Math.min(shortage, gameState.units.length);
-      for (let i = 0; i < unitsToAffect; i++) {
-        const randomUnit = gameState.units[Math.floor(Math.random() * gameState.units.length)];
-        randomUnit.health = Math.max(0, randomUnit.health - 20);
-
-        if (randomUnit.health <= 0) {
-          unitsLost.push(randomUnit);
-        }
+      // Units go hungry — lose combat effectiveness (HP)
+      for (const unit of gameState.units) {
+        unit.health = Math.max(0, unit.health - 10);
       }
 
-      report.events.push(`⚠️ Insufficient food for unit upkeep! ${shortage} food short.`);
+      report.events.push(`⚠️ Insufficient food for unit upkeep! ${shortage} food short. Units are weakened.`);
     }
   }
 
-  // Remove dead units
+  // Units that reached 0 HP from sustained hunger die
+  const starvedUnits = gameState.units.filter(u => u.health <= 0);
+  for (const unit of starvedUnits) {
+    const unitType = window.UNIT_TYPES[unit.type];
+    gameState.units = gameState.units.filter(u => u.id !== unit.id);
+    gameState.population.employed -= unitType.cost.population;
+    gameState.population.total -= unitType.cost.population;
+    report.events.push(`💀 ${unitType.icon} ${unitType.name} starved to death.`);
+  }
+
+  // Passive healing — only when food was sufficient this turn
+  if (!hadShortage) {
+    for (const unit of gameState.units) {
+      if (unit.health < 100) {
+        const inTerritory = window.isInTerritory && window.isInTerritory(unit.col, unit.row);
+        const healAmount = inTerritory ? 15 : 5;
+        unit.health = Math.min(100, unit.health + healAmount);
+      }
+    }
+  }
+}
+
+// Apply starvation damage to units proportional to a given food deficit (used in equal-rations mode)
+function processUnitStarvation(deficit, report) {
+  if (deficit <= 0 || gameState.units.length === 0) return;
+  const unitsLost = [];
+  const unitsToAffect = Math.min(Math.ceil(deficit), gameState.units.length);
+  for (let i = 0; i < unitsToAffect; i++) {
+    const randomUnit = gameState.units[Math.floor(Math.random() * gameState.units.length)];
+    randomUnit.health = Math.max(0, randomUnit.health - 20);
+    if (randomUnit.health <= 0 && !unitsLost.includes(randomUnit)) unitsLost.push(randomUnit);
+  }
+  report.events.push(`⚠️ Units suffered from shared food shortage (${deficit} food short).`);
   for (const deadUnit of unitsLost) {
     const unitType = window.UNIT_TYPES[deadUnit.type];
     gameState.units = gameState.units.filter(u => u.id !== deadUnit.id);
-
-    // Loss of elders is especially devastating to identity
-    if (deadUnit.type === 'elder') {
-      gameState.cohesion.identity = Math.max(0, gameState.cohesion.identity - 15);
-      report.events.push(`💔 Elder ${unitType.icon} died from starvation - oral traditions lost!`);
-    } else {
-      report.events.push(`💀 ${unitType.name} ${unitType.icon} died from starvation.`);
-    }
+    gameState.population.employed -= unitType.cost.population;
+    gameState.population.total -= unitType.cost.population;
+    report.events.push(`💀 ${unitType.name} ${unitType.icon} died from starvation.`);
   }
 }
 
@@ -389,12 +446,33 @@ function processStarvation(deficit, report) {
   // Remove empty cohorts
   gameState.childCohorts = gameState.childCohorts.filter(c => c.count > 0);
 
-  // Then adults die
+  // Then adults die — idle workers first, then employed
   if (remainingDeaths > 0) {
+    const idleDeaths = Math.min(remainingDeaths, gameState.population.idle);
+    const employedDeaths = remainingDeaths - idleDeaths;
+
     gameState.population.total -= remainingDeaths;
     gameState.population.idle = Math.max(0, gameState.population.idle - remainingDeaths);
     report.adultDeaths += remainingDeaths;
     report.events.push(`☠️ ${remainingDeaths} adults died from starvation.`);
+
+    // When deaths fall on employed workers, units share the same per-capita risk
+    if (employedDeaths > 0 && gameState.units.length > 0 && gameState.population.employed > 0) {
+      const deathRate = employedDeaths / gameState.population.employed;
+      for (const unit of [...gameState.units]) {
+        if (Math.random() < deathRate) {
+          const unitType = window.UNIT_TYPES[unit.type];
+          const idx = gameState.units.indexOf(unit);
+          if (idx >= 0) {
+            gameState.units.splice(idx, 1);
+            // population.total already decremented above; just fix employed tracking
+            gameState.population.employed -= unitType.cost.population;
+          }
+          report.events.push(`💀 ${unitType.icon} ${unitType.name} died from starvation.`);
+          if (window.addChronicleEntry) window.addChronicleEntry(`A ${unitType.name} perished in the famine.`, 'death');
+        }
+      }
+    }
   }
 
   // Ensure storytellers don't exceed remaining population
@@ -421,6 +499,7 @@ export {
   initTurnProcessing,
   processTurn,
   processUnitUpkeep,
+  processUnitStarvation,
   processBirths,
   processAging,
   processStarvation,

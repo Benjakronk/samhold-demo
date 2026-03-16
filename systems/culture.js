@@ -147,6 +147,43 @@ export function getTraditionRemovalPenalty(tradition) {
   return { identity: identityPenalty, legitimacy: legitimacyPenalty };
 }
 
+// Returns projected cohesion deltas from traditions that will fire next turn.
+// Mirrors the logic in processTraditions/fireTradition without side effects.
+export function projectTraditionDeltas() {
+  const deltas = { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 };
+  if (!gameState.traditions.length) return deltas;
+
+  const inc = window.calculateIncome ? window.calculateIncome() : { netFood: 0, netMat: 0 };
+  let foodLeft = Math.max(0, gameState.resources.food + inc.netFood);
+  let matLeft  = Math.max(0, gameState.resources.materials + inc.netMat);
+
+  for (const tradition of gameState.traditions) {
+    const template = TRADITIONS[tradition.id];
+    if (!template || template.triggerOn) continue;
+    if (!isTraditionDue(tradition, template)) continue;
+
+    const foodCost = getScaledTraditionCost(template.cost.food || 0);
+    const matCost  = getScaledTraditionCost(template.cost.materials || 0);
+
+    if (foodLeft >= foodCost && matLeft >= matCost) {
+      foodLeft -= foodCost;
+      matLeft  -= matCost;
+      const mult = getTraditionBonusMultiplier(tradition);
+      for (const [pillar, amount] of Object.entries(template.effects)) {
+        if (amount && deltas[pillar] !== undefined) {
+          deltas[pillar] += Math.round(amount * mult * 10) / 10;
+        }
+      }
+    } else {
+      // Tradition will be missed — apply the skip penalty
+      deltas.bonds    -= 2;
+      deltas.identity -= 1;
+    }
+  }
+
+  return deltas;
+}
+
 // ---- TRADITION PROCESSING (called each turn) ----
 
 export function processTraditions(report) {
@@ -1106,108 +1143,181 @@ const SACRED_REASONS = {
   natural_wonder: { label: 'Natural Wonder',  icon: '🌿', desc: 'A place of awe-inspiring natural beauty.' }
 };
 
-const BONDS_PER_SACRED_PLACE = 0.2; // per turn, sqrt diminishing returns
 const NAMEABLE_TERRAIN = new Set(['mountain', 'forest', 'hills', 'lake', 'wetland', 'desert']);
+const NATURAL_WONDER_TERRAIN = new Set(['mountain', 'lake']);
 
-// ---- SACRED PLACES ----
+// ---- SACRED SITES (building) ----
 
-export function getSacredPlace(col, row) {
-  return gameState.culture.sacredPlaces.find(p => p.col === col && p.row === row) || null;
-}
+// Returns { reason, available, reason: string } for each sacred site reason.
+// available = can be built (prereq met and not yet built).
+// lockedReason = human-readable explanation if not available.
+export function getSacredSiteReasonStatus(col, row) {
+  const hex = gameState.map[row]?.[col];
+  const built = gameState.culture.sacredSiteBuilt || {};
+  const c = gameState.culture;
 
-export function designateSacredPlace(col, row, reason, name) {
-  if (getSacredPlace(col, row)) return false;
+  const hexHasRiver = !!(hex?.riverIds?.length || hex?.hasRiver);
+  const hexIsNaturalWonder = hex && (NATURAL_WONDER_TERRAIN.has(hex.terrain) || hexHasRiver);
 
-  gameState.culture.sacredPlaces.push({ col, row, reason, name: name || null, established: gameState.turn });
-  gameState.cohesion.bonds = Math.min(100, gameState.cohesion.bonds + 2);
-
-  const reasonDef = SACRED_REASONS[reason];
-  const label = name ? `"${name}"` : `this place`;
-  if (window.addChronicleEntry) {
-    window.addChronicleEntry(
-      `The people designated ${label} as a ${reasonDef.label.toLowerCase()}. ${reasonDef.desc} It will be tended and remembered.`,
-      'cultural'
-    );
-  }
-
-  if (window.setMapDirty) window.setMapDirty(true);
-  if (window.updateAllUI) window.updateAllUI();
-  return true;
-}
-
-export function removeSacredDesignation(col, row) {
-  const idx = gameState.culture.sacredPlaces.findIndex(p => p.col === col && p.row === row);
-  if (idx === -1) return false;
-  gameState.culture.sacredPlaces.splice(idx, 1);
-  if (window.setMapDirty) window.setMapDirty(true);
-  if (window.updateAllUI) window.updateAllUI();
-  return true;
+  return {
+    founding_site: {
+      available: !built.founding_site,
+      lockedReason: built.founding_site ? 'Already built' : null
+    },
+    burial_ground: {
+      available: !built.burial_ground && !!(c.deathsOccurred),
+      lockedReason: built.burial_ground ? 'Already built' : !c.deathsOccurred ? 'No deaths have occurred yet' : null
+    },
+    battle_site: {
+      available: !built.battle_site && !!(c.battleOccurred),
+      lockedReason: built.battle_site ? 'Already built' : !c.battleOccurred ? 'No battles have been fought yet' : null
+    },
+    spiritual_site: {
+      available: !built.spiritual_site && !!(c.spiritualEventFired),
+      lockedReason: built.spiritual_site ? 'Already built' : !c.spiritualEventFired ? 'No spiritual event has occurred yet' : null
+    },
+    natural_wonder: {
+      available: !built.natural_wonder && hexIsNaturalWonder,
+      lockedReason: built.natural_wonder ? 'Already built' : !hexIsNaturalWonder ? 'Requires a mountain, lake, or river hex' : null
+    }
+  };
 }
 
 // Called from externalThreats when a threat moves onto a hex
 export function checkDesecration(col, row, report) {
-  const place = getSacredPlace(col, row);
-  if (!place) return;
+  const hex = gameState.map[row]?.[col];
+  if (!hex || hex.building !== 'sacred_site' || hex.buildProgress > 0) return;
 
-  const reasonDef = SACRED_REASONS[place.reason];
-  const label = place.name ? `"${place.name}"` : `the ${reasonDef.label.toLowerCase()}`;
+  const reason = hex.sacredReason || 'spiritual_site';
+  const reasonDef = SACRED_REASONS[reason];
+  const label = `the ${reasonDef.label.toLowerCase()}`;
 
   gameState.cohesion.bonds      = Math.max(0, gameState.cohesion.bonds      - 15);
   gameState.cohesion.identity   = Math.max(0, gameState.cohesion.identity   - 10);
   gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy -  5);
 
-  if (report) report.events.push(`💔 ${label} has been desecrated by an enemy! Bonds −15, Identity −10, Legitimacy −5.`);
+  // Free the worker and remove the building
+  if (hex.workers > 0) {
+    gameState.population.employed -= hex.workers;
+    gameState.population.idle += hex.workers;
+    hex.workers = 0;
+  }
+  hex.building = null;
+  hex.buildProgress = 0;
+  hex.sacredReason = null;
+
+  if (report) report.events.push(`💔 ${reasonDef.icon} ${label} has been desecrated by an enemy! Bonds −15, Identity −10, Legitimacy −5.`);
   if (window.addChronicleEntry) {
     window.addChronicleEntry(
       `Enemies overran ${label}. A sacred place was desecrated — a wound to the community's soul that will not heal quickly.`,
       'crisis'
     );
   }
-  removeSacredDesignation(col, row);
+  if (window.setMapDirty) window.setMapDirty(true);
 }
 
-// Per-turn passive Bonds from sacred places
+// Per-turn Bonds from worked sacred sites + material upkeep
 export function processSacredPlaces(report) {
-  const places = gameState.culture.sacredPlaces;
-  if (places.length === 0) return;
+  const bDef = window.BUILDINGS?.sacred_site;
+  if (!bDef) return;
 
-  const bondsPerTurn = BONDS_PER_SACRED_PLACE * Math.sqrt(places.length);
-  gameState.culture.sacredBondsAccumulator = (gameState.culture.sacredBondsAccumulator || 0) + bondsPerTurn;
+  let bondsAccumulated = 0;
+  let sitesUnfunded = 0;
 
-  if (gameState.culture.sacredBondsAccumulator >= 1) {
-    const gain = Math.floor(gameState.culture.sacredBondsAccumulator);
-    gameState.culture.sacredBondsAccumulator -= gain;
-    gameState.cohesion.bonds = Math.min(100, gameState.cohesion.bonds + gain);
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.building !== 'sacred_site' || hex.buildProgress > 0 || hex.workers === 0) continue;
+
+      const upkeep = bDef.upkeepMaterials * hex.workers;
+      if (gameState.resources.materials >= upkeep) {
+        gameState.resources.materials -= upkeep;
+        bondsAccumulated += bDef.bondsYield * hex.workers;
+      } else {
+        sitesUnfunded++;
+      }
+    }
+  }
+
+  if (bondsAccumulated > 0) {
+    gameState.culture.sacredSiteBondsAccumulator = (gameState.culture.sacredSiteBondsAccumulator || 0) + bondsAccumulated;
+    const gained = Math.floor(gameState.culture.sacredSiteBondsAccumulator);
+    if (gained >= 1) {
+      gameState.culture.sacredSiteBondsAccumulator -= gained;
+      gameState.cohesion.bonds = Math.min(100, gameState.cohesion.bonds + gained);
+      if (report) report.events.push(`⛩️ Sacred sites tended. Bonds +${gained}.`);
+    }
+  }
+
+  if (sitesUnfunded > 0 && report) {
+    report.events.push(`⚠️ ${sitesUnfunded} sacred site${sitesUnfunded > 1 ? 's' : ''} — not enough materials for upkeep. No Bonds gained.`);
   }
 }
 
-export function confirmDesignateSacredPlace(col, row) {
-  if (getSacredPlace(col, row)) return;
+export function confirmBuildSacredSite(col, row) {
+  const hex = gameState.map[row]?.[col];
+  if (!hex || hex.building) return;
 
-  const reasonOptions = Object.entries(SACRED_REASONS)
-    .map(([k, v]) => `<option value="${k}">${v.icon} ${v.label} — ${v.desc}</option>`)
+  const bDef = window.BUILDINGS.sacred_site;
+  const status = getSacredSiteReasonStatus(col, row);
+  const canAfford = gameState.resources.materials >= bDef.cost.materials;
+
+  const reasonRows = Object.entries(SACRED_REASONS).map(([key, def]) => {
+    const s = status[key];
+    return `<option value="${key}" ${s.available ? '' : 'disabled'}>${def.icon} ${def.label}</option>`;
+  });
+
+  const lockedNotes = Object.entries(SACRED_REASONS)
+    .filter(([k]) => !status[k].available)
+    .map(([k, def]) => `<li>${def.icon} ${def.label}: ${status[k].lockedReason}</li>`)
     .join('');
 
+  // Select first available reason by default
+  const firstAvailable = Object.keys(SACRED_REASONS).find(k => status[k].available);
+
+  if (!firstAvailable) {
+    window.showConfirmDialogNonDestructive(
+      'Build Sacred Site',
+      `<p>No sacred site dedications are currently available.</p>
+       <ul style="margin:0.5em 0 0 1em;font-size:0.93em;">${lockedNotes}</ul>`,
+      'OK', null, null
+    );
+    return;
+  }
+
   window.showConfirmDialogNonDestructive(
-    'Designate Sacred Place',
-    `<p>Mark this place as culturally significant. Sacred places generate passive Bonds over time. If desecrated by enemies, the loss is devastating.</p>
+    'Build Sacred Site',
+    `<p>Construct a tended sacred site on this hex. When staffed, it generates <strong>Bonds +${bDef.bondsYield}/turn</strong> but consumes <strong>🪵${bDef.upkeepMaterials} material/turn</strong>.</p>
+     <p><strong>Cost:</strong> 🪵${bDef.cost.materials} materials &nbsp;·&nbsp; <strong>Time:</strong> ${bDef.buildTurns} turns</p>
      <div class="tradition-customize">
        <div class="tradition-customize-row">
-         <label class="tradition-customize-label" for="sacred-name">Name (optional):</label>
-         <input id="sacred-name" class="tradition-name-input" placeholder="Leave blank to use terrain name" maxlength="40" />
-       </div>
-       <div class="tradition-customize-row">
-         <label class="tradition-customize-label" for="sacred-reason">Significance:</label>
-         <select id="sacred-reason" class="tradition-season-select">${reasonOptions}</select>
+         <label class="tradition-customize-label" for="sacred-reason">Dedication:</label>
+         <select id="sacred-reason" class="tradition-season-select">${reasonRows.join('')}</select>
        </div>
      </div>
-     <p><em>Sacred places are permanent. The community will not forget them.</em></p>`,
-    'Designate',
+     ${lockedNotes ? `<p style="font-size:0.88em;color:var(--text-dim);margin-top:4px">Locked: <ul style="margin:2px 0 0 1em;">${lockedNotes}</ul></p>` : ''}
+     ${!canAfford ? `<p style="color:var(--text-danger)">⚠️ Not enough materials (need ${bDef.cost.materials}, have ${gameState.resources.materials}).</p>` : ''}`,
+    'Build',
     'Cancel',
     () => {
-      const name = document.getElementById('sacred-name')?.value.trim() || null;
-      const reason = document.getElementById('sacred-reason')?.value || 'spiritual_site';
-      designateSacredPlace(col, row, reason, name);
+      if (gameState.resources.materials < bDef.cost.materials) return;
+      const reason = document.getElementById('sacred-reason')?.value || firstAvailable;
+      if (!status[reason]?.available) return;
+
+      // Mark this reason as built
+      if (!gameState.culture.sacredSiteBuilt) gameState.culture.sacredSiteBuilt = {};
+      gameState.culture.sacredSiteBuilt[reason] = true;
+
+      window.placeBuilding(col, row, 'sacred_site');
+      hex.sacredReason = reason;
+
+      const reasonDef = SACRED_REASONS[reason];
+      if (window.addChronicleEntry) {
+        window.addChronicleEntry(
+          `Construction began on a sacred site dedicated as a ${reasonDef.label.toLowerCase()}. ${reasonDef.desc}`,
+          'cultural'
+        );
+      }
       if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
     }
   );
@@ -1426,4 +1536,361 @@ export function confirmNameRiver(col, row, riverId) {
       if (window.render) window.render();
     }
   );
+}
+
+// ---- REGION SYSTEM ----
+
+const MIN_REGION_DISTANCE = 4;  // minimum cubeDistance between region centers
+const REGION_BASE_RADIUS = 1;   // starting radius (7 hexes)
+const REGION_MAX_RADIUS = 3;    // max expansion (37 hexes)
+const REGION_STRENGTH_DECAY = 0.5; // strength lost per turn with no activity
+// Strength cost for each additional hex beyond the initial 7:
+// hex N costs BASE + (N-1)*STEP
+const REGION_EXPANSION_BASE = 10;
+const REGION_EXPANSION_STEP = 5;
+
+// Unique colors for region overlays (low-opacity washes)
+const REGION_COLORS = [
+  '#c8a03a', '#3a8cc8', '#c83a6e', '#3ac878',
+  '#8a3ac8', '#3ac8c8', '#c85a3a', '#6e8ac8',
+  '#a0c83a', '#c83aa0'
+];
+
+export function getRegionColor(regionId) {
+  return REGION_COLORS[(regionId - 1) % REGION_COLORS.length];
+}
+
+// Get all hex keys within a given radius of a center hex
+function getHexesInRadius(centerCol, centerRow, radius) {
+  const hexes = [];
+  const centerCube = window.offsetToCube(centerCol, centerRow);
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const cube = window.offsetToCube(c, r);
+      if (window.cubeDistance(centerCube, cube) <= radius) {
+        const hex = gameState.map[r]?.[c];
+        if (hex && hex.terrain !== 'ocean') {
+          hexes.push(`${c},${r}`);
+        }
+      }
+    }
+  }
+  return hexes;
+}
+
+// Returns the region that this hex is part of (strongest claim wins)
+export function getRegionOwner(col, row) {
+  const key = `${col},${row}`;
+  let best = null;
+  let bestStrength = -1;
+  for (const region of (gameState.culture?.namedRegions || [])) {
+    if (region.hexes.includes(key) && region.strength > bestStrength) {
+      best = region;
+      bestStrength = region.strength;
+    }
+  }
+  return best;
+}
+
+// Returns the region centered exactly at this hex
+export function getRegionAt(col, row) {
+  return (gameState.culture?.namedRegions || []).find(
+    r => r.centerCol === col && r.centerRow === row
+  ) || null;
+}
+
+// Check if a region can be founded at the given hex
+export function canFoundRegion(col, row) {
+  const hex = gameState.map[row]?.[col];
+  if (!hex || !hex.revealed) return false;
+  if (hex.terrain === 'ocean' || hex.terrain === 'lake' || hex.terrain === 'coast') return false;
+  if (!window.isInTerritory(col, row)) return false;
+
+  // Check minimum distance from all existing region centers
+  const centerCube = window.offsetToCube(col, row);
+  for (const region of (gameState.culture?.namedRegions || [])) {
+    const rCube = window.offsetToCube(region.centerCol, region.centerRow);
+    if (window.cubeDistance(centerCube, rCube) < MIN_REGION_DISTANCE) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Found a new region — called after surveyor is consumed
+export function foundRegion(col, row, name) {
+  const hexes = getHexesInRadius(col, row, REGION_BASE_RADIUS);
+  const region = {
+    id: gameState.culture.nextRegionId++,
+    name: name,
+    centerCol: col,
+    centerRow: row,
+    hexes: hexes,
+    strength: 0,
+    foundedYear: gameState.year,
+    foundedSeason: gameState.season
+  };
+  gameState.culture.namedRegions.push(region);
+
+  // Identity bonus for naming
+  gameState.cohesion.identity = Math.min(100, gameState.cohesion.identity + 2);
+
+  if (window.addChronicleEntry) {
+    window.addChronicleEntry(
+      `The people named these lands "${name}." What is named is claimed. What is claimed is home. (Identity +2)`,
+      'cultural'
+    );
+  }
+
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.updateAllUI) window.updateAllUI();
+  return region;
+}
+
+// Show the region founding confirmation dialog
+export function showRegionFoundingConfirmation(col, row, unitId) {
+  const hex = gameState.map[row]?.[col];
+  if (!hex) return;
+
+  // Find the unit by ID (passed from the action button)
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (!unit || unit.type !== 'surveyor') return;
+
+  window.showConfirmDialogNonDestructive(
+    '🗺️ Name this Region',
+    `<p><em>Your surveyor will claim this land and its surroundings. The region starts with 7 hexes and grows through activity.</em></p>
+     <p><em>Founding grants Identity +2.</em></p>
+     <div class="tradition-customize">
+       <div class="tradition-customize-row">
+         <label class="tradition-customize-label" for="region-name">Name:</label>
+         <input id="region-name" class="tradition-name-input" value="" placeholder="Enter a name..." maxlength="40" />
+       </div>
+     </div>`,
+    'Found Region',
+    'Cancel',
+    () => {
+      const name = document.getElementById('region-name')?.value.trim();
+      if (!name) return;
+
+      // Consume the surveyor unit — return population to idle
+      const unitType = window.UNIT_TYPES[unit.type];
+      const index = gameState.units.findIndex(u => u.id === unit.id);
+      if (index >= 0) {
+        gameState.units.splice(index, 1);
+        gameState.population.employed -= unitType.cost.population;
+        gameState.population.idle += unitType.cost.population;
+      }
+      if (gameState.selectedUnit?.id === unit.id) {
+        window.deselectUnit();
+      }
+
+      foundRegion(col, row, name);
+      if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+      if (window.render) window.render();
+    }
+  );
+}
+
+// Per-turn region processing: strength accumulation, expansion, decay, competition
+export function processRegions(report) {
+  const regions = gameState.culture?.namedRegions;
+  if (!regions || regions.length === 0) return;
+
+  for (const region of regions) {
+    let turnActivity = 0;
+
+    // Scan hexes in region for activity
+    for (const key of region.hexes) {
+      const [c, r] = key.split(',').map(Number);
+      const hex = gameState.map[r]?.[c];
+      if (!hex) continue;
+
+      // Workers on hex
+      if (hex.workers > 0) {
+        turnActivity += hex.workers;
+      }
+
+      // Completed buildings
+      if (hex.building && hex.buildProgress <= 0) {
+        turnActivity += 0.5;
+      }
+
+      // Sacred site workers get extra weight
+      if (hex.building === 'sacred_site' && hex.buildProgress <= 0 && hex.workers > 0) {
+        turnActivity += hex.workers * 0.5; // +0.5 extra per sacred site worker
+      }
+    }
+
+    // Passive existence bonus
+    turnActivity += 0.1;
+
+    // Apply strength change
+    if (turnActivity > 0.1) {
+      // Active region — gain strength
+      region.strength += turnActivity;
+    } else {
+      // Inactive region — decay
+      region.strength = Math.max(0, region.strength - REGION_STRENGTH_DECAY);
+    }
+
+    // Check for expansion
+    const baseHexCount = getHexesInRadius(region.centerCol, region.centerRow, REGION_BASE_RADIUS).length;
+    const extraHexes = region.hexes.length - baseHexCount;
+    const nextExpansionCost = REGION_EXPANSION_BASE + extraHexes * REGION_EXPANSION_STEP;
+
+    // Can we expand? (strength must exceed cumulative cost of all extra hexes + next one)
+    const cumulativeCost = getCumulativeExpansionCost(extraHexes + 1);
+    const maxRadius3Hexes = getHexesInRadius(region.centerCol, region.centerRow, REGION_MAX_RADIUS);
+
+    if (region.strength >= cumulativeCost && region.hexes.length < maxRadius3Hexes.length) {
+      // Find best candidate hex to add
+      const candidate = findBestExpansionHex(region, maxRadius3Hexes);
+      if (candidate) {
+        region.hexes.push(candidate);
+        if (window.setMapDirty) window.setMapDirty(true);
+
+        if (report) {
+          report.events.push(`🗺️ ${region.name} grows. Your people's connection to the land deepens.`);
+        }
+        if (window.addChronicleEntry) {
+          window.addChronicleEntry(
+            `The region known as "${region.name}" expanded as the people's presence grew.`,
+            'cultural'
+          );
+        }
+      }
+    }
+
+    // Check for contraction (strength too low to maintain extra hexes)
+    if (extraHexes > 0) {
+      const maintainCost = getCumulativeExpansionCost(extraHexes);
+      if (region.strength < maintainCost * 0.5) {
+        // Shed outermost hex (farthest from center, then least activity)
+        const shed = findWorstHex(region);
+        if (shed) {
+          region.hexes = region.hexes.filter(h => h !== shed);
+          if (window.setMapDirty) window.setMapDirty(true);
+
+          if (report) {
+            report.events.push(`🗺️ The memory of the outer ${region.name} fades as the people turn away.`);
+          }
+          if (window.addChronicleEntry) {
+            window.addChronicleEntry(
+              `The edges of "${region.name}" contracted as activity waned.`,
+              'cultural'
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // Resolve contested hexes — remove hex from weaker region if two regions both claim it
+  resolveContestedHexes(regions);
+}
+
+function getCumulativeExpansionCost(n) {
+  // Cost for n extra hexes: sum of (BASE + i*STEP) for i=0..n-1
+  if (n <= 0) return 0;
+  return n * REGION_EXPANSION_BASE + REGION_EXPANSION_STEP * n * (n - 1) / 2;
+}
+
+function findBestExpansionHex(region, maxHexes) {
+  const regionSet = new Set(region.hexes);
+  const candidates = [];
+
+  for (const key of maxHexes) {
+    if (regionSet.has(key)) continue;
+
+    const [c, r] = key.split(',').map(Number);
+    const hex = gameState.map[r]?.[c];
+    if (!hex || hex.terrain === 'ocean') continue;
+
+    // Must be adjacent to at least one existing region hex
+    let adjacent = false;
+    for (let e = 0; e < 6; e++) {
+      const nb = window.hexNeighbor(c, r, e);
+      if (regionSet.has(`${nb.col},${nb.row}`)) {
+        adjacent = true;
+        break;
+      }
+    }
+    if (!adjacent) continue;
+
+    // Score: workers + buildings + proximity to center
+    let score = 0;
+    if (hex.workers > 0) score += hex.workers * 3;
+    if (hex.building && hex.buildProgress <= 0) score += 2;
+    // Slight preference for closer hexes
+    const dist = window.cubeDistance(
+      window.offsetToCube(c, r),
+      window.offsetToCube(region.centerCol, region.centerRow)
+    );
+    score -= dist * 0.5;
+
+    candidates.push({ key, score });
+  }
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  return candidates[0].key;
+}
+
+function findWorstHex(region) {
+  const baseHexes = new Set(getHexesInRadius(region.centerCol, region.centerRow, REGION_BASE_RADIUS));
+  let worst = null;
+  let worstScore = Infinity;
+
+  for (const key of region.hexes) {
+    if (baseHexes.has(key)) continue; // Never shed base hexes
+
+    const [c, r] = key.split(',').map(Number);
+    const hex = gameState.map[r]?.[c];
+    const dist = window.cubeDistance(
+      window.offsetToCube(c, r),
+      window.offsetToCube(region.centerCol, region.centerRow)
+    );
+
+    // Score: distance from center (higher = more likely to shed), minus activity
+    let score = dist * 2;
+    if (hex && hex.workers > 0) score -= hex.workers * 3;
+    if (hex && hex.building && hex.buildProgress <= 0) score -= 2;
+
+    // We want to shed the hex with the HIGHEST score (farthest, least active)
+    // But we're tracking worstScore as the one to shed, so we want max score
+    if (worst === null || score > worstScore) {
+      worst = key;
+      worstScore = score;
+    }
+  }
+  return worst;
+}
+
+function resolveContestedHexes(regions) {
+  // Build a map of hex -> [regions claiming it]
+  const hexClaims = new Map();
+  for (const region of regions) {
+    for (const key of region.hexes) {
+      if (!hexClaims.has(key)) hexClaims.set(key, []);
+      hexClaims.get(key).push(region);
+    }
+  }
+
+  // For contested hexes, keep only in the strongest region
+  for (const [key, claimants] of hexClaims) {
+    if (claimants.length <= 1) continue;
+
+    // Sort by strength descending
+    claimants.sort((a, b) => b.strength - a.strength);
+    const winner = claimants[0];
+
+    // Base hexes (radius 1) can never be removed — skip those
+    for (let i = 1; i < claimants.length; i++) {
+      const loser = claimants[i];
+      const baseHexes = new Set(getHexesInRadius(loser.centerCol, loser.centerRow, REGION_BASE_RADIUS));
+      if (!baseHexes.has(key)) {
+        loser.hexes = loser.hexes.filter(h => h !== key);
+      }
+    }
+  }
 }

@@ -10,6 +10,7 @@ export const UNIT_TYPES = {
     upkeep: { food: 1 }, // food per turn
     training: 2, // turns to train
     movement: 3, // hexes per turn
+    vision: 2, // fog of war reveal radius
     combat: 0, // no combat ability
     abilities: ['explore'],
     description: 'Explores fog of war. Fast movement, no combat ability.'
@@ -21,9 +22,23 @@ export const UNIT_TYPES = {
     upkeep: { food: 2 }, // higher food cost
     training: 4, // longer training for combat skills
     movement: 2, // slower than scout
+    vision: 1,
     combat: 3, // combat strength
     abilities: ['combat', 'defend'],
     description: 'Defends settlements and fights external threats. Requires materials to equip.'
+  },
+  surveyor: {
+    name: 'Surveyor',
+    icon: '🗺️',
+    cost: { population: 1, materials: 8 },
+    upkeep: { food: 1 },
+    training: 2,
+    movement: 2,
+    vision: 1,
+    combat: 0,
+    abilities: ['foundRegion'],
+    description: 'Names and claims a region of land. Consumed on founding; the worker returns to the settlement.'
+  }
   // MORE UNIT TYPES TO BE ADDED LATER
   // },
   // worker: {
@@ -58,5 +73,5 @@ export const UNIT_TYPES = {
   //   combat: 1, // minimal defensive capability
   //   abilities: ['found'],
   //   description: 'Founds new settlements. Expansion splits population and dilutes cohesion.'
-  }
+  // }
 };

@@ -73,5 +73,18 @@ export const BUILDINGS = {
     materialBonus: 1,
     maxWorkers: 1,
     description: 'Hunts game and gathers hides. Quick to set up.'
+  },
+  sacred_site: {
+    name: 'Sacred Site',
+    icon: '⛩️',
+    cost: { materials: 12 },
+    buildTurns: 6,
+    validTerrain: ['grassland', 'hills', 'forest', 'mountain', 'desert', 'wetland'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 2,
+    bondsYield: 0.1,      // Bonds accumulated per turn per worker (fractional accumulator)
+    upkeepMaterials: 1,   // materials consumed per turn per worker
+    description: 'A tended sacred site. Generates Bonds while staffed, but requires materials for upkeep.'
   }
 };

@@ -41,6 +41,9 @@ export function getHexYield(hex) {
   // Under construction: workers are building, not producing
   if (hex.building && hex.buildProgress > 0) return result;
 
+  // Sacred sites produce no terrain yield — their output is bonds, handled separately
+  if (hex.building === 'sacred_site') return result;
+
   // Terrain base yield from having any workers
   const terrain = window.TERRAIN[hex.terrain];
   result.food += terrain.food;
@@ -67,7 +70,7 @@ export function getHexYield(hex) {
 
 // Calculate total income and resource consumption
 export function calculateIncome() {
-  let foodIncome = 0, matIncome = 0, laborUsed = 0, constructionWorkers = 0;
+  let foodIncome = 0, matIncome = 0, matUpkeep = 0, laborUsed = 0, constructionWorkers = 0;
 
   for (let r = 0; r < window.MAP_ROWS; r++) for (let c = 0; c < window.MAP_COLS; c++) {
     if (!isInTerritory(c, r)) continue;
@@ -77,6 +80,12 @@ export function calculateIncome() {
     matIncome += y.materials;
     laborUsed += hex.workers;
     if (hex.building && hex.buildProgress > 0) constructionWorkers += hex.workers;
+
+    // Per-worker material upkeep for buildings that require it (e.g. sacred sites)
+    if (hex.building && hex.buildProgress <= 0 && hex.workers > 0) {
+      const bDef = window.BUILDINGS[hex.building];
+      if (bDef?.upkeepMaterials) matUpkeep += bDef.upkeepMaterials * hex.workers;
+    }
   }
 
   // Count unit population as labor used
@@ -92,11 +101,17 @@ export function calculateIncome() {
   const totalChildren = getTotalChildren();
   const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
   const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
-  const popFoodConsumed = window.gameState.population.total * foodPerPop + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop; // builders and trainees eat double
 
-  // Unit upkeep food (deducted separately in processUnitUpkeep, but included here for accurate projections)
+  // Civilian population excludes people currently serving as units
+  // (their food is handled entirely in processUnitUpkeep so priority ordering works correctly)
+  const unitPopulation = window.gameState.units.reduce((sum, u) => sum + window.UNIT_TYPES[u.type].cost.population, 0);
+  const civilianPop = Math.max(0, window.gameState.population.total - unitPopulation);
+  const popFoodConsumed = civilianPop * foodPerPop + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop; // builders and trainees eat double
+
+  // Unit food = their population share (foodPerPop) + unit-specific upkeep
   const unitFoodUpkeep = window.gameState.units.reduce((total, unit) => {
-    const upkeep = window.UNIT_TYPES[unit.type]?.upkeep?.food || 0;
+    const unitType = window.UNIT_TYPES[unit.type];
+    const upkeep = (unitType?.upkeep?.food || 0) + (unitType?.cost?.population || 0) * foodPerPop;
     return total + upkeep;
   }, 0);
 
@@ -105,12 +120,15 @@ export function calculateIncome() {
   return {
     foodIncome,
     matIncome,
+    matUpkeep,
     laborUsed: laborUsed + unitLaborUsed,
     constructionWorkers,
     unitsInTraining,
+    popFoodConsumed,
+    unitFoodUpkeep,
     foodConsumed,
-    netFood: foodIncome - foodConsumed,
-    netMat: matIncome
+    netFood: foodIncome - foodConsumed, // total net for UI display only
+    netMat: matIncome - matUpkeep
   };
 }
 

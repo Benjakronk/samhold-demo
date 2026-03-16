@@ -25,6 +25,7 @@
       <button class="panels-menu-item" onclick="openGovernanceOverlay();closePanelsMenu()">⚖️ Governance & Policy</button>
       <div class="panels-menu-group">Society</div>
       <button class="panels-menu-item" onclick="openCohesionOverlay();closePanelsMenu()">🫂 Social Cohesion</button>
+      <button class="panels-menu-item" onclick="openValuesOverlay();closePanelsMenu()">🧭 Shared Values</button>
       <button class="panels-menu-item" onclick="openTraditions();closePanelsMenu()">🎭 Traditions & Rituals</button>
       <button class="panels-menu-item" onclick="openStories();closePanelsMenu()">📖 Oral Tradition</button>
       <button class="panels-menu-item" onclick="openChronicle();closePanelsMenu()">📜 The Chronicle</button>
@@ -89,8 +90,13 @@
       </div>
     </div>
 
+    <div id="values-display"></div>
+
     <button class="manage-workers-btn" onclick="openGovernanceOverlay()" style="margin-top:8px">
       ⚖️ Governance & Policy
+    </button>
+    <button class="manage-workers-btn" onclick="openValuesOverlay()" style="margin-top:4px">
+      🧭 Shared Values
     </button>
     <button class="manage-workers-btn" onclick="openTraditions()" style="margin-top:4px">
       🎭 Traditions
@@ -150,6 +156,7 @@
 
 <canvas id="minimap"></canvas>
 <button id="labels-toggle-btn" class="active" onclick="toggleFeatureLabels()" title="Toggle place names">Aa</button>
+<button id="region-toggle-btn" onclick="toggleRegionView()" title="Toggle region view">🗺️</button>
 
 <div id="game-menu-overlay">
   <div class="game-menu-box">
@@ -385,6 +392,22 @@
         <span>Education</span>
         <span>Prosperity</span>
       </div>
+      <div class="policy-category-header">Ration Priority</div>
+      <div class="policy-description">When food is scarce, who eats first?</div>
+      <div class="ration-priority-options" id="ration-priority-options">
+        <label class="ration-option">
+          <input type="radio" name="ration-priority" value="people">
+          <span class="ration-label"><strong>People first</strong> — population fed before units; warriors go hungry last</span>
+        </label>
+        <label class="ration-option">
+          <input type="radio" name="ration-priority" value="military">
+          <span class="ration-label"><strong>Military first</strong> — units fed before population; civilians absorb the shortfall</span>
+        </label>
+        <label class="ration-option">
+          <input type="radio" name="ration-priority" value="equal">
+          <span class="ration-label"><strong>Equal rations</strong> — shortage split proportionally between population and units</span>
+        </label>
+      </div>
         </div>
       </div>
     </div>
@@ -394,6 +417,16 @@
 </div>
 
 <!-- Traditions overlay -->
+<!-- Values overlay -->
+<div id="values-overlay">
+  <div class="values-box">
+    <h2>🧭 Shared Values</h2>
+    <div class="values-intro">Values emerge from the sustained choices of your people. Once crystallized, they strengthen Identity — but abandoning them carries a cost.</div>
+    <div class="values-panel-content" id="values-panel-content"></div>
+    <button class="wf-close" id="values-close">Done</button>
+  </div>
+</div>
+
 <div id="traditions-overlay">
   <div class="traditions-box">
     <h2>🎭 Traditions & Rituals</h2>

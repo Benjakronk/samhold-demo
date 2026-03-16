@@ -27,69 +27,95 @@ function handleHexClick(e) {
   // Check if there's a unit at this hex that can be selected
   const unitsHere = window.getUnitsAt(h.col, h.row);
 
-  // If we have a selected unit and clicked a valid move target
-  if (gameState.selectedUnit) {
+  const mode = gameState.unitInteractionMode;
+
+  // ---- ACTION MODE: clicking a valid action target executes the action ----
+  if (gameState.selectedUnit && mode === 'action') {
+    const actionTargets = window.getValidActionTargets(gameState.selectedUnit);
+    const isActionTarget = actionTargets.some(t => t.col === h.col && t.row === h.row);
+
+    if (isActionTarget) {
+      window.executeUnitAction(gameState.selectedUnit, h.col, h.row);
+      gameState.selectedHex = gameState.map[gameState.selectedUnit?.row ?? h.row]?.[gameState.selectedUnit?.col ?? h.col] ?? hex;
+      window.updateSidePanel(hex);
+      if (window.render) window.render();
+      return;
+    } else {
+      // Clicked off a valid target — exit action mode but stay on unit hex
+      window.setUnitMode(null);
+    }
+  }
+
+  // ---- MOVE MODE: clicking a valid move target moves the unit ----
+  if (gameState.selectedUnit && mode === 'move') {
     const validTargets = window.getValidMoveTargets(gameState.selectedUnit);
     const isValidTarget = validTargets.some(t => t.col === h.col && t.row === h.row);
 
     if (isValidTarget) {
-      // Check if this is a Settler attempting to found a settlement
+      // Settler founding
       if (gameState.selectedUnit.type === 'settler' && window.canFoundSettlement(h.col, h.row)) {
-        // Show settlement founding confirmation
         window.showSettlementFoundingConfirmation(h.col, h.row);
         return;
       }
 
-      // Move the unit
       const success = window.moveUnit(gameState.selectedUnit.id, h.col, h.row);
       if (success) {
-        // Update selected hex to follow the unit
         gameState.selectedHex = hex;
         window.updateSidePanel(hex);
-
-        // Keep unit selected unless it's out of movement
-        if (gameState.selectedUnit.movementLeft <= 0) {
+        if (gameState.selectedUnit && gameState.selectedUnit.movementLeft <= 0) {
           window.deselectUnit();
         }
-
         if (window.render) window.render();
         return;
       } else {
-        // Movement blocked - provide feedback
         const existingUnit = gameState.units.find(u =>
           u.id !== gameState.selectedUnit.id && u.col === h.col && u.row === h.row
         );
         if (existingUnit) {
           const unitType = window.UNIT_TYPES[existingUnit.type];
           window.showTurnSummary({
-            events: [`\u274C Cannot move - hex occupied by ${unitType.icon} ${unitType.name}`],
+            events: [`\u274C Cannot move — hex occupied by ${unitType.icon} ${unitType.name}`],
             foodIncome: 0, matIncome: 0, foodConsumed: 0, netFood: 0, netMat: 0
           }, '', 0);
         }
         return;
       }
+    } else if (gameState.selectedHex &&
+               gameState.selectedHex.col === h.col &&
+               gameState.selectedHex.row === h.row &&
+               unitsHere.some(u => u.id === gameState.selectedUnit.id)) {
+      // Clicked the unit's own hex while in move mode — cycle to action mode
+      const hasActions = window.hasUnitActions && window.hasUnitActions(gameState.selectedUnit);
+      if (hasActions) {
+        window.setUnitMode('action');
+        window.updateSidePanel(hex);
+        return;
+      } else {
+        // No actions available — exit mode
+        window.setUnitMode(null);
+        window.updateSidePanel(hex);
+        if (window.render) window.render();
+        return;
+      }
     } else {
-      // Clicked on invalid target - deselect unit
       window.deselectUnit();
     }
-  } else {
-    // No unit selected - check if we clicked on the same hex as currently selected (reclick behavior)
+  }
+
+  // ---- NO MODE: re-clicking the selected hex cycles into move mode ----
+  if (!gameState.selectedUnit) {
     if (gameState.selectedHex &&
         gameState.selectedHex.col === h.col &&
         gameState.selectedHex.row === h.row) {
       if (unitsHere.length > 0) {
-        // Clicking on selected hex with units - activate movement for first unit
         window.selectUnitForMovement(unitsHere[0].id);
-        // Don't call deselectUnit() - keep the unit selected
       } else {
-        // Clicking on selected hex with no units - deselect the hex
         gameState.selectedHex = null;
         window.clearSidePanel();
         if (window.render) window.render();
         return;
       }
     } else {
-      // Clicking on different hex - clear unit selection
       window.deselectUnit();
     }
   }

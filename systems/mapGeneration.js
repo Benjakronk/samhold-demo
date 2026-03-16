@@ -1,5 +1,16 @@
 // Map Generation System for Samhold
 // Faithfully extracted from index.html.backup
+//
+// FUTURE REWORK PLANNED: This module uses a simple biome-seed + weighted random approach.
+// A future multi-pass world generation system should:
+//   1. Generate a continuous elevation map (Perlin/simplex noise)
+//   2. Determine sea level to place coast/ocean procedurally
+//   3. Derive climate zones from latitude + elevation
+//   4. Map climate zones → biomes → terrain types
+//   5. Add new terrain types (e.g. tundra, savanna, jungle, volcanic, canyon)
+//   6. Rework lake generation to respect elevation basins
+//   7. Rework river generation to flow by true elevation gradient
+// Hold off until core cultural/governance systems are complete.
 
 // Import dependencies
 import { TERRAIN } from '../data/terrain.js';

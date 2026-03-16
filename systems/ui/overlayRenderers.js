@@ -346,6 +346,15 @@ function renderGovernanceOverlay() {
     };
   });
 
+  // Ration priority radio buttons
+  const rationPriority = gameState.governance.policies.rationPriority ?? 'people';
+  document.querySelectorAll('input[name="ration-priority"]').forEach(radio => {
+    radio.checked = radio.value === rationPriority;
+    radio.onchange = (e) => {
+      gameState.governance.policies.rationPriority = e.target.value;
+    };
+  });
+
   const workingAgeSlider = document.getElementById('policy-working-age');
   const workingAgeDisplay = document.getElementById('working-age-value');
   const workingAgeHeader = document.getElementById('policy-header-working-age');
@@ -566,9 +575,9 @@ function cohesionDriversIdentity() {
     drivers.push({ type: 'positive', text: `📌 ${namedFeatures} named landscape feature${namedFeatures > 1 ? 's' : ''}` });
   }
 
-  const sacredPlaces = gs.culture?.sacredPlaces?.length ?? 0;
-  if (sacredPlaces > 0) {
-    drivers.push({ type: 'positive', text: `⛩️ ${sacredPlaces} sacred place${sacredPlaces > 1 ? 's' : ''} on the land` });
+  const sacredSites = gs.map ? gs.map.flat().filter(h => h.building === 'sacred_site' && h.buildProgress <= 0).length : 0;
+  if (sacredSites > 0) {
+    drivers.push({ type: 'positive', text: `⛩️ ${sacredSites} sacred site${sacredSites > 1 ? 's' : ''} on the land` });
   }
 
   if (gs.resources.knowledge >= 20) {
@@ -653,10 +662,11 @@ function cohesionDriversBonds() {
     drivers.push({ type: 'neutral', text: '🌱 Still new to this land — bonds take time to form' });
   }
 
-  const sacredCount = gs.culture?.sacredPlaces?.length ?? 0;
-  if (sacredCount > 0) {
-    const bondsPerTurn = Math.round(0.2 * Math.sqrt(sacredCount) * 10) / 10;
-    drivers.push({ type: 'positive', text: `⛩️ ${sacredCount} sacred place${sacredCount > 1 ? 's' : ''} (+${bondsPerTurn} Bonds/turn)` });
+  const sacredSitesWorked = gs.map ? gs.map.flat().filter(h => h.building === 'sacred_site' && h.buildProgress <= 0 && h.workers > 0).length : 0;
+  if (sacredSitesWorked > 0) {
+    const bDef = window.BUILDINGS?.sacred_site;
+    const bondsPerTurn = sacredSitesWorked * (bDef?.bondsYield ?? 2);
+    drivers.push({ type: 'positive', text: `⛩️ ${sacredSitesWorked} sacred site${sacredSitesWorked > 1 ? 's' : ''} tended (+${bondsPerTurn} Bonds/turn)` });
   }
 
   if (c.satisfaction < 40 && gs.population.total > 1) {

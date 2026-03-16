@@ -127,9 +127,8 @@ function drawHexStatic(hex, size) {
     }
   }
 
-  // Sacred place marker — golden inner glow, edges to center
-  const sacredPlace = window.getSacredPlace?.(hex.col, hex.row);
-  if (sacredPlace) {
+  // Sacred site marker — golden inner glow, edges to center
+  if (hex.building === 'sacred_site' && hex.buildProgress <= 0) {
     mapCtx.save();
     drawHexPath(mapCtx, dx, dy, size);
     mapCtx.clip();
@@ -353,6 +352,60 @@ function renderMapToCache() {
     }
   }
 
+  // Pass 1.75: Region color overlay (when region view toggle is active)
+  if (window.regionViewVisible && gameState.culture?.namedRegions?.length > 0) {
+    for (const region of gameState.culture.namedRegions) {
+      const color = window.getRegionColor ? window.getRegionColor(region.id) : '#c8a03a';
+      // Parse hex color and apply as rgba
+      const r2 = parseInt(color.slice(1, 3), 16);
+      const g2 = parseInt(color.slice(3, 5), 16);
+      const b2 = parseInt(color.slice(5, 7), 16);
+
+      for (const key of region.hexes) {
+        const [hc, hr] = key.split(',').map(Number);
+        const hex = gameState.map[hr]?.[hc];
+        if (!hex || !hex.revealed) continue;
+
+        const wp = hexToPixel(hc, hr, CONSTANTS.HEX_SIZE);
+        const dx = wp.x + CONSTANTS.MAP_PAD, dy = wp.y + CONSTANTS.MAP_PAD;
+
+        mapCtx.save();
+        drawHexPath(mapCtx, dx, dy, CONSTANTS.HEX_SIZE);
+        mapCtx.clip();
+        mapCtx.fillStyle = `rgba(${r2},${g2},${b2},0.2)`;
+        mapCtx.fillRect(dx - CONSTANTS.HEX_SIZE, dy - CONSTANTS.HEX_SIZE, CONSTANTS.HEX_SIZE * 2, CONSTANTS.HEX_SIZE * 2);
+        mapCtx.restore();
+      }
+
+      // Draw region border edges
+      mapCtx.save();
+      mapCtx.strokeStyle = `rgba(${r2},${g2},${b2},0.6)`;
+      mapCtx.lineWidth = 2.5;
+      mapCtx.lineCap = 'round';
+      mapCtx.lineJoin = 'round';
+      const regionSet = new Set(region.hexes);
+      mapCtx.beginPath();
+      for (const key of region.hexes) {
+        const [hc, hr] = key.split(',').map(Number);
+        const hex = gameState.map[hr]?.[hc];
+        if (!hex || !hex.revealed) continue;
+        const wp = hexToPixel(hc, hr, CONSTANTS.HEX_SIZE);
+        const dx = wp.x + CONSTANTS.MAP_PAD, dy = wp.y + CONSTANTS.MAP_PAD;
+
+        for (let i = 0; i < 6; i++) {
+          const nb = hexNeighbor(hc, hr, i);
+          if (regionSet.has(`${nb.col},${nb.row}`)) continue;
+          const a0 = (Math.PI / 180) * (60 * i - 30);
+          const a1 = (Math.PI / 180) * (60 * ((i + 1) % 6) - 30);
+          mapCtx.moveTo(dx + CONSTANTS.HEX_SIZE * Math.cos(a0), dy + CONSTANTS.HEX_SIZE * Math.sin(a0));
+          mapCtx.lineTo(dx + CONSTANTS.HEX_SIZE * Math.cos(a1), dy + CONSTANTS.HEX_SIZE * Math.sin(a1));
+        }
+      }
+      mapCtx.stroke();
+      mapCtx.restore();
+    }
+  }
+
   // Pass 2: Territory vignette — gradient only from boundary edges inward
   for (let r = 0; r < CONSTANTS.MAP_ROWS; r++) for (let c = 0; c < CONSTANTS.MAP_COLS; c++) {
     if (!window.isInTerritory(c, r) || !gameState.map[r][c].revealed) continue;
@@ -497,7 +550,8 @@ function drawFeatureLabels() {
   const cam = gameState.camera;
   const features = gameState.culture.namedFeatures ?? [];
   const featureNames = features.map(f => f.name).join('\x00');
-  const cacheKey = `${cam.x.toFixed(1)},${cam.y.toFixed(1)},${cam.zoom.toFixed(3)}\x00${featureNames}`;
+  const regionNames = (gameState.culture?.namedRegions ?? []).map(r => `${r.name}:${r.hexes.length}`).join('\x00');
+  const cacheKey = `${cam.x.toFixed(1)},${cam.y.toFixed(1)},${cam.zoom.toFixed(3)}\x00${featureNames}\x00${regionNames}`;
   if (cacheKey === _featureLabelCacheKey) return;
   _featureLabelCacheKey = cacheKey;
 
@@ -540,6 +594,21 @@ function drawFeatureLabels() {
     if (count === 0) continue;
     const sp = window.worldToScreen(sumX / count, sumY / count);
     html += `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(feature.name)}</span>`;
+  }
+
+  // Region names — at centroid of revealed hexes
+  for (const region of (gameState.culture?.namedRegions ?? [])) {
+    let sumX = 0, sumY = 0, count = 0;
+    for (const key of region.hexes) {
+      const [hc, hr] = key.split(',').map(Number);
+      const hex = gameState.map[hr]?.[hc];
+      if (!hex?.revealed) continue;
+      const wp = hexToPixel(hc, hr, CONSTANTS.HEX_SIZE);
+      sumX += wp.x; sumY += wp.y; count++;
+    }
+    if (count === 0) continue;
+    const sp = window.worldToScreen(sumX / count, sumY / count);
+    html += `<span class="map-region-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(region.name)}</span>`;
   }
 
   // River names — at midpoint of revealed portion
@@ -603,8 +672,53 @@ function drawMovementRange() {
   const selectedUnit = gameState.selectedUnit;
   if (!selectedUnit) return;
 
+  const mode = gameState.unitInteractionMode;
+
+  // ---- ACTION MODE: draw action targets instead of move range ----
+  if (mode === 'action') {
+    const actionTargets = window.getValidActionTargets ? window.getValidActionTargets(selectedUnit) : [];
+    const scale = gameState.camera.zoom;
+    for (const target of actionTargets) {
+      const wp = hexToPixel(target.col, target.row, CONSTANTS.HEX_SIZE);
+      const sp = window.worldToScreen(wp.x, wp.y);
+      const ds = CONSTANTS.HEX_SIZE * scale;
+
+      // Pulsing red ring for attack targets
+      drawHexPath(ctx, sp.x, sp.y, ds - 2);
+      ctx.strokeStyle = 'rgba(255, 80, 80, 0.9)';
+      ctx.fillStyle = 'rgba(255, 80, 80, 0.15)';
+      ctx.lineWidth = 3 * scale;
+      ctx.stroke();
+      ctx.fill();
+
+      // Outer glow ring
+      drawHexPath(ctx, sp.x, sp.y, ds + 4);
+      ctx.strokeStyle = 'rgba(255, 80, 80, 0.3)';
+      ctx.lineWidth = 5 * scale;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 80, 80, 0.9)';
+      ctx.font = `${16 * scale}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚔️', sp.x, sp.y);
+    }
+
+    // Highlight the unit's current hex in action mode (amber outline)
+    const uwp = hexToPixel(selectedUnit.col, selectedUnit.row, CONSTANTS.HEX_SIZE);
+    const usp = window.worldToScreen(uwp.x, uwp.y);
+    const uds = CONSTANTS.HEX_SIZE * scale;
+    drawHexPath(ctx, usp.x, usp.y, uds - 1);
+    ctx.strokeStyle = 'rgba(220, 160, 40, 0.9)';
+    ctx.lineWidth = 3 * scale;
+    ctx.stroke();
+
+    return;
+  }
+
+  // ---- MOVE MODE ----
   const validTargets = window.getValidMoveTargets(selectedUnit);
-  const blockedTargets = window.getBlockedMoveTargets(selectedUnit); // Show blocked targets too
+  const blockedTargets = window.getBlockedMoveTargets(selectedUnit);
   const unitType = UNIT_TYPES[selectedUnit.type];
 
   for (const target of validTargets) {
@@ -630,10 +744,11 @@ function drawMovementRange() {
       canFoundHere = window.canFoundSettlement(target.col, target.row);
     }
 
+
     // Movement range indicator - different colors for different abilities
     drawHexPath(ctx, sp.x, sp.y, ds - 4);
     if (canFoundHere) {
-      // Green for settlement founding locations
+      // Green for settlement/region founding locations
       ctx.strokeStyle = 'rgba(100, 255, 100, 0.8)';
       ctx.fillStyle = 'rgba(100, 255, 100, 0.2)';
     } else if (canAttackFromHere) {
@@ -941,6 +1056,24 @@ function drawMinimap() {
   const vw=(canvasW/(cam.zoom*ms.width))*MM_W, vh=(canvasH/(cam.zoom*ms.height))*MM_H;
   minimapCtx.strokeStyle='rgba(201,168,76,0.8)'; minimapCtx.lineWidth=1.5;
   minimapCtx.strokeRect(vx-vw/2,vy-vh/2,vw,vh);
+  // Region overlay on minimap
+  if (window.regionViewVisible && gameState.culture?.namedRegions?.length > 0) {
+    for (const region of gameState.culture.namedRegions) {
+      const color = window.getRegionColor ? window.getRegionColor(region.id) : '#c8a03a';
+      const r2 = parseInt(color.slice(1, 3), 16);
+      const g2 = parseInt(color.slice(3, 5), 16);
+      const b2 = parseInt(color.slice(5, 7), 16);
+      minimapCtx.fillStyle = `rgba(${r2},${g2},${b2},0.4)`;
+      for (const key of region.hexes) {
+        const [hc, hr] = key.split(',').map(Number);
+        const hex = gameState.map[hr]?.[hc];
+        if (!hex || !hex.revealed) continue;
+        const mmx = (hc + 0.5 * (hr & 1)) * sx + sx * 0.5, mmy = hr * sy + sy * 0.5;
+        minimapCtx.beginPath(); minimapCtx.arc(mmx, mmy, dot + 1, 0, Math.PI * 2); minimapCtx.fill();
+      }
+    }
+  }
+
   for (const s of gameState.settlements) {
     const smx=(s.col+0.5*(s.row&1))*sx+sx*0.5, smy=s.row*sy+sy*0.5;
     minimapCtx.fillStyle='#c9a84c'; minimapCtx.beginPath(); minimapCtx.arc(smx,smy,dot+2,0,Math.PI*2); minimapCtx.fill();

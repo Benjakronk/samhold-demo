@@ -50,6 +50,7 @@ export const EVENT_LIBRARY = {
     id: 'religiousSchism',
     title: 'Religious Disagreement',
     category: 'social',
+    spiritualUnlock: true,
     triggers: {
       seasons: ['spring', 'summer', 'autumn'],
       minTurn: 12,
@@ -228,6 +229,7 @@ export const EVENT_LIBRARY = {
     id: 'mysteriousDisease',
     title: 'Strange Illness Spreads',
     category: 'crisis',
+    spiritualUnlock: true,
     triggers: {
       seasons: ['autumn', 'winter'],
       minTurn: 12,

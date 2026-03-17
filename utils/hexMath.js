@@ -48,3 +48,25 @@ export function hexNeighbor(col, row, edge) {
     : [[1,0],[1,1],[0,1],[-1,0],[0,-1],[1,-1]];
   return { col: col + dirs[edge][0], row: row + dirs[edge][1] };
 }
+
+// Canonical edge key: deterministic string for the shared edge between a hex and its neighbor.
+// Both sides produce the same key. Edge is 0-5 (E,SE,SW,W,NW,NE).
+export function canonicalEdgeKey(col, row, edge) {
+  const nb = hexNeighbor(col, row, edge);
+  // Pick the "smaller" hex as canonical (by row, then col)
+  if (row < nb.row || (row === nb.row && col < nb.col)) {
+    return `${col},${row},${edge}`;
+  }
+  // Find the reverse edge (neighbor's edge that faces back to us)
+  const reverseEdge = (edge + 3) % 6;
+  return `${nb.col},${nb.row},${reverseEdge}`;
+}
+
+// Get which edge (0-5) of hex1 faces hex2, or -1 if not adjacent.
+export function getEdgeBetween(col1, row1, col2, row2) {
+  for (let e = 0; e < 6; e++) {
+    const nb = hexNeighbor(col1, row1, e);
+    if (nb.col === col2 && nb.row === row2) return e;
+  }
+  return -1;
+}

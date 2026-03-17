@@ -364,6 +364,16 @@ export function closePanelsMenu() {
 
 // Handle ESC key to close overlays
 export function handleEscapeKey() {
+    // Exit fortify mode if active
+    if (window.gameState?.unitInteractionMode === 'fortify') {
+        window.gameState.unitInteractionMode = null;
+        window.hoveredHex = null;
+        window.hoveredEdge = null;
+        if (window.setMapDirty) window.setMapDirty(true);
+        if (window.render) window.render();
+        if (window.gameState.selectedHex && window.updateSidePanel) window.updateSidePanel(window.gameState.selectedHex);
+        return;
+    }
     if (isOverlayOpen('values-overlay')) {
         if (window.closeValuesOverlay) window.closeValuesOverlay();
     } else if (isOverlayOpen('traditions-overlay')) {

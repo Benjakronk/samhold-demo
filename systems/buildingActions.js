@@ -29,6 +29,28 @@ function handleHexClick(e) {
 
   const mode = gameState.unitInteractionMode;
 
+  // ---- FORTIFY MODE: clicking an edge places a fortification ----
+  if (mode === 'fortify' && window.hoveredHex && window.hoveredEdge != null) {
+    const fCol = window.hoveredHex.col;
+    const fRow = window.hoveredHex.row;
+    const fEdge = window.hoveredEdge;
+
+    if (window.isInTerritory(fCol, fRow) && !window.getFortification(fCol, fRow, fEdge)) {
+      const nb = window.hexNeighbor(fCol, fRow, fEdge);
+      if (nb.col >= 0 && nb.col < window.MAP_COLS && nb.row >= 0 && nb.row < window.MAP_ROWS) {
+        window.handleFortifyClick(fCol, fRow, fEdge);
+        return;
+      }
+    }
+    // Clicked an invalid edge or outside territory — exit fortify mode
+    gameState.unitInteractionMode = null;
+    window.hoveredHex = null;
+    window.hoveredEdge = null;
+    window.updateSidePanel(hex);
+    if (window.render) window.render();
+    return;
+  }
+
   // ---- ACTION MODE: clicking a valid action target executes the action ----
   if (gameState.selectedUnit && mode === 'action') {
     const actionTargets = window.getValidActionTargets(gameState.selectedUnit);
@@ -136,8 +158,10 @@ function placeBuilding(col, row, buildingKey) {
   hex.buildProgress = bDef.buildTurns;
 
   // Existing gatherer becomes a builder/worker; clamp to max
+  // During construction, use buildWorkers if defined (e.g. monument needs builders but no post-completion staff)
+  const constructionMax = hex.buildProgress > 0 ? (bDef.buildWorkers || bDef.maxWorkers || 0) : (bDef.maxWorkers || 0);
   const existingWorkers = hex.workers;
-  hex.workers = Math.min(existingWorkers, bDef.maxWorkers || 0);
+  hex.workers = Math.min(existingWorkers, constructionMax);
   const returned = existingWorkers - hex.workers;
   if (returned > 0) {
     gameState.population.employed -= returned;
@@ -145,7 +169,7 @@ function placeBuilding(col, row, buildingKey) {
   }
 
   // Auto-assign 1 builder if construction requires workers and none assigned
-  if (hex.buildProgress > 0 && hex.workers === 0 && (bDef.maxWorkers || 0) > 0 && gameState.population.idle > 0) {
+  if (hex.buildProgress > 0 && hex.workers === 0 && constructionMax > 0 && gameState.population.idle > 0) {
     hex.workers = 1;
     gameState.population.employed++;
     gameState.population.idle--;
@@ -167,11 +191,28 @@ function demolishBuilding(col, row) {
     ? (bDef.cost.materials || 0)
     : Math.floor((bDef.cost.materials || 0) / 2);
 
+  // Monument-specific outrage warning
+  let outrageWarning = '';
+  let outrageIdentity = 0, outrageLegitiacy = 0, outragesBonds = 0;
+  if (hex.building === 'monument' && !isConstruction) {
+    const age = gameState.turn - (hex.completedTurn || gameState.turn);
+    if (age >= 20) {
+      outrageIdentity = 10; outrageLegitiacy = 7; outragesBonds = 3;
+      outrageWarning = `<p style="color:var(--accent-red)">⚠️ This is an ancient monument. Destroying it will cause <strong>outrage</strong>: Identity −${outrageIdentity}, Legitimacy −${outrageLegitiacy}, Bonds −${outragesBonds}.</p>`;
+    } else if (age >= 5) {
+      outrageIdentity = 6; outrageLegitiacy = 4;
+      outrageWarning = `<p style="color:var(--accent-red)">⚠️ Tearing down this monument will anger the community: Identity −${outrageIdentity}, Legitimacy −${outrageLegitiacy}.</p>`;
+    } else if (age >= 1) {
+      outrageIdentity = 3; outrageLegitiacy = 2;
+      outrageWarning = `<p style="color:orange">⚠️ The people will grumble at removing this monument: Identity −${outrageIdentity}, Legitimacy −${outrageLegitiacy}.</p>`;
+    }
+  }
+
   const title = isConstruction ? `Cancel ${bDef.name}?` : `Demolish ${bDef.name}?`;
   const workerNote = hex.workers > 0
     ? `<br>${hex.workers} worker${hex.workers > 1 ? 's' : ''} will be freed.`
     : '';
-  const body = `Refund: \u{1FAB5} ${refund} materials${workerNote}`;
+  const body = `${outrageWarning}Refund: 🪵${refund} materials${workerNote}`;
   const okLabel = isConstruction ? 'Cancel Build' : 'Demolish';
 
   window.showConfirmDialog(title, body, okLabel, 'Keep', () => {
@@ -183,8 +224,35 @@ function demolishBuilding(col, row) {
       hex.workers = 0;
     }
 
+    // Apply monument demolition outrage
+    if (outrageIdentity > 0) {
+      gameState.cohesion.identity   = Math.max(0, gameState.cohesion.identity   - outrageIdentity);
+      gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy - outrageLegitiacy);
+      if (outragesBonds > 0) gameState.cohesion.bonds = Math.max(0, gameState.cohesion.bonds - outragesBonds);
+      if (window.addChronicleEntry) {
+        const subject = hex.monumentSubject || 'the past';
+        window.addChronicleEntry(`The monument commemorating ${subject} was torn down. The people were outraged.`, 'crisis');
+      }
+    }
+
+    // Deactivate any Steward tending this monument
+    for (const unit of gameState.units) {
+      if (unit.type === 'steward' && unit.col === col && unit.row === row && unit.activeAction) {
+        unit.activeAction = null;
+      }
+    }
+
+    const wasBuildingType = hex.building;
     hex.building = null;
     hex.buildProgress = 0;
+    hex.monumentState = undefined;
+    hex.lastStewardTurn = undefined;
+    hex.neglectTurns = undefined;
+    hex.completedTurn = undefined;
+    hex.monumentSubject = undefined;
+
+    // Watchtower removal affects vision
+    if (wasBuildingType === 'watchtower' && window.recomputeVisibility) window.recomputeVisibility();
 
     if (window.setMapDirty) window.setMapDirty(true);
     window.updateAllUI();

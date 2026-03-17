@@ -18,7 +18,7 @@ function initSaveLoad(gameStateRef, getCurrentSeedFunc, setCurrentSeedFunc) {
 function saveGameToSlot(slotName) {
   // Prepare save data with proper Set/Map serialization
   const saveData = {
-    version: 1,
+    version: 2,
     timestamp: Date.now(),
     gameState: {
       ...gameState,
@@ -106,11 +106,27 @@ function loadGameFromSlot(slotName) {
         rationPriority: { zone: null, turnsInZone: 0 }
       };
     }
+    // Migrate fortifications and visibilityMap for older saves
+    if (!loadedGameState.fortifications) loadedGameState.fortifications = {};
+    if (!loadedGameState.visibilityMap || !loadedGameState.visibilityMap.length) {
+      loadedGameState.visibilityMap = [];
+      const rows = loadedGameState.map?.length || window.MAP_ROWS;
+      const cols = loadedGameState.map?.[0]?.length || window.MAP_COLS;
+      for (let r = 0; r < rows; r++) {
+        loadedGameState.visibilityMap[r] = [];
+        for (let c = 0; c < cols; c++) {
+          // If hex was revealed in old save, mark as revealed (1); otherwise unexplored (0)
+          loadedGameState.visibilityMap[r][c] = loadedGameState.map?.[r]?.[c]?.revealed ? 1 : 0;
+        }
+      }
+    }
+
     if (!loadedGameState.culture) loadedGameState.culture = {};
     const cultureDef = {
       deathsOccurred: false, battleOccurred: false, spiritualEventFired: false,
       storytellers: 0, storyProgress: 0, turnsWithoutStoryteller: 0, stories: [],
       sacredSiteBondsAccumulator: 0,
+      societyBuildingAccumulators: { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 },
       sacredSiteBuilt: { founding_site: false, burial_ground: false, battle_site: false, spiritual_site: false, natural_wonder: false },
       namedFeatures: [],
       namedRegions: [],

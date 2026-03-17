@@ -38,6 +38,18 @@ export const UNIT_TYPES = {
     combat: 0,
     abilities: ['foundRegion'],
     description: 'Names and claims a region of land. Consumed on founding; the worker returns to the settlement.'
+  },
+  steward: {
+    name: 'Steward',
+    icon: '🧭',
+    cost: { population: 1, materials: 5 },
+    upkeep: { food: 1 },
+    training: 2,
+    movement: 2,
+    vision: 1,
+    combat: 0,
+    abilities: ['tend'],
+    description: 'Tends monuments and sacred sites. Activate on a building to maintain it. Moving deactivates tending.'
   }
   // MORE UNIT TYPES TO BE ADDED LATER
   // },

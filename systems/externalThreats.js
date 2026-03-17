@@ -116,6 +116,8 @@ export function moveThreatTowardTarget(threat) {
   // Find best move toward target
   let bestMove = null;
   let bestDistance = window.cubeDistance(currentPos, targetPos);
+  let bestBlockedEdge = null;
+  let bestBlockedDist = Infinity;
 
   // Check all adjacent hexes
   for (let direction = 0; direction < 6; direction++) {
@@ -128,6 +130,18 @@ export function moveThreatTowardTarget(threat) {
 
     // Threats can't enter ocean
     if (neighborHex.terrain === 'ocean') continue;
+
+    // Check if edge is blocked by fortification (enemies can't pass walls/palisades)
+    if (window.isEdgeBlocked && window.isEdgeBlocked(threat.col, threat.row, direction, false)) {
+      // Track as potential wall-attack target
+      const neighborPos = window.offsetToCube(neighbor.col, neighbor.row);
+      const distanceToTarget = window.cubeDistance(neighborPos, targetPos);
+      if (distanceToTarget < bestBlockedDist) {
+        bestBlockedDist = distanceToTarget;
+        bestBlockedEdge = direction;
+      }
+      continue;
+    }
 
     const neighborPos = window.offsetToCube(neighbor.col, neighbor.row);
     const distanceToTarget = window.cubeDistance(neighborPos, targetPos);
@@ -145,6 +159,19 @@ export function moveThreatTowardTarget(threat) {
     threat.movementLeft--;
     // Check if the threat has moved onto a sacred place
     if (window.checkDesecration) window.checkDesecration(bestMove.col, bestMove.row, null);
+    return true;
+  }
+
+  // No unblocked move — attack the wall blocking the path
+  if (bestBlockedEdge != null && window.damageFortification) {
+    const damage = threatType.combat * 10;
+    const destroyed = window.damageFortification(threat.col, threat.row, bestBlockedEdge, damage);
+    threat.movementLeft--;
+    if (destroyed) {
+      if (window.addChronicleEntry) {
+        window.addChronicleEntry(`${threatType.name} breached our fortifications!`, 'military');
+      }
+    }
     return true;
   }
 
@@ -196,9 +223,29 @@ export function calculateDefensiveStrength(settlement) {
     }
   }
 
-  // Add defensive buildings bonus (future: walls, watchtowers, etc.)
-  // For now, settlements provide base defense
-  strength += 1; // base settlement defense
+  // Base settlement defense
+  strength += 1;
+
+  // Fortification defense bonus
+  if (window.getSettlementFortificationBonus) {
+    strength += window.getSettlementFortificationBonus(settlement.col, settlement.row);
+  }
+
+  // Watchtower defense bonus — each staffed watchtower in territory adds 1
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = window.gameState.map[r][c];
+      if (hex.building === 'watchtower' && hex.buildProgress <= 0 && hex.workers > 0) {
+        const dist = window.cubeDistance(
+          window.offsetToCube(c, r),
+          window.offsetToCube(settlement.col, settlement.row)
+        );
+        if (dist <= window.TERRITORY_RADIUS) {
+          strength += 1;
+        }
+      }
+    }
+  }
 
   return Math.floor(strength);
 }

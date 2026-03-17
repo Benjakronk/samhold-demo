@@ -40,6 +40,8 @@ function setupTurnEventListeners() {
     if (gameState.season === 0) gameState.year++;
 
     window.resetUnitMovement();
+    // Recompute fog of war at turn start
+    if (window.recomputeVisibility) window.recomputeVisibility();
     window.updateTurnDisplay();
     window.updateAllUI();
 
@@ -76,9 +78,28 @@ function processTurn() {
         report.constructionWorkers += hex.workers;
         if (window.setMapDirty) window.setMapDirty(true);
         if (hex.buildProgress <= 0) {
-          report.buildingsCompleted.push({ name: window.BUILDINGS[hex.building].name, col: c, row: r });
-          report.events.push(`${window.BUILDINGS[hex.building].icon} ${window.BUILDINGS[hex.building].name} completed at (${c},${r}).`);
-          // Workers stay assigned — now they work the completed building
+          const bDef = window.BUILDINGS[hex.building];
+          report.buildingsCompleted.push({ name: bDef.name, col: c, row: r });
+          report.events.push(`${bDef.icon} ${bDef.name} completed at (${c},${r}).`);
+
+          // Monument: apply permanent Identity bonus, set lifecycle state, free construction workers
+          if (hex.building === 'monument' && bDef.permanentIdentityBonus) {
+            gameState.cohesion.identity = Math.min(100, gameState.cohesion.identity + bDef.permanentIdentityBonus);
+            hex.monumentState = 'active';
+            hex.lastStewardTurn = gameState.turn;
+            hex.neglectTurns = 0;
+            hex.completedTurn = gameState.turn;
+            report.events.push(`🗿 Monument completed! Identity +${bDef.permanentIdentityBonus} (permanent).`);
+            if (window.addChronicleEntry) {
+              const subject = hex.monumentSubject || 'our history';
+              window.addChronicleEntry(`A monument commemorating ${subject} was completed. The people feel a stronger sense of identity.`, 'cultural');
+            }
+            // Free construction workers — monument needs no staff
+            gameState.population.employed -= hex.workers;
+            gameState.population.idle += hex.workers;
+            hex.workers = 0;
+          }
+          // Other buildings: workers stay assigned — now they work the completed building
         }
       }
     }
@@ -90,12 +111,23 @@ function processTurn() {
     trainingUnit.trainingProgress--;
 
     if (trainingUnit.trainingProgress <= 0) {
-      // Training completed - create the actual unit
-      const unit = window.createUnit(trainingUnit.type, trainingUnit.col, trainingUnit.row);
-      if (unit) {
-        const unitType = window.UNIT_TYPES[trainingUnit.type];
-        report.events.push(`${unitType.icon} ${unitType.name} training completed at (${trainingUnit.col},${trainingUnit.row}).`);
-      }
+      // Training completed — population was already claimed by startUnitTraining,
+      // so build the unit directly without going through createUnit (which would double-deduct).
+      const unitType = window.UNIT_TYPES[trainingUnit.type];
+      const unit = {
+        id: gameState.nextUnitId++,
+        type: trainingUnit.type,
+        col: trainingUnit.col,
+        row: trainingUnit.row,
+        movementLeft: unitType.movement,
+        health: 100,
+        experience: 0,
+        orders: null,
+        lastDamage: 0,
+        activeAction: null
+      };
+      gameState.units.push(unit);
+      report.events.push(`${unitType.icon} ${unitType.name} training completed at (${trainingUnit.col},${trainingUnit.row}).`);
 
       // Remove from training queue
       gameState.unitsInTraining.splice(i, 1);
@@ -188,11 +220,15 @@ function processTurn() {
   // Process oral tradition (storytellers compose/lose stories)
   if (window.processStories) window.processStories(report);
 
-  // Process sacred places (passive Bonds bonus)
-  if (window.processSacredPlaces) window.processSacredPlaces(report);
+  // Process society buildings (sacred sites, shrines, meeting halls — cohesion yields)
+  if (window.processSocietyBuildings) window.processSocietyBuildings(report);
+  else if (window.processSacredPlaces) window.processSacredPlaces(report);
 
   // Process named regions (strength accumulation, expansion, decay)
   if (window.processRegions) window.processRegions(report);
+
+  // Process fortification construction
+  if (window.processFortificationConstruction) window.processFortificationConstruction();
 
   // Process shared values (crystallization, violation, bonuses)
   if (window.processValues) window.processValues(report);

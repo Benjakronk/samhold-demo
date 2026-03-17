@@ -5,6 +5,7 @@
 
 import { GOVERNANCE_MODELS } from '../data/governance.js';
 import { BUILDINGS } from '../data/buildings.js';
+import { VALUE_IDENTITY_BASE, VALUE_IDENTITY_MAX } from '../data/values.js';
 
 // Constants used by cohesion system (accessed from global scope)
 // FOOD_PER_POP, FOOD_PER_CHILD, WORKING_AGE are defined in main game
@@ -53,7 +54,13 @@ export function calculateCohesion() {
 
 /**
  * Preview the cohesion deltas that would occur next turn, without mutating state.
- * Used by the UI to show projected changes (like food delta in the top bar).
+ * Mirrors the actual turn order:
+ *   1. traditions  (before calculateCohesion)
+ *   2. oral tradition stories  (before calculateCohesion)
+ *   3. society building accumulators  (before calculateCohesion)
+ *   4. values passive bonus  (before calculateCohesion)
+ *   5. calculateCohesion — the four pillar functions
+ *   6. elder identity bonus  (after calculateCohesion)
  */
 export function previewCohesionDeltas() {
   const c = window.gameState.cohesion;
@@ -66,60 +73,131 @@ export function previewCohesionDeltas() {
     bonds: c.bonds
   };
   const savedFood = gs.resources.food;
+  const savedKnowledge = gs.resources.knowledge;
 
-  // Project food to next turn so satisfaction uses the food level it will actually see
+  // Project food so satisfaction sees the level it will actually compute against
   if (window.calculateIncome) {
     const inc = window.calculateIncome();
     gs.resources.food = Math.max(0, savedFood + inc.netFood);
   }
 
+  // ── 1. Tradition effects ────────────────────────────────────────────────────
+  if (window.projectTraditionDeltas) {
+    const trad = window.projectTraditionDeltas();
+    c.identity     += trad.identity;
+    c.legitimacy   += trad.legitimacy;
+    c.satisfaction += trad.satisfaction;
+    c.bonds        += trad.bonds;
+  }
+
+  // ── 2. Oral tradition (story completion / loss) ─────────────────────────────
+  if (gs.culture) {
+    const cult = gs.culture;
+    const PROGRESS_PER = 0.25;  // matches STORY_PROGRESS_PER_STORYTELLER
+    const CAPACITY_PER = 4;     // matches STORY_CAPACITY_PER_STORYTELLER
+    const GRACE_TURNS  = 4;     // matches STORY_LOSS_GRACE_TURNS
+    const BONUS        = 1;     // matches STORY_IDENTITY_BONUS
+    if (cult.storytellers > 0) {
+      const nextProgress = (cult.storyProgress || 0) + cult.storytellers * PROGRESS_PER;
+      const completed = Math.floor(nextProgress);
+      const capacity = cult.storytellers * CAPACITY_PER;
+      const afterCount = (cult.stories?.length || 0) + completed;
+      const fades = Math.max(0, afterCount - (capacity + 2));
+      c.identity = Math.min(100, Math.max(0, c.identity + (completed - fades) * BONUS));
+    } else if ((cult.turnsWithoutStoryteller || 0) >= GRACE_TURNS - 1 && (cult.stories?.length || 0) > 0) {
+      c.identity = Math.max(0, c.identity - BONUS);
+    }
+  }
+
+  // ── 3. Society building accumulators ────────────────────────────────────────
+  if (gs.map) {
+    const accumulators = { ...(gs.culture?.societyBuildingAccumulators || { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 }) };
+    if (gs.culture?.sacredSiteBondsAccumulator > 0) accumulators.bonds += gs.culture.sacredSiteBondsAccumulator;
+
+    let upkeepLeft = gs.resources.materials;
+    const isTheocracy = gs.governance?.model === 'theocracy';
+    const yieldMap = { identityYield: 'identity', legitimacyYield: 'legitimacy', satisfactionYield: 'satisfaction', bondsYield: 'bonds' };
+
+    for (const row of gs.map) {
+      for (const hex of row) {
+        if (!hex.building || hex.buildProgress > 0) continue;
+        const bDef = BUILDINGS[hex.building];
+        if (!bDef?.isSocietyBuilding) continue;
+
+        if (hex.building === 'monument') {
+          const upkeep = bDef.upkeepMaterials || 0;
+          if (upkeep > 0 && upkeepLeft < upkeep) continue;
+          if (upkeep > 0) upkeepLeft -= upkeep;
+          const NEGLECT_INTERVAL = 8;
+          const stewardTending = gs.units?.some(u => u.type === 'steward' && u.col === hex.col && u.row === hex.row && u.activeAction === 'tending_monument');
+          const turnsSince = gs.turn - (hex.lastStewardTurn ?? hex.completedTurn ?? gs.turn);
+          const willNeglect = !stewardTending && turnsSince >= NEGLECT_INTERVAL;
+          const isNeglected = hex.monumentState === 'neglected' || willNeglect;
+          if (isNeglected) {
+            const drain = 0.05; // upkeep was already checked above
+            accumulators.identity -= drain;
+            accumulators.bonds    -= drain;
+          } else {
+            accumulators.identity += 0.05;
+            accumulators.bonds    += 0.05;
+          }
+          continue;
+        }
+
+        if (hex.workers === 0) continue;
+        const upkeep = (bDef.upkeepMaterials || 0) * hex.workers;
+        if (upkeep > 0) {
+          if (upkeepLeft >= upkeep) upkeepLeft -= upkeep;
+          else continue;
+        }
+        for (const [yKey, pillar] of Object.entries(yieldMap)) {
+          if (bDef[yKey]) {
+            let amount = bDef[yKey] * hex.workers;
+            if (yKey === 'identityYield' && hex.building === 'shrine' && isTheocracy) amount *= 1.5;
+            accumulators[pillar] += amount;
+          }
+        }
+      }
+    }
+    for (const pillar of ['identity', 'legitimacy', 'satisfaction', 'bonds']) {
+      const pts = Math.floor(accumulators[pillar]);
+      if (pts !== 0) c[pillar] = Math.max(0, Math.min(100, c[pillar] + pts));
+    }
+  }
+
+  // ── 4. Values passive identity bonus ────────────────────────────────────────
+  for (const value of (gs.values || [])) {
+    const bonus = Math.min(VALUE_IDENTITY_MAX, VALUE_IDENTITY_BASE * value.strength);
+    c.identity = Math.min(100, c.identity + bonus);
+  }
+
+  // ── 5. calculateCohesion — pillar functions see the pre-modified starting values ──
   calculateSatisfactionPillar();
   calculateIdentityPillar();
   calculateLegitimacyPillar();
   calculateBondsPillar();
 
+  // ── 6. Elder identity bonus (post-calculateCohesion) ────────────────────────
+  for (const unit of (gs.units || [])) {
+    if (unit.type === 'elder' && unit.health >= 50) {
+      c.identity = Math.min(100, c.identity + 0.5);
+    }
+  }
+
   const deltas = {
-    identity: c.identity - savedPillars.identity,
-    legitimacy: c.legitimacy - savedPillars.legitimacy,
+    identity:     c.identity     - savedPillars.identity,
+    legitimacy:   c.legitimacy   - savedPillars.legitimacy,
     satisfaction: c.satisfaction - savedPillars.satisfaction,
-    bonds: c.bonds - savedPillars.bonds
+    bonds:        c.bonds        - savedPillars.bonds
   };
 
-  // Tradition effects: project which traditions fire next turn and their cohesion impact
-  if (window.projectTraditionDeltas) {
-    const trad = window.projectTraditionDeltas();
-    deltas.identity     += trad.identity;
-    deltas.legitimacy   += trad.legitimacy;
-    deltas.satisfaction += trad.satisfaction;
-    deltas.bonds        += trad.bonds;
-  }
-
-  // Sacred sites grant bonds via a fractional accumulator (processSacredPlaces).
-  // Project how much the accumulator advances next turn and whether it tips over.
-  const sacredBDef = window.BUILDINGS?.sacred_site;
-  if (sacredBDef && gs.map) {
-    let upkeepLeft = gs.resources.materials;
-    let projectedAccum = gs.culture?.sacredSiteBondsAccumulator || 0;
-    for (const row of gs.map) {
-      for (const hex of row) {
-        if (hex.building === 'sacred_site' && hex.buildProgress <= 0 && hex.workers > 0) {
-          const upkeep = sacredBDef.upkeepMaterials * hex.workers;
-          if (upkeepLeft >= upkeep) {
-            upkeepLeft -= upkeep;
-            projectedAccum += sacredBDef.bondsYield * hex.workers;
-          }
-        }
-      }
-    }
-    deltas.bonds += Math.floor(projectedAccum);
-  }
-
   // Restore everything
-  c.identity = savedPillars.identity;
-  c.legitimacy = savedPillars.legitimacy;
+  c.identity     = savedPillars.identity;
+  c.legitimacy   = savedPillars.legitimacy;
   c.satisfaction = savedPillars.satisfaction;
-  c.bonds = savedPillars.bonds;
-  gs.resources.food = savedFood;
+  c.bonds        = savedPillars.bonds;
+  gs.resources.food      = savedFood;
+  gs.resources.knowledge = savedKnowledge;
 
   return deltas;
 }
@@ -228,7 +306,7 @@ export function calculateSatisfactionPillar() {
     satisfaction = Math.min(50, satisfaction + decayRate);
   }
 
-  window.gameState.cohesion.satisfaction = Math.round(Math.max(0, Math.min(100, satisfaction)));
+  window.gameState.cohesion.satisfaction = Math.max(0, Math.min(100, satisfaction));
 }
 
 /**
@@ -323,7 +401,7 @@ export function calculateIdentityPillar() {
     identity = Math.min(identity + 0.2, 70);
   }
 
-  window.gameState.cohesion.identity = Math.round(Math.max(0, Math.min(100, identity)));
+  window.gameState.cohesion.identity = Math.max(0, Math.min(100, identity));
 }
 
 /**
@@ -335,9 +413,23 @@ export function calculateLegitimacyPillar() {
   let legitimacy = window.gameState.cohesion.legitimacy;
   const currentModel = GOVERNANCE_MODELS[window.gameState.governance.model];
 
-  // Governance transition penalty
+  // Governance transition penalty — meeting hall workers reduce it
   if (window.gameState.governance.modelChangeTimer > 0) {
-    legitimacy = Math.max(legitimacy - 5, 0); // Major disruption during transition
+    let transitionPenalty = 5;
+    // Meeting hall bonus: each staffed worker reduces penalty by 1, capped at halving it
+    if (window.gameState.map) {
+      let meetingHallWorkers = 0;
+      for (const row of window.gameState.map) {
+        for (const hex of row) {
+          if (hex.building === 'meeting_hall' && hex.buildProgress <= 0 && hex.workers > 0) {
+            meetingHallWorkers += hex.workers;
+          }
+        }
+      }
+      const maxReduction = Math.floor(transitionPenalty / 2); // cap at halving
+      transitionPenalty -= Math.min(meetingHallWorkers, maxReduction);
+    }
+    legitimacy = Math.max(legitimacy - transitionPenalty, 0);
     window.gameState.governance.modelChangeTimer--;
 
     // Check if transition just completed
@@ -384,7 +476,7 @@ export function calculateLegitimacyPillar() {
     legitimacy = Math.max(0, Math.min(100, legitimacy + identityEffect));
   }
 
-  window.gameState.cohesion.legitimacy = Math.round(Math.max(0, Math.min(100, legitimacy)));
+  window.gameState.cohesion.legitimacy = Math.max(0, Math.min(100, legitimacy));
 }
 
 /**
@@ -436,7 +528,7 @@ export function calculateBondsPillar() {
     bonds = Math.min(45, bonds + baseDecay);
   }
 
-  window.gameState.cohesion.bonds = Math.round(Math.max(0, Math.min(100, bonds)));
+  window.gameState.cohesion.bonds = Math.max(0, Math.min(100, bonds));
 }
 
 /**
@@ -498,7 +590,7 @@ export function applyCohesionEffects() {
  */
 export function updateCohesionDisplay() {
   const c = window.gameState.cohesion;
-  const total = c.total; // Use calculated total from cohesion system
+  const total = Math.round(c.total);
   const sum = c.identity + c.legitimacy + c.satisfaction + c.bonds;
   const status = getCohesionStatus();
 
@@ -518,11 +610,24 @@ export function updateCohesionDisplay() {
   // Compute projected next-turn deltas for display
   const projected = previewCohesionDeltas();
 
-  const fmt = (val, d) => d !== 0 ? ` (${d > 0 ? '+' : ''}${Math.round(d)})` : '';
+  // Format a delta for display: show 1 decimal for sub-integer, integer otherwise.
+  // Returns empty string if change is negligible (< 0.05).
+  const fmtDelta = d => {
+    if (Math.abs(d) < 0.05) return '';
+    const sign = d > 0 ? '+' : '';
+    const abs = Math.abs(d);
+    const str = abs >= 1 && Number.isInteger(Math.round(abs)) && abs % 1 < 0.05
+      ? Math.round(d).toString()
+      : (Math.round(d * 10) / 10).toFixed(1);
+    return ` (${sign}${d < 0 ? '-' : ''}${str.replace('-','')})`;
+  };
+
+  // Display values as rounded integers, but keep bar widths as floats for smooth fill
+  const disp = p => Math.round(c[p]);
 
   // Add tooltip with breakdown and projected changes
   const container = document.getElementById('cohesion-bar-container');
-  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${fmt(c.identity, projected.identity)}\nLegitimacy: ${c.legitimacy}${fmt(c.legitimacy, projected.legitimacy)}\nSatisfaction: ${c.satisfaction}${fmt(c.satisfaction, projected.satisfaction)}\nBonds: ${c.bonds}${fmt(c.bonds, projected.bonds)}`;
+  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${disp('identity')}${fmtDelta(projected.identity)}\nLegitimacy: ${disp('legitimacy')}${fmtDelta(projected.legitimacy)}\nSatisfaction: ${disp('satisfaction')}${fmtDelta(projected.satisfaction)}\nBonds: ${disp('bonds')}${fmtDelta(projected.bonds)}`;
 
   // Update sidebar detail bars
   for (const p of ['identity','legitimacy','satisfaction','bonds']) {
@@ -530,12 +635,12 @@ export function updateCohesionDisplay() {
     const valEl = document.getElementById(`val-${p}`);
     if (barEl && valEl) {
       barEl.style.width = c[p]+'%';
-      valEl.textContent = c[p];
+      valEl.textContent = disp(p);
 
       // Show projected next-turn change
-      const change = projected[p];
-      if (change !== 0) {
-        valEl.textContent += ` (${change > 0 ? '+' : ''}${Math.round(change)})`;
+      const deltaStr = fmtDelta(projected[p]);
+      if (deltaStr) {
+        valEl.textContent += deltaStr;
         valEl.style.fontWeight = '700';
       } else {
         valEl.style.fontWeight = '400';

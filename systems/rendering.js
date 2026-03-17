@@ -7,8 +7,9 @@ import { BUILDINGS } from '../data/buildings.js';
 import { UNIT_TYPES } from '../data/units.js';
 import { THREAT_TYPES } from '../data/threats.js';
 import * as CONSTANTS from '../data/constants.js';
-import { hexToPixel, pixelToHex, hexNeighbor, offsetToCube, cubeDistance } from '../utils/hexMath.js';
+import { hexToPixel, pixelToHex, hexNeighbor, offsetToCube, cubeDistance, canonicalEdgeKey } from '../utils/hexMath.js';
 import { createRNG } from '../utils/random.js';
+import { FORTIFICATIONS, WALL_INSET } from '../data/fortifications.js';
 
 // Global variables that will be set by main game
 let gameState = null;
@@ -73,7 +74,11 @@ function drawHexStatic(hex, size) {
   const wp = hexToPixel(hex.col, hex.row, size);
   const dx = wp.x + CONSTANTS.MAP_PAD, dy = wp.y + CONSTANTS.MAP_PAD;
 
-  if (!hex.revealed) {
+  // 3-tier visibility: 0=unexplored, 1=revealed(dimmed), 2=visible(full)
+  const vis = (gameState.visibilityMap && gameState.visibilityMap[hex.row])
+    ? gameState.visibilityMap[hex.row][hex.col] : (hex.revealed ? 2 : 0);
+
+  if (vis === 0) {
     drawHexPath(mapCtx, dx, dy, size);
     mapCtx.fillStyle = '#1a1610'; mapCtx.fill();
     drawHexPath(mapCtx, dx, dy, size);
@@ -141,6 +146,84 @@ function drawHexStatic(hex, size) {
     mapCtx.restore();
   }
 
+  // Shrine marker — soft purple/violet inner glow
+  if (hex.building === 'shrine' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.2, dx, dy, size * 1.0);
+    grd.addColorStop(0, 'rgba(160,100,200,0)');
+    grd.addColorStop(0.5, 'rgba(160,100,200,0.15)');
+    grd.addColorStop(1, 'rgba(180,120,220,0.45)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
+  // Monument marker — active: stone-grey glow with golden center; neglected: dull red crack pattern
+  if (hex.building === 'monument' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    if (hex.monumentState === 'neglected') {
+      // Neglected: muted reddish-grey, no warmth
+      const grd = mapCtx.createRadialGradient(dx, dy, size * 0.1, dx, dy, size * 0.9);
+      grd.addColorStop(0, 'rgba(120,80,70,0.25)');
+      grd.addColorStop(0.5, 'rgba(100,70,60,0.15)');
+      grd.addColorStop(1, 'rgba(80,55,50,0.35)');
+      mapCtx.fillStyle = grd;
+      mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+      // Small crack indicator — a dim X at center
+      mapCtx.globalAlpha = 0.35;
+      mapCtx.strokeStyle = '#8a6055';
+      mapCtx.lineWidth = 1.5;
+      mapCtx.beginPath();
+      mapCtx.moveTo(dx - size * 0.15, dy - size * 0.15);
+      mapCtx.lineTo(dx + size * 0.15, dy + size * 0.15);
+      mapCtx.moveTo(dx + size * 0.15, dy - size * 0.15);
+      mapCtx.lineTo(dx - size * 0.15, dy + size * 0.15);
+      mapCtx.stroke();
+      mapCtx.globalAlpha = 1.0;
+    } else {
+      // Active: warm stone glow
+      const grd = mapCtx.createRadialGradient(dx, dy, size * 0.15, dx, dy, size * 0.9);
+      grd.addColorStop(0, 'rgba(255,215,80,0.35)');
+      grd.addColorStop(0.4, 'rgba(180,170,155,0.2)');
+      grd.addColorStop(1, 'rgba(140,135,125,0.4)');
+      mapCtx.fillStyle = grd;
+      mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    }
+    mapCtx.restore();
+  }
+
+  // Meeting Hall marker — blue-green civic glow
+  if (hex.building === 'meeting_hall' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.2, dx, dy, size * 1.0);
+    grd.addColorStop(0, 'rgba(60,160,140,0)');
+    grd.addColorStop(0.5, 'rgba(60,160,140,0.15)');
+    grd.addColorStop(1, 'rgba(80,180,160,0.45)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
+  // Watchtower marker — amber/orange utilitarian glow
+  if (hex.building === 'watchtower' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.15, dx, dy, size * 0.85);
+    grd.addColorStop(0, 'rgba(220,160,40,0)');
+    grd.addColorStop(0.5, 'rgba(220,160,40,0.12)');
+    grd.addColorStop(1, 'rgba(200,140,30,0.35)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
   // Named terrain feature label is drawn in screen-space in drawFeatureLabels()
   // so that font size stays legible regardless of zoom level.
 
@@ -173,6 +256,13 @@ function drawHexStatic(hex, size) {
       mapCtx.fillText('👤', dx, dy - size * 0.1);
       mapCtx.shadowBlur = 0;
     }
+  }
+
+  // Revealed-but-not-visible overlay (state 1): dark semi-transparent wash
+  if (vis === 1) {
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.fillStyle = 'rgba(15,13,10,0.45)';
+    mapCtx.fill();
   }
 }
 
@@ -256,7 +346,9 @@ function renderMapToCache() {
         for (const key of near0) {
           if (near1Set.has(key)) {
             const c = Math.floor(key / 10000), r = key % 10000;
-            if (gameState.map[r][c].revealed) { visible = true; break; }
+            // Use visibilityMap >= 1 (revealed or visible) if available, else fallback to hex.revealed
+            const vm = gameState.visibilityMap?.[r]?.[c];
+            if (vm != null ? vm >= 1 : gameState.map[r][c].revealed) { visible = true; break; }
           }
         }
         if (!visible) continue;
@@ -483,6 +575,148 @@ function renderMapToCache() {
   }
   mapCtx.stroke();
 
+  // Pass 4: Fortification rendering — drawn inset from hex edge to avoid clashing with territory borders
+  if (gameState.fortifications) {
+    // vertexEndpoints: ideal_vertex_key -> [{x, y, fortKey, def, alpha}]
+    // Used in the gap-closer pass after all segments are drawn.
+    const vertexEndpoints = new Map();
+
+    for (const [key, fort] of Object.entries(gameState.fortifications)) {
+      const parts = key.split(',');
+      const fc = parseInt(parts[0]), fr = parseInt(parts[1]), fe = parseInt(parts[2]);
+
+      // Skip if not at least revealed — check owner hex visibility
+      const visCol = fort.ownerCol ?? fc, visRow = fort.ownerRow ?? fr;
+      const fVis = gameState.visibilityMap?.[visRow]?.[visCol];
+      if (fVis != null ? fVis < 1 : !gameState.map[visRow]?.[visCol]?.revealed) continue;
+
+      const def = FORTIFICATIONS[fort.type];
+      if (!def) continue;
+
+      // Use owner hex for inset direction so wall always appears inside the owning hex.
+      // If no owner stored (old data), fall back to canonical hex.
+      const renderCol = fort.ownerCol ?? fc;
+      const renderRow = fort.ownerRow ?? fr;
+      const isOwnerCanonical = (renderCol === fc && renderRow === fr);
+      const renderEdge = isOwnerCanonical ? fe : (fe + 3) % 6;
+
+      const wp = hexToPixel(renderCol, renderRow, CONSTANTS.HEX_SIZE);
+      const cx = wp.x + CONSTANTS.MAP_PAD, cy = wp.y + CONSTANTS.MAP_PAD;
+
+      // Compute inset edge corners
+      const a0 = (Math.PI / 180) * (60 * renderEdge - 30);
+      const a1 = (Math.PI / 180) * (60 * ((renderEdge + 1) % 6) - 30);
+      const inset = WALL_INSET;
+      const x0 = cx + CONSTANTS.HEX_SIZE * inset * Math.cos(a0);
+      const y0 = cy + CONSTANTS.HEX_SIZE * inset * Math.sin(a0);
+      const x1 = cx + CONSTANTS.HEX_SIZE * inset * Math.cos(a1);
+      const y1 = cy + CONSTANTS.HEX_SIZE * inset * Math.sin(a1);
+
+      // Opacity: under construction = dashed 50%, revealed-not-visible = 50%, else full
+      let alpha = 1.0;
+      if (fort.buildProgress > 0) alpha = 0.5;
+      else if (fVis === 1) alpha = 0.5;
+
+      mapCtx.save();
+      mapCtx.globalAlpha = alpha;
+      mapCtx.strokeStyle = def.color;
+      mapCtx.lineWidth = def.lineWidth;
+      mapCtx.lineCap = 'round';
+
+      if (fort.buildProgress > 0) {
+        mapCtx.setLineDash([6, 4]);
+      }
+
+      if (fort.type === 'gate' && def.gapRatio) {
+        // Gate: two segments with a gap in the middle
+        const gap = def.gapRatio;
+        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        const dx = (x1 - x0) * gap / 2, dy2 = (y1 - y0) * gap / 2;
+
+        // Left segment
+        mapCtx.beginPath();
+        mapCtx.moveTo(x0, y0);
+        mapCtx.lineTo(mx - dx, my - dy2);
+        mapCtx.stroke();
+
+        // Right segment
+        mapCtx.beginPath();
+        mapCtx.moveTo(mx + dx, my + dy2);
+        mapCtx.lineTo(x1, y1);
+        mapCtx.stroke();
+
+        // Gate posts (small circles at gap ends)
+        mapCtx.fillStyle = def.color;
+        mapCtx.beginPath();
+        mapCtx.arc(mx - dx, my - dy2, def.lineWidth * 0.6, 0, Math.PI * 2);
+        mapCtx.fill();
+        mapCtx.beginPath();
+        mapCtx.arc(mx + dx, my + dy2, def.lineWidth * 0.6, 0, Math.PI * 2);
+        mapCtx.fill();
+      } else {
+        // Palisade or Wall: solid line
+        mapCtx.beginPath();
+        mapCtx.moveTo(x0, y0);
+        mapCtx.lineTo(x1, y1);
+        mapCtx.stroke();
+      }
+
+      mapCtx.setLineDash([]);
+
+      // Health bar if damaged and completed
+      if (fort.buildProgress <= 0 && fort.health < fort.maxHealth) {
+        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        const barW = 16, barH = 3;
+        mapCtx.globalAlpha = 0.9;
+        mapCtx.fillStyle = '#400000';
+        mapCtx.fillRect(mx - barW / 2, my - barH / 2 - 4, barW, barH);
+        const hp = fort.health / fort.maxHealth;
+        mapCtx.fillStyle = hp > 0.5 ? '#5a8a4a' : hp > 0.25 ? '#c9a84c' : '#a94442';
+        mapCtx.fillRect(mx - barW / 2, my - barH / 2 - 4, barW * hp, barH);
+      }
+
+      mapCtx.restore();
+
+      // Register endpoints for gap-closing (skip gates and in-construction forts).
+      // Key is the IDEAL (full-radius) vertex position — both hexes sharing a vertex
+      // produce the same ideal coordinate, so they bucket together reliably.
+      if (fort.type !== 'gate' && fort.buildProgress <= 0) {
+        const R = CONSTANTS.HEX_SIZE;
+        const ix0 = Math.round(cx + R * Math.cos(a0));
+        const iy0 = Math.round(cy + R * Math.sin(a0));
+        const ix1 = Math.round(cx + R * Math.cos(a1));
+        const iy1 = Math.round(cy + R * Math.sin(a1));
+
+        for (const [ik, ax, ay] of [[`${ix0},${iy0}`, x0, y0], [`${ix1},${iy1}`, x1, y1]]) {
+          if (!vertexEndpoints.has(ik)) vertexEndpoints.set(ik, []);
+          vertexEndpoints.get(ik).push({ x: ax, y: ay, key, def, alpha });
+        }
+      }
+    }
+
+    // Gap-closer pass: for each shared vertex where two different forts almost meet,
+    // draw a short connector segment between their inset endpoints.
+    for (const endpoints of vertexEndpoints.values()) {
+      if (endpoints.length < 2) continue;
+      for (let i = 0; i < endpoints.length; i++) {
+        for (let j = i + 1; j < endpoints.length; j++) {
+          if (endpoints[i].key === endpoints[j].key) continue; // same fort, skip
+          const ep1 = endpoints[i], ep2 = endpoints[j];
+          mapCtx.save();
+          mapCtx.globalAlpha = Math.min(ep1.alpha, ep2.alpha);
+          mapCtx.strokeStyle = ep1.def.color;
+          mapCtx.lineWidth = Math.min(ep1.def.lineWidth, ep2.def.lineWidth);
+          mapCtx.lineCap = 'round';
+          mapCtx.beginPath();
+          mapCtx.moveTo(ep1.x, ep1.y);
+          mapCtx.lineTo(ep2.x, ep2.y);
+          mapCtx.stroke();
+          mapCtx.restore();
+        }
+      }
+    }
+  }
+
   mapDirty = false;
 }
 
@@ -654,6 +888,43 @@ function drawOverlays() {
 
   // Draw external threats
   drawThreats();
+
+  // Draw fortification edge highlight (when in fortify mode)
+  if (gameState.unitInteractionMode === 'fortify' && window.hoveredHex && window.hoveredEdge != null) {
+    const hh = window.hoveredHex;
+    const he = window.hoveredEdge;
+    const wp = hexToPixel(hh.col, hh.row, CONSTANTS.HEX_SIZE);
+    const sp = window.worldToScreen(wp.x, wp.y);
+    const scale = gameState.camera.zoom;
+    const inset = WALL_INSET;
+
+    const a0 = (Math.PI / 180) * (60 * he - 30);
+    const a1 = (Math.PI / 180) * (60 * ((he + 1) % 6) - 30);
+    const ex0 = sp.x + CONSTANTS.HEX_SIZE * scale * inset * Math.cos(a0);
+    const ey0 = sp.y + CONSTANTS.HEX_SIZE * scale * inset * Math.sin(a0);
+    const ex1 = sp.x + CONSTANTS.HEX_SIZE * scale * inset * Math.cos(a1);
+    const ey1 = sp.y + CONSTANTS.HEX_SIZE * scale * inset * Math.sin(a1);
+
+    // Determine validity
+    const inTerritory = window.isInTerritory(hh.col, hh.row);
+    const nb = hexNeighbor(hh.col, hh.row, he);
+    const nbValid = nb.col >= 0 && nb.col < CONSTANTS.MAP_COLS && nb.row >= 0 && nb.row < CONSTANTS.MAP_ROWS;
+    const existing = window.getFortification ? window.getFortification(hh.col, hh.row, he) : null;
+    const valid = inTerritory && nbValid && !existing;
+
+    // Glow
+    ctx.save();
+    ctx.strokeStyle = valid ? 'rgba(100,255,100,0.8)' : 'rgba(255,80,80,0.8)';
+    ctx.lineWidth = 6 * scale;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = valid ? 'rgba(100,255,100,0.5)' : 'rgba(255,80,80,0.5)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(ex0, ey0);
+    ctx.lineTo(ex1, ey1);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   // Draw selected hex outline
   const sel = gameState.selectedHex;
@@ -953,7 +1224,9 @@ function drawUnitsInTraining() {
 function drawThreats() {
   for (const threat of gameState.externalThreats) {
     const hex = gameState.map[threat.row][threat.col];
-    if (!hex.revealed) continue; // Only draw threats on revealed hexes
+    // Only draw enemy threats on hexes with active visibility (2)
+    const vis = gameState.visibilityMap?.[threat.row]?.[threat.col];
+    if (vis != null ? vis < 2 : !hex.revealed) continue;
 
     const threatType = THREAT_TYPES[threat.type];
     const wp = hexToPixel(threat.col, threat.row, CONSTANTS.HEX_SIZE);
@@ -1043,7 +1316,18 @@ function drawMinimap() {
   for (let r = 0; r < CONSTANTS.MAP_ROWS; r++) for (let c = 0; c < CONSTANTS.MAP_COLS; c++) {
     const hex = gameState.map[r][c];
     const mx = (c+0.5*(r&1))*sx+sx*0.5, my = r*sy+sy*0.5;
-    minimapCtx.fillStyle = hex.revealed ? TERRAIN[hex.terrain].color : '#1a1610';
+    const mmVis = gameState.visibilityMap?.[r]?.[c];
+    const mmState = mmVis != null ? mmVis : (hex.revealed ? 2 : 0);
+    if (mmState === 0) {
+      minimapCtx.fillStyle = '#1a1610';
+    } else if (mmState === 1) {
+      // Dimmed terrain color for revealed-but-not-visible
+      const tc = TERRAIN[hex.terrain].color;
+      const pr = parseInt(tc.slice(1,3),16), pg = parseInt(tc.slice(3,5),16), pb = parseInt(tc.slice(5,7),16);
+      minimapCtx.fillStyle = `rgb(${Math.floor(pr*0.5)},${Math.floor(pg*0.5)},${Math.floor(pb*0.5)})`;
+    } else {
+      minimapCtx.fillStyle = TERRAIN[hex.terrain].color;
+    }
     minimapCtx.beginPath(); minimapCtx.arc(mx,my,dot,0,Math.PI*2); minimapCtx.fill();
     // River indicator on minimap
     if (hex.revealed && window.hexHasRiver && window.hexHasRiver(hex)) {

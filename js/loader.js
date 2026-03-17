@@ -17,7 +17,9 @@ import {
   cubeDistance,
   hexToPixel,
   pixelToHex,
-  hexNeighbor
+  hexNeighbor,
+  canonicalEdgeKey,
+  getEdgeBetween
 } from '../utils/hexMath.js';
 import * as ExternalThreats from '../systems/externalThreats.js';
 import * as Combat from '../systems/combat.js';
@@ -45,6 +47,8 @@ import * as BuildingActions from '../systems/buildingActions.js';
 import * as Chronicle from '../systems/chronicle.js';
 import * as Culture from '../systems/culture.js';
 import * as Values from '../systems/values.js';
+import * as Fortifications from '../systems/fortifications.js';
+import { FORTIFICATIONS, WALL_INSET } from '../data/fortifications.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -53,6 +57,8 @@ window.UNIT_TYPES = UNIT_TYPES;
 window.THREAT_TYPES = THREAT_TYPES;
 window.GOVERNANCE_MODELS = GOVERNANCE_MODELS;
 window.EVENT_LIBRARY = EVENT_LIBRARY;
+window.FORTIFICATIONS = FORTIFICATIONS;
+window.WALL_INSET = WALL_INSET;
 
 // Export constants individually for compatibility
 window.MAP_COLS = CONSTANTS.MAP_COLS;
@@ -60,6 +66,7 @@ window.MAP_ROWS = CONSTANTS.MAP_ROWS;
 window.HEX_SIZE = CONSTANTS.HEX_SIZE;
 window.MAP_PAD = CONSTANTS.MAP_PAD;
 window.TERRITORY_RADIUS = CONSTANTS.TERRITORY_RADIUS;
+window.SETTLEMENT_VISION = CONSTANTS.SETTLEMENT_VISION;
 window.FOOD_PER_POP = CONSTANTS.FOOD_PER_POP;
 window.FOOD_PER_CHILD = CONSTANTS.FOOD_PER_CHILD;
 window.WORKING_AGE_MIN = CONSTANTS.WORKING_AGE_MIN;
@@ -78,6 +85,8 @@ window.cubeDistance = cubeDistance;
 window.hexToPixel = hexToPixel;
 window.pixelToHex = pixelToHex;
 window.hexNeighbor = hexNeighbor;
+window.canonicalEdgeKey = canonicalEdgeKey;
+window.getEdgeBetween = getEdgeBetween;
 
 // External Threats system
 window.spawnThreat = ExternalThreats.spawnThreat;
@@ -241,6 +250,8 @@ window.toggleHexInfoSection = SidePanel.toggleHexInfoSection;
 window.toggleBuildSection = SidePanel.toggleBuildSection;
 window.toggleTrainingSection = SidePanel.toggleTrainingSection;
 window.toggleCultureSection = SidePanel.toggleCultureSection;
+window.toggleFortificationsSection = SidePanel.toggleFortificationsSection;
+window.selectFortEdge = SidePanel.selectFortEdge;
 
 // Overlay Manager system
 window.initOverlayManager = OverlayManager.initOverlayManager;
@@ -399,6 +410,120 @@ window.recalcTerritory = Territory.recalcTerritory;
 window.canFoundSettlement = Territory.canFoundSettlement;
 window.foundSettlement = Territory.foundSettlement;
 window.showSettlementFoundingConfirmation = Territory.showSettlementFoundingConfirmation;
+window.recomputeVisibility = Territory.recomputeVisibility;
+
+// Fortifications system
+window.initFortifications = Fortifications.initFortifications;
+window.getFortification = Fortifications.getFortification;
+window.getHexFortifications = Fortifications.getHexFortifications;
+window.placeFortification = Fortifications.placeFortification;
+window.upgradeFortification = Fortifications.upgradeFortification;
+window.damageFortification = Fortifications.damageFortification;
+window.demolishFortification = Fortifications.demolishFortification;
+window.processFortificationConstruction = Fortifications.processFortificationConstruction;
+window.isEdgeBlocked = Fortifications.isEdgeBlocked;
+window.getSettlementFortificationBonus = Fortifications.getSettlementFortificationBonus;
+window.assignFortWorker = Fortifications.assignFortWorker;
+window.unassignFortWorker = Fortifications.unassignFortWorker;
+
+// Fortification UI helpers (inline — too small for a module)
+
+// Place a fortification directly from the panel hex diagram (no confirm dialog needed —
+// type and cost are shown on the button before clicking).
+window.buildFortAt = function(col, row, edge, type) {
+  const success = window.placeFortification(col, row, edge, type);
+  if (success) {
+    if (window.setMapDirty) window.setMapDirty(true);
+    if (window.updateAllUI) window.updateAllUI();
+    const hex = window.gameState.map[row]?.[col];
+    if (hex && window.updateSidePanel) window.updateSidePanel(hex);
+    if (window.render) window.render();
+  }
+};
+
+window.enterFortifyMode = function(col, row) {
+  const gs = window.gameState;
+  gs.unitInteractionMode = 'fortify';
+  gs.selectedHex = gs.map[row][col];
+  window.hoveredHex = null;
+  window.hoveredEdge = null;
+  if (window.updateSidePanel) window.updateSidePanel(gs.selectedHex);
+  if (window.render) window.render();
+};
+
+window.confirmDemolishFortification = function(col, row, edge) {
+  const fort = window.getFortification(col, row, edge);
+  if (!fort) return;
+  const def = FORTIFICATIONS[fort.type];
+  const refund = Math.floor((def?.cost?.materials || 0) / 2);
+  window.showConfirmDialog(
+    'Demolish Fortification',
+    `Demolish this ${def?.name || 'fortification'}?<br>Refunds 🪵${refund} materials.`,
+    'Demolish', 'Cancel',
+    () => {
+      window.demolishFortification(col, row, edge);
+      if (window.gameState.selectedHex) window.updateSidePanel(window.gameState.selectedHex);
+      if (window.render) window.render();
+    }
+  );
+};
+
+window.confirmUpgradeFortification = function(col, row, edge) {
+  const wallDef = FORTIFICATIONS.wall;
+  const canAfford = window.gameState.resources.materials >= wallDef.upgradeCost.materials;
+  if (!canAfford) {
+    window.showAlert('Not Enough Materials', `<p>Upgrading to Stone Wall costs 🪵${wallDef.upgradeCost.materials} materials.</p>`);
+    return;
+  }
+  window.showConfirmDialogNonDestructive(
+    'Upgrade to Stone Wall',
+    `Upgrade this palisade to a Stone Wall?<br>Cost: 🪵${wallDef.upgradeCost.materials}<br>HP: ${wallDef.health} · Defense: +${wallDef.defenseBonus}<br>Build time: ${wallDef.buildTurns} turns`,
+    'Upgrade', 'Cancel',
+    () => {
+      window.upgradeFortification(col, row, edge);
+      if (window.gameState.selectedHex) window.updateSidePanel(window.gameState.selectedHex);
+      if (window.render) window.render();
+    }
+  );
+};
+
+// Handle fortify-mode edge click
+window.handleFortifyClick = function(col, row, edge) {
+  const fort = window.getFortification(col, row, edge);
+  if (fort) return; // Already has fort
+
+  if (!window.isInTerritory(col, row)) return;
+
+  // Show type selection dialog
+  let body = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  for (const [type, def] of Object.entries(FORTIFICATIONS)) {
+    if (type === 'wall') continue; // Wall is upgrade-only
+    const canAfford = window.gameState.resources.materials >= def.cost.materials;
+    body += `<button class="detail-btn" style="text-align:left;padding:8px;${canAfford ? '' : 'opacity:0.5;'}"
+      ${canAfford ? `onclick="window.placeFortification(${col},${row},${edge},'${type}'); window.closeDialog(); window.gameState.unitInteractionMode=null; window.hoveredHex=null; window.hoveredEdge=null; if(window.gameState.selectedHex)window.updateSidePanel(window.gameState.selectedHex); if(window.render)window.render();"` : 'disabled'}>
+      ${def.icon} <strong>${def.name}</strong> · 🪵${def.cost.materials} · 🔨${def.buildTurns}t · HP ${def.health} · Def +${def.defenseBonus}<br>
+      <small>${def.description}</small>
+    </button>`;
+  }
+  body += '</div>';
+  // Use a custom approach: show dialog, hide OK (choices are inline buttons)
+  window.showConfirmDialogNonDestructive('Build Fortification', body, '', 'Cancel', () => {});
+  // Hide the OK button since choices are inline; restore on cleanup via MutationObserver
+  const okBtn = document.getElementById('confirm-ok');
+  if (okBtn) {
+    okBtn.style.display = 'none';
+    // Restore display when dialog closes (clone-based cleanup creates a new element)
+    const dialog = document.getElementById('confirm-dialog');
+    const obs = new MutationObserver(() => {
+      if (!dialog.classList.contains('visible')) {
+        const newOk = document.getElementById('confirm-ok');
+        if (newOk) newOk.style.display = '';
+        obs.disconnect();
+      }
+    });
+    obs.observe(dialog, { attributes: true, attributeFilter: ['class'] });
+  }
+};
 
 // Tutorial system
 window.initTutorial = Tutorial.initTutorial;
@@ -456,6 +581,12 @@ window.renderStoriesPanel = Culture.renderStoriesPanel;
 window.getSacredSiteReasonStatus = Culture.getSacredSiteReasonStatus;
 window.checkDesecration = Culture.checkDesecration;
 window.processSacredPlaces = Culture.processSacredPlaces;
+window.processSocietyBuildings = Culture.processSocietyBuildings;
+window.confirmBuildMonument = Culture.confirmBuildMonument;
+window.hasSettlementMeetingHall = Culture.hasSettlementMeetingHall;
+window.getMonumentRestoreCost = Culture.getMonumentRestoreCost;
+window.activateStewardTend = Culture.activateStewardTend;
+window.deactivateStewardTend = Culture.deactivateStewardTend;
 window.confirmBuildSacredSite = Culture.confirmBuildSacredSite;
 window.isNameableTerrain = Culture.isNameableTerrain;
 window.getNamedLake = Culture.getNamedLake;

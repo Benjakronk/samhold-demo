@@ -52,6 +52,12 @@ export function initGameCore(seed) {
   window.resizeCanvas();
   gameState.map = window.generateMap(MAP_COLS, MAP_ROWS, seed);
 
+  // Initialize visibility map — 0=unexplored, 1=revealed, 2=visible
+  gameState.visibilityMap = [];
+  for (let r = 0; r < MAP_ROWS; r++) {
+    gameState.visibilityMap[r] = new Array(MAP_COLS).fill(0);
+  }
+
   // Find grassland start near center
   let sc = Math.floor(MAP_COLS / 2), sr = Math.floor(MAP_ROWS / 2);
   outer: for (let r = 0; r < 4; r++)
@@ -111,13 +117,21 @@ export function initGameCore(seed) {
 
   // Fog of war setup
   const fogDisabled = window.isFogOfWarDisabled ? window.isFogOfWarDisabled() : false;
-  if (!fogDisabled) {
+  if (fogDisabled) {
+    // All hexes fully visible when fog disabled
+    for (let r = 0; r < MAP_ROWS; r++) {
+      for (let c = 0; c < MAP_COLS; c++) {
+        gameState.visibilityMap[r][c] = 2;
+      }
+    }
+  } else {
     window.revealArea(sc, sr, 3);
     // Reveal territory hexes and one hex beyond territory boundary
     for (let r = 0; r < MAP_ROWS; r++) {
       for (let c = 0; c < MAP_COLS; c++) {
         if (window.isInTerritory(c, r)) {
           gameState.map[r][c].revealed = true;
+          if (gameState.visibilityMap[r]) gameState.visibilityMap[r][c] = Math.max(gameState.visibilityMap[r][c], 2);
           for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
               const nr = r + dr;
@@ -125,6 +139,7 @@ export function initGameCore(seed) {
               if (nr >= 0 && nr < MAP_ROWS && nc >= 0 && nc < MAP_COLS) {
                 if (window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nc, nr)) <= 1) {
                   gameState.map[nr][nc].revealed = true;
+                  if (gameState.visibilityMap[nr]) gameState.visibilityMap[nr][nc] = Math.max(gameState.visibilityMap[nr][nc], 1);
                 }
               }
             }
@@ -245,6 +260,14 @@ export function initGameCore(seed) {
     window.initValues(gameState);
     console.log('🧭 Values system initialized');
   }
+
+  if (window.initFortifications) {
+    window.initFortifications(gameState);
+    console.log('🛡️ Fortifications system initialized');
+  }
+
+  // Compute initial visibility from settlement + territory
+  if (window.recomputeVisibility) window.recomputeVisibility();
 
   window.updateTurnDisplay();
   window.updateAllUI();

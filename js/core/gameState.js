@@ -63,7 +63,8 @@ export function createGameState() {
       storyProgress: 0,      // fractional accumulator — reaches 1.0 when a new story is ready
       turnsWithoutStoryteller: 0, // consecutive turns with 0 storytellers (triggers story loss after 4)
       stories: [],           // [{ id, title, description, identityBonus, turn, year, season }]
-      sacredSiteBondsAccumulator: 0, // fractional accumulator for bonds from tended sacred sites
+      sacredSiteBondsAccumulator: 0, // legacy — migrated into societyBuildingAccumulators
+      societyBuildingAccumulators: { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 },
       sacredSiteBuilt: {     // tracks which sacred site reasons have been built (one per reason)
         founding_site: false,
         burial_ground: false,
@@ -88,6 +89,8 @@ export function createGameState() {
     units: [], // array of unit objects
     unitsInTraining: [], // array of units being trained: {type, col, row, trainingProgress, trainingNeeded}
     externalThreats: [], // array of threat objects approaching the settlement
+    fortifications: {}, // edge key -> { type, health, buildProgress, buildTurns }
+    visibilityMap: [], // 2D array: 0=unexplored, 1=revealed, 2=visible
     nextUnitId: 1 // for unique unit IDs
   };
 }

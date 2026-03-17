@@ -1217,41 +1217,334 @@ export function checkDesecration(col, row, report) {
 }
 
 // Per-turn Bonds from worked sacred sites + material upkeep
+// Legacy wrapper — kept for backward compatibility
 export function processSacredPlaces(report) {
-  const bDef = window.BUILDINGS?.sacred_site;
-  if (!bDef) return;
+  processSocietyBuildings(report);
+}
 
-  let bondsAccumulated = 0;
+/**
+ * Unified processor for all society buildings (sacred site, shrine, monument, meeting hall).
+ * Data-driven: any building with isSocietyBuilding and *Yield fields is handled automatically.
+ */
+export function processSocietyBuildings(report) {
+  // Ensure accumulators exist (migration safety)
+  if (!gameState.culture.societyBuildingAccumulators) {
+    gameState.culture.societyBuildingAccumulators = { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 };
+  }
+  // Migrate legacy accumulator
+  if (gameState.culture.sacredSiteBondsAccumulator > 0) {
+    gameState.culture.societyBuildingAccumulators.bonds += gameState.culture.sacredSiteBondsAccumulator;
+    gameState.culture.sacredSiteBondsAccumulator = 0;
+  }
+
+  const accum = gameState.culture.societyBuildingAccumulators;
   let sitesUnfunded = 0;
+  const isTheocracy = gameState.governance?.model === 'theocracy';
+  const yieldKeys = ['identityYield', 'legitimacyYield', 'satisfactionYield', 'bondsYield'];
+  const pillarMap = { identityYield: 'identity', legitimacyYield: 'legitimacy', satisfactionYield: 'satisfaction', bondsYield: 'bonds' };
+
+  // Build a lookup of steward positions and active actions for fast reference
+  const stewardTending = {}; // "col,row" -> actionType
+  for (const unit of gameState.units) {
+    if (unit.type === 'steward' && unit.activeAction) {
+      stewardTending[`${unit.col},${unit.row}`] = unit.activeAction;
+    }
+  }
 
   for (let r = 0; r < window.MAP_ROWS; r++) {
     for (let c = 0; c < window.MAP_COLS; c++) {
       const hex = gameState.map[r][c];
-      if (hex.building !== 'sacred_site' || hex.buildProgress > 0 || hex.workers === 0) continue;
+      if (!hex.building || hex.buildProgress > 0) continue;
+      const bDef = window.BUILDINGS[hex.building];
+      if (!bDef?.isSocietyBuilding) continue;
 
-      const upkeep = bDef.upkeepMaterials * hex.workers;
-      if (gameState.resources.materials >= upkeep) {
-        gameState.resources.materials -= upkeep;
-        bondsAccumulated += bDef.bondsYield * hex.workers;
-      } else {
-        sitesUnfunded++;
+      const hexKey = `${c},${r}`;
+      const stewardAction = stewardTending[hexKey];
+
+      // ---- MONUMENT: worker-free, lifecycle-based ----
+      if (hex.building === 'monument') {
+        const NEGLECT_INTERVAL = 8; // turns before neglect without a steward
+        const stewardPresent = stewardAction === 'tending_monument';
+
+        // Pay flat per-turn upkeep regardless of state
+        const upkeep = bDef.upkeepMaterials || 0;
+        let canAffordUpkeep = true;
+        if (upkeep > 0) {
+          if (gameState.resources.materials >= upkeep) {
+            gameState.resources.materials -= upkeep;
+          } else {
+            canAffordUpkeep = false;
+            sitesUnfunded++;
+            if (report) report.events.push(`⚠️ Not enough materials for monument upkeep (need 🪵${upkeep}).`);
+          }
+        }
+
+        if (stewardPresent) {
+          hex.lastStewardTurn = gameState.turn;
+          hex.monumentState = 'active';
+          hex.neglectTurns = 0;
+        } else {
+          // No steward — check if maintenance interval has passed
+          const turnsSinceAttention = gameState.turn - (hex.lastStewardTurn ?? hex.completedTurn ?? 0);
+          if (hex.monumentState !== 'neglected' && turnsSinceAttention > NEGLECT_INTERVAL) {
+            hex.monumentState = 'neglected';
+            hex.neglectTurns = 0;
+            if (report) report.events.push(`🗿 A monument is falling into neglect. Send a Steward to restore it.`);
+          }
+        }
+
+        // Apply yields based on current state
+        if (hex.monumentState === 'neglected') {
+          hex.neglectTurns = (hex.neglectTurns || 0) + 1;
+          // Neglected + can't afford upkeep = double drain
+          const drain = canAffordUpkeep ? 0.05 : 0.10;
+          accum.identity -= drain;
+          accum.bonds    -= drain;
+          if (hex.neglectTurns % 4 === 0 && report) {
+            const restoreCost = getMonumentRestoreCost(hex);
+            const doubleNote = !canAffordUpkeep ? ' Unpaid upkeep compounds the decay.' : '';
+            report.events.push(`⚠️ Monument neglected for ${hex.neglectTurns} turns — morale suffers.${doubleNote} Restoration now costs 🪵${restoreCost}.`);
+            gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy - 1);
+          }
+        } else if (canAffordUpkeep) {
+          accum.identity += 0.05;
+          accum.bonds    += 0.05;
+        }
+        continue; // monuments handled — don't fall through to worker logic below
+      }
+
+      // ---- WORKER-STAFFED SOCIETY BUILDINGS (shrine, meeting_hall, sacred_site) ----
+      if (hex.workers === 0) continue;
+
+      // Sacred site: steward tending waives material upkeep
+      const isSacredSite = hex.building === 'sacred_site';
+      const stewardWaivingUpkeep = isSacredSite && stewardAction === 'tending_sacred_site';
+
+      // Check upkeep affordability
+      const upkeep = (bDef.upkeepMaterials || 0) * hex.workers;
+      if (upkeep > 0 && !stewardWaivingUpkeep) {
+        if (gameState.resources.materials >= upkeep) {
+          gameState.resources.materials -= upkeep;
+        } else {
+          sitesUnfunded++;
+          continue;
+        }
+      }
+
+      // Accumulate all *Yield fields
+      for (const yKey of yieldKeys) {
+        if (bDef[yKey]) {
+          let amount = bDef[yKey] * hex.workers;
+          if (yKey === 'identityYield' && hex.building === 'shrine' && isTheocracy) {
+            amount *= 1.5;
+          }
+          accum[pillarMap[yKey]] += amount;
+        }
       }
     }
   }
 
-  if (bondsAccumulated > 0) {
-    gameState.culture.sacredSiteBondsAccumulator = (gameState.culture.sacredSiteBondsAccumulator || 0) + bondsAccumulated;
-    const gained = Math.floor(gameState.culture.sacredSiteBondsAccumulator);
-    if (gained >= 1) {
-      gameState.culture.sacredSiteBondsAccumulator -= gained;
-      gameState.cohesion.bonds = Math.min(100, gameState.cohesion.bonds + gained);
-      if (report) report.events.push(`⛩️ Sacred sites tended. Bonds +${gained}.`);
+  // Clamp accumulators to prevent runaway negatives from going below -1
+  for (const pillar of Object.keys(accum)) {
+    if (accum[pillar] < -1) accum[pillar] = -1;
+  }
+
+  // Apply integer portions of each accumulator to cohesion pillars
+  const pillarNames = { identity: 'Identity', legitimacy: 'Legitimacy', satisfaction: 'Satisfaction', bonds: 'Bonds' };
+  const pillarIcons = { identity: '🕯️', legitimacy: '🏛️', satisfaction: '😊', bonds: '💗' };
+  const gains = {};
+  const losses = {};
+
+  for (const pillar of Object.keys(pillarNames)) {
+    if (accum[pillar] >= 1) {
+      const gained = Math.floor(accum[pillar]);
+      accum[pillar] -= gained;
+      gameState.cohesion[pillar] = Math.min(100, gameState.cohesion[pillar] + gained);
+      gains[pillar] = gained;
+    } else if (accum[pillar] <= -1) {
+      const lost = Math.floor(Math.abs(accum[pillar]));
+      accum[pillar] += lost;
+      gameState.cohesion[pillar] = Math.max(0, gameState.cohesion[pillar] - lost);
+      losses[pillar] = lost;
     }
   }
 
-  if (sitesUnfunded > 0 && report) {
-    report.events.push(`⚠️ ${sitesUnfunded} sacred site${sitesUnfunded > 1 ? 's' : ''} — not enough materials for upkeep. No Bonds gained.`);
+  if (Object.keys(gains).length > 0 && report) {
+    const parts = Object.entries(gains).map(([p, v]) => `${pillarNames[p]} +${v}`);
+    report.events.push(`${pillarIcons[Object.keys(gains)[0]]} Society buildings tended. ${parts.join(', ')}.`);
   }
+  if (Object.keys(losses).length > 0 && report) {
+    const parts = Object.entries(losses).map(([p, v]) => `${pillarNames[p]} −${v}`);
+    report.events.push(`🗿 Neglected monuments drag on cohesion. ${parts.join(', ')}.`);
+  }
+
+  if (sitesUnfunded > 0 && report) {
+    report.events.push(`⚠️ ${sitesUnfunded} society building${sitesUnfunded > 1 ? 's' : ''} — not enough materials for upkeep.`);
+  }
+}
+
+/**
+ * Calculate the material cost to restore a neglected monument.
+ */
+export function getMonumentRestoreCost(hex) {
+  return 5 + 2 * (hex.neglectTurns || 0);
+}
+
+/**
+ * Activate a Steward's tending action on its current hex.
+ * Handles restoration payment for neglected monuments.
+ */
+export function activateStewardTend(unitId) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (!unit || unit.type !== 'steward') return;
+
+  const hex = gameState.map[unit.row]?.[unit.col];
+  if (!hex) return;
+
+  const bDef = window.BUILDINGS[hex.building];
+
+  if (hex.building === 'monument' && hex.buildProgress <= 0) {
+    // For neglected monuments: pay restoration cost first
+    if (hex.monumentState === 'neglected') {
+      const cost = getMonumentRestoreCost(hex);
+      if (gameState.resources.materials < cost) {
+        window.showAlert('Cannot Restore', `<p>Restoring this monument requires 🪵${cost} materials. You have ${gameState.resources.materials}.</p>`);
+        return;
+      }
+      gameState.resources.materials -= cost;
+      hex.monumentState = 'active';
+      hex.neglectTurns = 0;
+      hex.lastStewardTurn = gameState.turn;
+      if (window.addChronicleEntry) window.addChronicleEntry('A Steward restored a neglected monument to its former glory.', 'cultural');
+    }
+    unit.activeAction = 'tending_monument';
+    hex.lastStewardTurn = gameState.turn;
+    if (window.updateAllUI) window.updateAllUI();
+    if (window.updateSidePanel && gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+    if (window.render) window.render();
+
+  } else if (hex.building === 'sacred_site' && hex.buildProgress <= 0) {
+    unit.activeAction = 'tending_sacred_site';
+    if (window.updateAllUI) window.updateAllUI();
+    if (window.updateSidePanel && gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+    if (window.render) window.render();
+
+  } else {
+    return; // nothing to tend here
+  }
+}
+
+/**
+ * Deactivate a Steward's current tending action.
+ */
+export function deactivateStewardTend(unitId) {
+  const unit = gameState.units.find(u => u.id === unitId);
+  if (!unit) return;
+  unit.activeAction = null;
+  if (window.updateAllUI) window.updateAllUI();
+  if (window.updateSidePanel && gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+  if (window.render) window.render();
+}
+
+/**
+ * Check if a settlement's territory already has a meeting hall.
+ */
+export function hasSettlementMeetingHall(col, row) {
+  // Find the nearest settlement to this hex
+  let nearestSettlement = null;
+  let nearestDist = Infinity;
+  for (const s of gameState.settlements) {
+    const d = window.cubeDistance(window.offsetToCube(col, row), window.offsetToCube(s.col, s.row));
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestSettlement = s;
+    }
+  }
+  if (!nearestSettlement) return false;
+
+  // Check all hexes in that settlement's territory radius for a meeting hall
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.building !== 'meeting_hall') continue;
+      // Check if this meeting hall is in the same settlement's territory
+      const d = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nearestSettlement.col, nearestSettlement.row));
+      if (d <= window.TERRITORY_RADIUS) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Monument commemoration dialog — lets the player choose what to commemorate.
+ */
+export function confirmBuildMonument(col, row) {
+  const hex = gameState.map[row]?.[col];
+  if (!hex || hex.building) return;
+
+  const bDef = window.BUILDINGS.monument;
+  const canAfford = gameState.resources.materials >= bDef.cost.materials;
+  if (!canAfford) return;
+
+  // Preset commemoration categories
+  const categories = [
+    { value: 'founding', label: '🏛️ Our Founding' },
+    { value: 'ancestors', label: '👴 Our Ancestors' },
+    { value: 'survival', label: '🔥 Survival & Resilience' },
+    { value: 'unity', label: '🤝 Community Unity' },
+    { value: 'nature', label: '🌿 The Natural World' },
+    { value: 'victory', label: '⚔️ A Great Victory' },
+  ];
+
+  // Add recent Chronicle entries as options
+  const recentEntries = (gameState.chronicle || []).slice(-10).reverse();
+  const chronicleOptions = recentEntries.map((entry, i) => {
+    const label = entry.text.length > 40 ? entry.text.substring(0, 40) + '…' : entry.text;
+    return `<option value="chronicle_${i}">📜 ${label}</option>`;
+  });
+
+  const categoryOptions = categories.map(c => `<option value="${c.value}">${c.label}</option>`);
+
+  const body = `<p>Build a <strong>Monument</strong> at (${col},${row})?</p>
+    <p><strong>Cost:</strong> 🪵${bDef.cost.materials} materials · <strong>Time:</strong> ${bDef.buildTurns} turns (needs ${bDef.buildWorkers || 2} builders)</p>
+    <p><strong>Effect:</strong> Identity +${bDef.permanentIdentityBonus} on completion (permanent, no workers needed)</p>
+    <p style="margin-top:8px"><strong>Commemorate:</strong></p>
+    <select id="monument-subject" style="width:100%;padding:6px;margin-top:4px;background:var(--panel-bg);color:var(--text-light);border:1px solid var(--border-color);border-radius:4px">
+      ${categoryOptions.join('')}
+      ${chronicleOptions.length > 0 ? '<option disabled>── Recent Events ──</option>' + chronicleOptions.join('') : ''}
+    </select>`;
+
+  window.showConfirmDialogNonDestructive(
+    'Build Monument',
+    body,
+    'Build',
+    'Cancel',
+    () => {
+      const selectEl = document.getElementById('monument-subject');
+      const subject = selectEl ? selectEl.value : 'founding';
+
+      // Resolve subject label for display
+      let subjectLabel;
+      if (subject.startsWith('chronicle_')) {
+        const idx = parseInt(subject.replace('chronicle_', ''));
+        subjectLabel = recentEntries[idx]?.text || 'A historic event';
+      } else {
+        subjectLabel = categories.find(c => c.value === subject)?.label || subject;
+      }
+
+      window.placeBuilding(col, row, 'monument');
+      hex.monumentSubject = subjectLabel;
+
+      if (window.addChronicleEntry) {
+        window.addChronicleEntry(`Construction began on a monument commemorating ${subjectLabel}.`, 'cultural');
+      }
+
+      if (window.updateAllUI) window.updateAllUI();
+      if (window.renderWorkersTab) window.renderWorkersTab();
+      if (window.render) window.render();
+      if (gameState.selectedHex) window.updateSidePanel(gameState.selectedHex);
+    }
+  );
 }
 
 export function confirmBuildSacredSite(col, row) {

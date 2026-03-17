@@ -53,6 +53,7 @@
   .training-content.collapsed { display: none; }
   .build-content.collapsed { display: none; }
   .culture-content.collapsed { display: none; }
+  .fort-content.collapsed { display: none; }
   .panel-section h3 { cursor: default; }
   .section-toggle-hint {
     font-size: 10px; color: var(--text-dim); font-weight: 400;
@@ -598,6 +599,8 @@
   /* Build buttons */
   .build-section { margin-top: 12px; }
   .build-section h4 { font-family: 'Almendra', serif; font-size: 14px; color: var(--text-gold); margin-bottom: 8px; }
+  .fort-edge-controls { margin-top: 2px; }
+  .fort-edge-label { font-size: 12px; font-weight: 600; color: var(--text-light); }
   /* Sacred place & naming sidebar elements */
   .culture-section { border-bottom: 1px solid var(--border-gold-dim); padding-bottom: 10px; }
   .sacred-place-display {
@@ -756,12 +759,23 @@
     font-style: italic; text-align: center;
   }
   .unit-controls {
-    display: flex; gap: 6px; margin-top: 8px; align-items: center;
+    display: flex; flex-direction: column; gap: 5px; margin-top: 8px;
   }
-  .unit-controls button {
+  .unit-controls-primary {
+    display: flex; gap: 6px;
+  }
+  .unit-controls-primary button {
     flex: 1; padding: 4px 8px !important; font-size: 11px; border-radius: 3px; height: 28px;
     display: flex; align-items: center; justify-content: center;
-    box-sizing: border-box; vertical-align: top; line-height: 1;
+    box-sizing: border-box; line-height: 1;
+  }
+  .unit-controls-actions {
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .unit-controls-actions button {
+    width: 100%; padding: 5px 10px !important; font-size: 11px; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    box-sizing: border-box; line-height: 1.3; white-space: normal; min-height: 28px;
   }
   .unit-controls .detail-btn,
   .unit-controls .demolish-btn {

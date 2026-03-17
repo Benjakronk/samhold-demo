@@ -9,6 +9,110 @@ import { THREAT_TYPES } from '../../data/threats.js';
 import { cubeDistance, offsetToCube } from '../../utils/hexMath.js';
 
 let gameState = null;
+let _selectedFortEdge = null; // { col, row, edge } — persists across same-hex re-renders
+let _fortPanelHex = null;     // tracks which hex the fort panel is showing
+
+// ---- FORTIFICATION HEX DIAGRAM HELPERS ----
+
+function _fortHexSVG(col, row, hexForts, selEdge) {
+    const r = 36, cx = 44, cy = 44, W = 88, H = 88;
+    const verts = Array.from({ length: 6 }, (_, v) => {
+        const a = (60 * v - 30) * Math.PI / 180;
+        return { x: (cx + r * Math.cos(a)).toFixed(2), y: (cy + r * Math.sin(a)).toFixed(2) };
+    });
+    const pts = verts.map(v => `${v.x},${v.y}`).join(' ');
+    const FORTS = window.FORTIFICATIONS;
+    const fortByEdge = {};
+    for (const { edge, fort } of hexForts) fortByEdge[edge] = fort;
+
+    let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin:0 auto 6px">`;
+    svg += `<polygon points="${pts}" fill="rgba(40,32,24,0.75)" stroke="rgba(180,150,80,0.2)" stroke-width="1"/>`;
+
+    for (let e = 0; e < 6; e++) {
+        const v0 = verts[e], v1 = verts[(e + 1) % 6];
+        const fort = fortByEdge[e];
+        const def = fort ? FORTS?.[fort.type] : null;
+        const isSel = selEdge && selEdge.col === col && selEdge.row === row && selEdge.edge === e;
+        const color = isSel ? '#ffe080' : (def ? def.color : 'rgba(180,150,80,0.25)');
+        const sw = isSel ? 6 : (fort ? 4 : 2);
+        const dash = fort?.buildProgress > 0 ? '4,3' : 'none';
+        const opacity = fort?.buildProgress > 0 ? 0.6 : 1.0;
+        // Visual line
+        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${dash}" opacity="${opacity}" pointer-events="none"/>`;
+        // Hit area (on top)
+        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="transparent" stroke-width="14" style="cursor:pointer" onclick="window.selectFortEdge(${col},${row},${e})"/>`;
+    }
+    svg += `</svg>`;
+    return svg;
+}
+
+function _fortEdgeControls(hex, hexForts, selEdge) {
+    const FORTS = window.FORTIFICATIONS;
+    const edgeNames = ['East', 'SE', 'SW', 'West', 'NW', 'NE'];
+
+    if (!selEdge || selEdge.col !== hex.col || selEdge.row !== hex.row) {
+        return `<p style="text-align:center;font-size:11px;color:var(--text-dim);margin:2px 0 4px">Click an edge to place or manage fortifications</p>`;
+    }
+
+    const edge = selEdge.edge;
+    const fortEntry = hexForts.find(f => f.edge === edge);
+    const fort = fortEntry?.fort;
+    const def = fort ? FORTS?.[fort.type] : null;
+
+    if (!fort) {
+        const mats = gameState.resources.materials;
+        const canPal = mats >= (FORTS?.palisade?.cost?.materials ?? 4);
+        const canGate = mats >= (FORTS?.gate?.cost?.materials ?? 8);
+        return `<div class="fort-edge-controls">
+            <div class="fort-edge-label">${edgeNames[edge]} — unfortified</div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+                <button class="detail-btn" ${canPal ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'palisade')">🪵 Palisade <span style="color:var(--text-dim)">(🪵${FORTS?.palisade?.cost?.materials ?? 4})</span></button>
+                <button class="detail-btn" ${canGate ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'gate')">🚪 Gate <span style="color:var(--text-dim)">(🪵${FORTS?.gate?.cost?.materials ?? 8})</span></button>
+            </div>
+        </div>`;
+    }
+
+    if (fort.buildProgress > 0) {
+        const maxW = def?.buildWorkers ?? 1;
+        const wc = fort.workers ?? 0;
+        const canAdd = wc < maxW && gameState.population.idle > 0;
+        const statusStr = wc > 0
+            ? `<span class="yield-val" style="color:var(--text-gold)">Building... (${fort.buildProgress} turn${fort.buildProgress !== 1 ? 's' : ''} left)</span>`
+            : `<span class="yield-none">stalled — assign a builder!</span>`;
+        return `<div class="fort-edge-controls">
+            <div class="fort-edge-label">${def.icon} ${def.name} (${edgeNames[edge]})</div>
+            <div class="worker-section" style="margin-top:4px">
+                <div class="worker-controls">
+                    <span class="worker-label">🔨 Builders</span>
+                    <div class="worker-btns">
+                        <button class="worker-btn" ${wc > 0 ? '' : 'disabled'} onclick="window.unassignFortWorker(${hex.col},${hex.row},${edge})">−</button>
+                        <span class="worker-count">${wc} / ${maxW}</span>
+                        <button class="worker-btn" ${canAdd ? '' : 'disabled'} onclick="window.assignFortWorker(${hex.col},${hex.row},${edge})">+</button>
+                    </div>
+                </div>
+                <div class="yield-row"><span class="yield-label">Progress:</span>${statusStr}</div>
+            </div>
+            <button class="demolish-btn" style="margin-top:6px;width:100%" onclick="window.confirmDemolishFortification(${hex.col},${hex.row},${edge})">✕ Cancel Build</button>
+        </div>`;
+    }
+
+    // Completed fort
+    const canUpgrade = fort.type === 'palisade';
+    const canAffordUpgrade = canUpgrade && gameState.resources.materials >= (FORTS?.wall?.upgradeCost?.materials ?? 6);
+    return `<div class="fort-edge-controls">
+        <div class="fort-edge-label">${def.icon} ${def.name} (${edgeNames[edge]}) — ${fort.health}/${fort.maxHealth} HP</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+            ${canUpgrade ? `<button class="detail-btn" ${canAffordUpgrade ? '' : 'disabled'} onclick="window.confirmUpgradeFortification(${hex.col},${hex.row},${edge})">🧱 Upgrade to Wall <span style="color:var(--text-dim)">(🪵${FORTS?.wall?.upgradeCost?.materials ?? 6})</span></button>` : ''}
+            <button class="demolish-btn" onclick="window.confirmDemolishFortification(${hex.col},${hex.row},${edge})">✕ Demolish</button>
+        </div>
+    </div>`;
+}
+
+export function selectFortEdge(col, row, edge) {
+    _selectedFortEdge = { col, row, edge };
+    const hex = gameState?.map[row]?.[col];
+    if (hex) updateSidePanel(hex);
+}
 
 export function initSidePanel(gameStateRef) {
     gameState = gameStateRef;
@@ -24,6 +128,12 @@ export function initSidePanel(gameStateRef) {
 }
 
 export function updateSidePanel(hex) {
+    // Reset fort edge selection when switching to a different hex
+    if (!_fortPanelHex || _fortPanelHex.col !== hex.col || _fortPanelHex.row !== hex.row) {
+        _selectedFortEdge = null;
+    }
+    _fortPanelHex = hex;
+
     const t = TERRAIN[hex.terrain];
     const riverLabel = hexHasRiver(hex) ? ' 🏞️' : '';
     document.querySelector('#hex-info-section h3').innerHTML = `${t.icon} ${t.name} (${hex.col},${hex.row})${riverLabel} <span class="section-toggle-hint">click to toggle</span>`;
@@ -66,6 +176,12 @@ export function updateSidePanel(hex) {
                 <div class="bd-name">${bDef.icon} ${bDef.name}</div>`;
             if (hex.building === 'settlement') {
                 html += `<div class="bd-detail">🌾+${bDef.autoFood || 0} food (community foraging)</div>`;
+            } else if (bDef.isSocietyBuilding && bDef.maxWorkers === 0 && bDef.permanentIdentityBonus) {
+                // Monument — permanent passive effect, no workers
+                const subject = hex.monumentSubject || '';
+                const refund = Math.floor((bDef.cost.materials || 0) / 2);
+                html += `<div class="bd-detail">🗿 Permanent Identity +${bDef.permanentIdentityBonus}${subject ? '<br><em>Commemorating: ' + subject + '</em>' : ''}</div>
+                <button class="demolish-btn" onclick="demolishBuilding(${hex.col},${hex.row})">✕ Demolish (🪵+${refund})</button>`;
             } else {
                 const refund = Math.floor((bDef.cost.materials || 0) / 2);
                 html += `<div class="bd-detail">Bonus: ${bDef.foodBonus ? '🌾+' + bDef.foodBonus : ''}${bDef.foodBonus && bDef.materialBonus ? ' ' : ''}${bDef.materialBonus ? '🪵+' + bDef.materialBonus : ''} (at full workers)</div>
@@ -73,6 +189,17 @@ export function updateSidePanel(hex) {
             }
             html += `</div>`;
         }
+    }
+
+    // Show fortifications on this hex's edges
+    if (inTerr && window.getHexFortifications) {
+        const hexForts = window.getHexFortifications(hex.col, hex.row);
+        const fortInner = _fortHexSVG(hex.col, hex.row, hexForts, _selectedFortEdge)
+                        + _fortEdgeControls(hex, hexForts, _selectedFortEdge);
+        html += `<div class="fortifications-section build-section">
+            <h4 onclick="toggleFortificationsSection()" style="cursor:pointer;">Fortifications <span class="section-toggle-hint">click to toggle</span></h4>
+            <div class="fort-content collapsed" id="fort-content">${fortInner}</div>
+        </div>`;
     }
 
     // Show units on this hex
@@ -94,12 +221,40 @@ export function updateSidePanel(hex) {
               actionButtons += `<button class="detail-btn unit-control-btn" onclick="showRegionFoundingConfirmation(${unit.col},${unit.row},${unit.id})">🗺️ Found Region</button>`;
             }
 
+            // Steward: Tend actions based on what's on this hex
+            if (unit.type === 'steward') {
+              const hexHere = gameState.map[unit.row]?.[unit.col];
+              const isActive = !!unit.activeAction;
+
+              if (isActive) {
+                const actionLabel = unit.activeAction === 'tending_monument' ? '🗿 Tending Monument' : '⛩️ Tending Site';
+                actionButtons += `<button class="detail-btn unit-control-btn" style="color:var(--accent-green);outline:1px solid var(--accent-green)"
+                  onclick="deactivateStewardTend(${unit.id})">${actionLabel} ✕ Stop</button>`;
+              } else {
+                if (hexHere?.building === 'monument' && hexHere.buildProgress <= 0) {
+                  const isNeglected = hexHere.monumentState === 'neglected';
+                  const restoreCost = window.getMonumentRestoreCost ? window.getMonumentRestoreCost(hexHere) : 5;
+                  const btnLabel = isNeglected ? `🗿 Restore Monument (🪵${restoreCost})` : '🗿 Tend Monument';
+                  actionButtons += `<button class="detail-btn unit-control-btn" onclick="activateStewardTend(${unit.id})">${btnLabel}</button>`;
+                }
+                if (hexHere?.building === 'sacred_site' && hexHere.buildProgress <= 0 && hexHere.workers > 0) {
+                  actionButtons += `<button class="detail-btn unit-control-btn" onclick="activateStewardTend(${unit.id})">⛩️ Tend Sacred Site</button>`;
+                }
+              }
+            }
+
             // Warrior: Attack action (when threat is adjacent)
             if (unit.type === 'warrior' && window.hasUnitActions && window.hasUnitActions(unit)) {
               const inActionMode = gameState.selectedUnit?.id === unit.id && gameState.unitInteractionMode === 'action';
               actionButtons += `<button class="detail-btn unit-control-btn" style="color:#cc6666${inActionMode ? ';outline:1px solid #cc6666' : ''}"
                 onclick="activateActionMode(${unit.id})">⚔️ Attack</button>`;
             }
+
+            const primaryBtn = isSelected && gameState.unitInteractionMode === 'action'
+                ? `<button class="detail-btn" onclick="setUnitMode(null); updateSidePanel(gameState.selectedHex); if (window.render) window.render();">✕ Cancel</button>`
+                : isSelected
+                    ? `<button class="detail-btn" onclick="deselectUnit(); updateSidePanel(gameState.selectedHex); if (window.render) window.render();">✕ Cancel</button>`
+                    : `<button class="detail-btn" onclick="selectUnitForMovement(${unit.id}); updateSidePanel(gameState.selectedHex);">🚶 Move</button>`;
 
             html += `
                 <div class="unit-display">
@@ -110,14 +265,11 @@ export function updateSidePanel(hex) {
                     </div>
                     <div class="unit-details">${unitType.description}${movementInfo}</div>
                     <div class="unit-controls">
-                        ${isSelected && gameState.unitInteractionMode === 'action'
-                            ? `<button class="detail-btn unit-control-btn" onclick="setUnitMode(null); updateSidePanel(gameState.selectedHex); if (window.render) window.render();">✕ Cancel</button>`
-                            : isSelected
-                                ? `<button class="detail-btn unit-control-btn" onclick="deselectUnit(); updateSidePanel(gameState.selectedHex); if (window.render) window.render();">✕ Cancel</button>`
-                                : `<button class="detail-btn unit-control-btn" onclick="selectUnitForMovement(${unit.id}); updateSidePanel(gameState.selectedHex);">🚶 Move</button>`
-                        }
-                        ${actionButtons}
-                        <button class="demolish-btn unit-control-btn" onclick="confirmDisbandUnit(${unit.id}); updateSidePanel(gameState.selectedHex);">✕ Disband</button>
+                        <div class="unit-controls-primary">
+                            ${primaryBtn}
+                            <button class="demolish-btn" onclick="confirmDisbandUnit(${unit.id}); updateSidePanel(gameState.selectedHex);">✕ Disband</button>
+                        </div>
+                        ${actionButtons ? `<div class="unit-controls-actions">${actionButtons}</div>` : ''}
                     </div>
                     ${isSelected ? `<div class="unit-mode-indicator">${gameState.unitInteractionMode === 'action' ? '⚔️ Action mode — click a target' : '🚶 Move mode — click a hex'}</div>` : ''}
                 </div>`;
@@ -188,11 +340,22 @@ export function updateSidePanel(hex) {
             statusStr = hex.workers > 0
                 ? `<span class="yield-val" style="color:var(--text-gold)">Building... (🍖×2 rations)</span>`
                 : `<span class="yield-none">${emptyMsg}</span>`;
-        } else if (hex.building === 'sacred_site') {
-            const bDef = BUILDINGS.sacred_site;
-            statusStr = hex.workers > 0
-                ? `<span class="yield-val">💗+${bDef.bondsYield * hex.workers} Bonds/turn · 🪵−${bDef.upkeepMaterials * hex.workers}/turn</span>`
-                : `<span class="yield-none">${emptyMsg}</span>`;
+        } else if (hex.building && BUILDINGS[hex.building]?.isSocietyBuilding) {
+            const bDef = BUILDINGS[hex.building];
+            if (hex.workers > 0) {
+                const yieldParts = [];
+                if (bDef.bondsYield) yieldParts.push(`💗+${(bDef.bondsYield * hex.workers).toFixed(2)} Bonds`);
+                if (bDef.identityYield) yieldParts.push(`🪶+${(bDef.identityYield * hex.workers).toFixed(2)} Identity`);
+                if (bDef.satisfactionYield) yieldParts.push(`😊+${(bDef.satisfactionYield * hex.workers).toFixed(2)} Satisfaction`);
+                if (bDef.legitimacyYield) yieldParts.push(`🏛️+${(bDef.legitimacyYield * hex.workers).toFixed(2)} Legitimacy`);
+                const upkeepStr = bDef.upkeepMaterials ? ` · 🪵−${bDef.upkeepMaterials * hex.workers}/turn` : '';
+                statusStr = `<span class="yield-val">${yieldParts.join(' · ')}/turn${upkeepStr}</span>`;
+            } else if (bDef.maxWorkers === 0 && bDef.permanentIdentityBonus) {
+                const subject = hex.monumentSubject || '';
+                statusStr = `<span class="yield-val">🗿 Permanent Identity +${bDef.permanentIdentityBonus}${subject ? ' — ' + subject : ''}</span>`;
+            } else {
+                statusStr = `<span class="yield-none">${emptyMsg}</span>`;
+            }
         } else {
             statusStr = (y.food || y.materials)
                 ? `<span class="yield-val">${y.food ? '🌾' + y.food : ''}${y.food && y.materials ? ' ' : ''}${y.materials ? '🪵' + y.materials : ''}</span>`
@@ -228,6 +391,8 @@ export function updateSidePanel(hex) {
         for (const [key, bDef] of Object.entries(BUILDINGS)) {
             if (bDef.onlyStart) continue;
             if (key === 'sacred_site') continue; // handled separately below
+            if (key === 'monument') continue;    // handled separately below
+            if (key === 'meeting_hall') continue; // handled separately below
             const terrainValid = bDef.validTerrain.includes(hex.terrain);
             const riverValid = bDef.validOnRiver && hexHasRiver(hex);
             const waterAdjValid = bDef.requiresAdjacentWater && hexAdjacentToWater(hex) && bDef.validTerrain.includes(hex.terrain);
@@ -238,21 +403,39 @@ export function updateSidePanel(hex) {
             const canAfford = gameState.resources.materials >= bDef.cost.materials;
             const reason = canAfford ? '' : `Need ${bDef.cost.materials} materials`;
 
-            const freshWater = hexHasFreshWater(hex);
-            const riverBase = freshWater ? 1 : 0;
-            const riverBldg = freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0;
-            const terrFood = t.food + bDef.foodBonus + riverBase + riverBldg;
-            const terrMat = t.materials + bDef.materialBonus;
-            const riverTag = freshWater ? ' 💧' : '';
+            if (bDef.isSocietyBuilding) {
+                // Society buildings (shrine) — show cohesion yields
+                const yieldParts = [];
+                if (bDef.identityYield) yieldParts.push(`🪶+${(bDef.identityYield * bDef.maxWorkers).toFixed(2)} Identity`);
+                if (bDef.satisfactionYield) yieldParts.push(`😊+${(bDef.satisfactionYield * bDef.maxWorkers).toFixed(2)} Satisfaction`);
+                if (bDef.legitimacyYield) yieldParts.push(`🏛️+${(bDef.legitimacyYield * bDef.maxWorkers).toFixed(2)} Legitimacy`);
+                if (bDef.bondsYield) yieldParts.push(`💗+${(bDef.bondsYield * bDef.maxWorkers).toFixed(2)} Bonds`);
+                const upkeepStr = bDef.upkeepMaterials ? ` · 🪵−${bDef.upkeepMaterials * bDef.maxWorkers}/turn` : '';
+                buildHtml += `<button class="build-btn" ${canAfford ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'${key}')" title="${reason}">
+                    <span class="b-icon">${bDef.icon}</span>
+                    <span class="b-info">
+                        <span class="b-name">${bDef.name}</span><br>
+                        <span class="b-cost">🪵${bDef.cost.materials} · 🔨${bDef.buildTurns} work · 👥${bDef.maxWorkers}</span>
+                        <span class="b-yield"> → ${yieldParts.join(' · ')}${upkeepStr}</span>
+                    </span>
+                </button>`;
+            } else {
+                const freshWater = hexHasFreshWater(hex);
+                const riverBase = freshWater ? 1 : 0;
+                const riverBldg = freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0;
+                const terrFood = t.food + bDef.foodBonus + riverBase + riverBldg;
+                const terrMat = t.materials + bDef.materialBonus;
+                const riverTag = freshWater ? ' 💧' : '';
 
-            buildHtml += `<button class="build-btn" ${canAfford ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'${key}')" title="${reason}">
-                <span class="b-icon">${bDef.icon}</span>
-                <span class="b-info">
-                    <span class="b-name">${bDef.name}</span><br>
-                    <span class="b-cost">🪵${bDef.cost.materials} · 🔨${bDef.buildTurns} work · 👥${bDef.maxWorkers}</span>
-                    <span class="b-yield"> → ${terrFood ? '🌾' + terrFood : ''}${terrMat ? ' 🪵' + terrMat : ''}${riverTag}</span>
-                </span>
-            </button>`;
+                buildHtml += `<button class="build-btn" ${canAfford ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'${key}')" title="${reason}">
+                    <span class="b-icon">${bDef.icon}</span>
+                    <span class="b-info">
+                        <span class="b-name">${bDef.name}</span><br>
+                        <span class="b-cost">🪵${bDef.cost.materials} · 🔨${bDef.buildTurns} work · 👥${bDef.maxWorkers}</span>
+                        <span class="b-yield"> → ${terrFood ? '🌾' + terrFood : ''}${terrMat ? ' 🪵' + terrMat : ''}${bDef.visionRadius ? '👁️ Vision ' + bDef.visionRadius : ''}${riverTag}</span>
+                    </span>
+                </button>`;
+            }
         }
 
         // Sacred site — valid terrain check, custom dialog, bonds yield display
@@ -269,6 +452,42 @@ export function updateSidePanel(hex) {
                     <span class="b-name">${sacredBDef.name}</span><br>
                     <span class="b-cost">🪵${sacredBDef.cost.materials} · 🔨${sacredBDef.buildTurns} work · 👥${sacredBDef.maxWorkers}</span>
                     <span class="b-yield"> → 💗+${sacredBDef.bondsYield * sacredBDef.maxWorkers} Bonds/turn (slow) · 🪵−${sacredBDef.upkeepMaterials * sacredBDef.maxWorkers}/turn</span>
+                </span>
+            </button>`;
+        }
+
+        // Monument — custom dialog with commemoration choice
+        const monumentBDef = BUILDINGS.monument;
+        if (monumentBDef.validTerrain.includes(hex.terrain)) {
+            const canAffordMonument = gameState.resources.materials >= monumentBDef.cost.materials;
+            const monumentReason = !canAffordMonument ? `Need ${monumentBDef.cost.materials} materials` : '';
+            buildHtml += `<button class="build-btn" ${canAffordMonument ? '' : 'disabled'} onclick="confirmBuildMonument(${hex.col},${hex.row})" title="${monumentReason}">
+                <span class="b-icon">${monumentBDef.icon}</span>
+                <span class="b-info">
+                    <span class="b-name">${monumentBDef.name}</span><br>
+                    <span class="b-cost">🪵${monumentBDef.cost.materials} · 🔨${monumentBDef.buildTurns} work · needs ${monumentBDef.buildWorkers || 2} builders · 🪵${monumentBDef.upkeepMaterials}/turn upkeep</span>
+                    <span class="b-yield"> → 🪶 Identity +${monumentBDef.permanentIdentityBonus} (permanent, on completion)</span>
+                </span>
+            </button>`;
+        }
+
+        // Meeting Hall — 1 per settlement territory
+        const meetingHallBDef = BUILDINGS.meeting_hall;
+        if (meetingHallBDef.validTerrain.includes(hex.terrain)) {
+            const hasMH = window.hasSettlementMeetingHall ? window.hasSettlementMeetingHall(hex.col, hex.row) : false;
+            const canAffordMH = gameState.resources.materials >= meetingHallBDef.cost.materials;
+            const mhEnabled = canAffordMH && !hasMH;
+            const mhReason = hasMH ? 'Already have a Meeting Hall in this settlement' : !canAffordMH ? `Need ${meetingHallBDef.cost.materials} materials` : '';
+            const mhYieldParts = [];
+            if (meetingHallBDef.legitimacyYield) mhYieldParts.push(`🏛️+${(meetingHallBDef.legitimacyYield * meetingHallBDef.maxWorkers).toFixed(2)} Legitimacy`);
+            const mhUpkeep = meetingHallBDef.upkeepMaterials ? ` · 🪵−${meetingHallBDef.upkeepMaterials * meetingHallBDef.maxWorkers}/turn` : '';
+            buildHtml += `<button class="build-btn" ${mhEnabled ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'meeting_hall')" title="${mhReason}">
+                <span class="b-icon">${meetingHallBDef.icon}</span>
+                <span class="b-info">
+                    <span class="b-name">${meetingHallBDef.name}</span><br>
+                    <span class="b-cost">🪵${meetingHallBDef.cost.materials} · 🔨${meetingHallBDef.buildTurns} work · 👥${meetingHallBDef.maxWorkers}</span>
+                    <span class="b-yield"> → ${mhYieldParts.join(' · ')}${mhUpkeep}</span>
+                    ${hasMH ? '<span class="b-yield" style="color:var(--text-dim)"> (limit: 1 per settlement)</span>' : ''}
                 </span>
             </button>`;
         }
@@ -337,11 +556,46 @@ export function updateSidePanel(hex) {
         const reasonLabel = reasonLabels[hex.sacredReason] || '⛩️ Sacred Site';
         const bDef = window.BUILDINGS?.sacred_site;
         const isWorked = hex.workers > 0;
+        // Check if a Steward is tending this site
+        const stewardHere = gameState.units.find(u => u.type === 'steward' && u.col === hex.col && u.row === hex.row && u.activeAction === 'tending_sacred_site');
+        const tendingNote = stewardHere ? ' · 🧭 Steward tending (upkeep waived)' : '';
         cultureInner += `<div class="sacred-place-display">
           <span class="sacred-icon">⛩️</span>
           <span class="sacred-label">${reasonLabel}</span>
-          <span class="sacred-type">${isWorked ? `💗+${(bDef?.bondsYield ?? 0.1) * hex.workers}/turn · 🪵−${(bDef?.upkeepMaterials ?? 1) * hex.workers}/turn` : 'Unstaffed — assign keepers'}</span>
+          <span class="sacred-type">${isWorked ? `💗+${(bDef?.bondsYield ?? 0.1) * hex.workers}/turn · 🪵−${(bDef?.upkeepMaterials ?? 1) * hex.workers}/turn${tendingNote}` : 'Unstaffed — assign keepers'}</span>
         </div>`;
+      }
+
+      // Monument status display (when built and complete)
+      if (hex.building === 'monument' && hex.buildProgress <= 0) {
+        const NEGLECT_INTERVAL = 8;
+        const state = hex.monumentState || 'active';
+        const neglectTurns = hex.neglectTurns || 0;
+        const turnsSince = gameState.turn - (hex.lastStewardTurn ?? hex.completedTurn ?? gameState.turn);
+        const turnsUntilNeglect = Math.max(0, NEGLECT_INTERVAL - turnsSince);
+        const restoreCost = window.getMonumentRestoreCost ? window.getMonumentRestoreCost(hex) : (5 + 2 * neglectTurns);
+        const stewardHere = gameState.units.find(u => u.type === 'steward' && u.col === hex.col && u.row === hex.row && u.activeAction === 'tending_monument');
+        const subject = hex.monumentSubject || '';
+
+        if (state === 'neglected') {
+          cultureInner += `<div class="sacred-place-display" style="border-left:3px solid var(--accent-red)">
+            <span class="sacred-icon">🗿</span>
+            <span class="sacred-label" style="color:var(--accent-red)">Neglected ${neglectTurns} turn${neglectTurns !== 1 ? 's' : ''}</span>
+            <span class="sacred-type" style="color:var(--accent-red)">Identity −0.05 · Bonds −0.05 / turn · Restore: 🪵${restoreCost}</span>
+          </div>`;
+        } else if (stewardHere) {
+          cultureInner += `<div class="sacred-place-display" style="border-left:3px solid var(--accent-green)">
+            <span class="sacred-icon">🗿</span>
+            <span class="sacred-label">${subject ? subject : 'Monument'}</span>
+            <span class="sacred-type">🧭 Steward tending · Identity +0.05 · Bonds +0.05 / turn</span>
+          </div>`;
+        } else {
+          cultureInner += `<div class="sacred-place-display">
+            <span class="sacred-icon">🗿</span>
+            <span class="sacred-label">${subject ? subject : 'Monument'}</span>
+            <span class="sacred-type">Identity +0.05 · Bonds +0.05 / turn · Steward needed in ~${turnsUntilNeglect} turn${turnsUntilNeglect !== 1 ? 's' : ''}</span>
+          </div>`;
+        }
       }
 
       // River naming — one entry per river touching this hex
@@ -384,7 +638,23 @@ export function updateSidePanel(hex) {
       </div>`;
     }
 
+    // Snapshot open/closed state of collapsible sections before replacing innerHTML
+    const collapsibleIds = ['build-content', 'training-content', 'culture-content', 'fort-content'];
+    const wasOpen = {};
+    for (const id of collapsibleIds) {
+        const el = document.getElementById(id);
+        if (el) wasOpen[id] = !el.classList.contains('collapsed');
+    }
+
     document.getElementById('hex-info-content').innerHTML = html;
+
+    // Restore open sections (default is collapsed, so only un-collapse the ones that were open)
+    for (const id of collapsibleIds) {
+        if (wasOpen[id]) {
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('collapsed');
+        }
+    }
 }
 
 export function clearSidePanel() {
@@ -418,9 +688,10 @@ function isInTerritory(col, row) {
 }
 
 function getHexYield(hex) {
-    // Sacred sites produce no terrain yield — bonds are handled separately
-    if (hex.building === 'sacred_site' && hex.buildProgress === 0) {
-        return { food: 0, materials: 0 };
+    // Society buildings produce no terrain yield — cohesion is handled separately
+    if (hex.building && hex.buildProgress === 0) {
+        const bDef = BUILDINGS[hex.building];
+        if (bDef?.isSocietyBuilding) return { food: 0, materials: 0 };
     }
 
     const terrain = TERRAIN[hex.terrain];
@@ -455,7 +726,9 @@ function getHexYield(hex) {
 
 function getMaxWorkers(hex) {
     if (hex.building) {
-        return BUILDINGS[hex.building].maxWorkers;
+        const bDef = BUILDINGS[hex.building];
+        if (hex.buildProgress > 0) return bDef.buildWorkers || bDef.maxWorkers || 0;
+        return bDef.maxWorkers || 0;
     }
     return 1; // gatherer
 }
@@ -512,5 +785,10 @@ export function toggleBuildSection() {
 
 export function toggleTrainingSection() {
     const content = document.getElementById('training-content');
+    if (content) content.classList.toggle('collapsed');
+}
+
+export function toggleFortificationsSection() {
+    const content = document.getElementById('fort-content');
     if (content) content.classList.toggle('collapsed');
 }

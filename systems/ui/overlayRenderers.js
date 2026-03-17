@@ -710,6 +710,7 @@ function renderCohesionOverlay() {
   const lowestPillar = pillars.find(p => c[p.key] === minVal);
 
   const fmt = d => d !== 0 ? `<span class="cohesion-delta ${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : ''}${Math.round(d)}</span>` : '';
+  const roundVal = v => Math.round(v);
 
   let html = `<div class="cohesion-overview">
     <div class="cohesion-total-row">
@@ -717,7 +718,7 @@ function renderCohesionOverlay() {
       <span class="cohesion-total-status" style="color:${status.color}">${status.status}</span>
     </div>
     <div class="cohesion-total-desc">Total cohesion is a weighted average of four pillars (70% average, 30% minimum). The lowest pillar exerts extra drag on the whole.</div>
-    ${minVal < 40 ? `<div class="cohesion-warning">⚠️ <strong>${lowestPillar.name}</strong> is your weakest pillar at ${minVal} — it is pulling the whole society down.</div>` : ''}
+    ${minVal < 40 ? `<div class="cohesion-warning">⚠️ <strong>${lowestPillar.name}</strong> is your weakest pillar at ${roundVal(minVal)} — it is pulling the whole society down.</div>` : ''}
   </div>
   <div class="cohesion-pillars">`;
 
@@ -730,7 +731,7 @@ function renderCohesionOverlay() {
       <div class="cohesion-pillar-header">
         <span class="cohesion-pillar-icon">${pillar.icon}</span>
         <span class="cohesion-pillar-name">${pillar.name}</span>
-        <span class="cohesion-pillar-val">${val}${fmt(delta)}</span>
+        <span class="cohesion-pillar-val">${roundVal(val)}${fmt(delta)}</span>
       </div>
       <div class="cohesion-pillar-bar-wrap">
         <div class="cohesion-pillar-bar" style="width:${val}%;background:${pillarBarColor(val)}"></div>

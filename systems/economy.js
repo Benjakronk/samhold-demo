@@ -20,7 +20,7 @@ export function getMaxWorkers(hex) {
   if (!isInTerritory(hex.col, hex.row)) return 0;
   if (hex.building) {
     const bDef = window.BUILDINGS[hex.building];
-    if (hex.buildProgress > 0) return bDef.maxWorkers || 0; // construction workers
+    if (hex.buildProgress > 0) return bDef.buildWorkers || bDef.maxWorkers || 0; // construction workers
     return bDef.maxWorkers || 0;
   }
   return 1; // unimproved territory hex: 1 gatherer
@@ -41,8 +41,11 @@ export function getHexYield(hex) {
   // Under construction: workers are building, not producing
   if (hex.building && hex.buildProgress > 0) return result;
 
-  // Sacred sites produce no terrain yield — their output is bonds, handled separately
-  if (hex.building === 'sacred_site') return result;
+  // Society buildings produce no terrain yield — their output is cohesion, handled separately
+  if (hex.building) {
+    const bDef = window.BUILDINGS[hex.building];
+    if (bDef?.isSocietyBuilding) return result;
+  }
 
   // Terrain base yield from having any workers
   const terrain = window.TERRAIN[hex.terrain];
@@ -81,10 +84,31 @@ export function calculateIncome() {
     laborUsed += hex.workers;
     if (hex.building && hex.buildProgress > 0) constructionWorkers += hex.workers;
 
-    // Per-worker material upkeep for buildings that require it (e.g. sacred sites)
-    if (hex.building && hex.buildProgress <= 0 && hex.workers > 0) {
+    // Per-turn material upkeep for buildings that require it
+    if (hex.building && hex.buildProgress <= 0) {
       const bDef = window.BUILDINGS[hex.building];
-      if (bDef?.upkeepMaterials) matUpkeep += bDef.upkeepMaterials * hex.workers;
+      if (bDef?.upkeepMaterials) {
+        if (bDef.maxWorkers === 0) {
+          // Worker-free buildings (monument): flat upkeep per building
+          matUpkeep += bDef.upkeepMaterials;
+        } else if (hex.workers > 0) {
+          // Worker-staffed buildings: upkeep scales with workers
+          // Steward tending a sacred site waives its upkeep
+          const stewardWaiving = hex.building === 'sacred_site' &&
+            (window.gameState?.units || []).some(u =>
+              u.type === 'steward' && u.col === c && u.row === r && u.activeAction === 'tending_sacred_site'
+            );
+          if (!stewardWaiving) matUpkeep += bDef.upkeepMaterials * hex.workers;
+        }
+      }
+    }
+  }
+
+  // Count fortification construction workers
+  for (const fort of Object.values(window.gameState.fortifications || {})) {
+    if (fort.buildProgress > 0 && fort.workers > 0) {
+      laborUsed += fort.workers;
+      constructionWorkers += fort.workers; // builders eat double food
     }
   }
 
@@ -162,6 +186,8 @@ export function assignWorker(col, row) {
   if (window.setMapDirty) window.setMapDirty(true);
   if (window.updateAllUI) window.updateAllUI();
   if (window.updateSidePanel) window.updateSidePanel(hex);
+  // Watchtower staffing affects vision
+  if (hex.building === 'watchtower' && window.recomputeVisibility) window.recomputeVisibility();
   if (window.render) window.render();
 }
 
@@ -174,6 +200,8 @@ export function unassignWorker(col, row) {
   if (window.setMapDirty) window.setMapDirty(true);
   if (window.updateAllUI) window.updateAllUI();
   if (window.updateSidePanel) window.updateSidePanel(hex);
+  // Watchtower staffing affects vision
+  if (hex.building === 'watchtower' && window.recomputeVisibility) window.recomputeVisibility();
   if (window.render) window.render();
 }
 
@@ -313,7 +341,21 @@ export function renderWorkersTab() {
     } else if (g.food || g.mat) {
       yieldStr = `<span class="wf-yield">${g.food ? '🌾' + g.food : ''}${g.food && g.mat ? ' ' : ''}${g.mat ? '🪵' + g.mat : ''}</span>`;
     } else {
-      yieldStr = `<span class="wf-yield stalled">No workers assigned</span>`;
+      // Check if this is a society building with cohesion yields
+      const sampleHex = g.hexes[0];
+      const bDef = sampleHex?.building ? window.BUILDINGS[sampleHex.building] : null;
+      if (bDef?.isSocietyBuilding && g.workers > 0) {
+        const parts = [];
+        if (bDef.bondsYield) parts.push(`💗 Bonds`);
+        if (bDef.identityYield) parts.push(`🪶 Identity`);
+        if (bDef.satisfactionYield) parts.push(`😊 Satisfaction`);
+        if (bDef.legitimacyYield) parts.push(`🏛️ Legitimacy`);
+        yieldStr = `<span class="wf-yield">${parts.join(' · ')}</span>`;
+      } else if (bDef?.isSocietyBuilding && bDef.maxWorkers === 0) {
+        yieldStr = `<span class="wf-yield">🗿 Permanent effect</span>`;
+      } else {
+        yieldStr = `<span class="wf-yield stalled">No workers assigned</span>`;
+      }
     }
 
     const hexCount = g.hexes.length;
@@ -440,21 +482,40 @@ export function wfInitiateBuild(buildingKey) {
   const validHexes = findValidHexesForBuilding(buildingKey);
   if (validHexes.length === 0) return;
 
-  const bestHex = validHexes[0];
+  // Meeting hall: filter to hexes without existing MH in that settlement
+  let filtered = validHexes;
+  if (buildingKey === 'meeting_hall' && window.hasSettlementMeetingHall) {
+    filtered = validHexes.filter(h => !window.hasSettlementMeetingHall(h.col, h.row));
+    if (filtered.length === 0) return;
+  }
+
+  const bestHex = filtered[0];
   const canAfford = window.gameState.resources.materials >= bDef.cost.materials;
   if (!canAfford) return;
 
-  const freshWater = hexHasFreshWater(bestHex);
-  const maxFood = (bDef.foodBonus || 0) + (freshWater ? 1 : 0) + (freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0);
-  const maxMat = bDef.materialBonus || 0;
-  const yieldStr = [maxFood ? `🌾+${maxFood}` : '', maxMat ? `🪵+${maxMat}` : ''].filter(Boolean).join(' ');
+  let yieldStr;
+  if (bDef.isSocietyBuilding) {
+    // Cohesion yields
+    const parts = [];
+    if (bDef.identityYield) parts.push(`🪶+${(bDef.identityYield * bDef.maxWorkers).toFixed(2)} Identity`);
+    if (bDef.satisfactionYield) parts.push(`😊+${(bDef.satisfactionYield * bDef.maxWorkers).toFixed(2)} Satisfaction`);
+    if (bDef.legitimacyYield) parts.push(`🏛️+${(bDef.legitimacyYield * bDef.maxWorkers).toFixed(2)} Legitimacy`);
+    if (bDef.bondsYield) parts.push(`💗+${(bDef.bondsYield * bDef.maxWorkers).toFixed(2)} Bonds`);
+    const upkeepStr = bDef.upkeepMaterials ? ` · 🪵−${bDef.upkeepMaterials * bDef.maxWorkers}/turn upkeep` : '';
+    yieldStr = parts.join(' · ') + upkeepStr;
+  } else {
+    const freshWater = hexHasFreshWater(bestHex);
+    const maxFood = (bDef.foodBonus || 0) + (freshWater ? 1 : 0) + (freshWater && bDef.riverFoodBonus ? bDef.riverFoodBonus : 0);
+    const maxMat = bDef.materialBonus || 0;
+    yieldStr = [maxFood ? `🌾+${maxFood}` : '', maxMat ? `🪵+${maxMat}` : ''].filter(Boolean).join(' ');
+  }
 
   window.showConfirmDialogNonDestructive(
     `Build ${bDef.name}`,
     `<p>Start construction of a <strong>${bDef.name}</strong> at the best available site (${bestHex.col},${bestHex.row})?</p>
      <p><strong>Cost:</strong> 🪵${bDef.cost.materials} materials · <strong>Time:</strong> ${bDef.buildTurns} turns</p>
      ${yieldStr ? `<p><strong>Max yield:</strong> ${yieldStr} (at full workers)</p>` : ''}
-     <p><em>${validHexes.length} valid site${validHexes.length !== 1 ? 's' : ''} available</em></p>`,
+     <p><em>${filtered.length} valid site${filtered.length !== 1 ? 's' : ''} available</em></p>`,
     'Build',
     'Cancel',
     () => {
@@ -476,13 +537,24 @@ function renderBuildSection() {
 
   for (const [key, bDef] of Object.entries(window.BUILDINGS)) {
     if (bDef.onlyStart) continue;
+    // Sacred site and monument use custom side-panel dialogs — skip in workforce build tab
+    if (key === 'sacred_site' || key === 'monument') continue;
     const validHexes = findValidHexesForBuilding(key);
-    const count = validHexes.length;
+    let count = validHexes.length;
     const canAfford = materials >= bDef.cost.materials;
+
+    // Meeting hall: check 1-per-settlement limit (filter valid hexes to those without existing MH)
+    let extraReason = '';
+    if (key === 'meeting_hall' && count > 0 && window.hasSettlementMeetingHall) {
+      const filteredHexes = validHexes.filter(h => !window.hasSettlementMeetingHall(h.col, h.row));
+      count = filteredHexes.length;
+      if (count === 0) extraReason = 'Already have one per settlement';
+    }
+
     const enabled = count > 0 && canAfford;
     if (count > 0) anyAvailable = true;
 
-    const reason = count === 0 ? 'No suitable terrain' : !canAfford ? `Need 🪵${bDef.cost.materials}` : '';
+    const reason = extraReason || (count === 0 ? 'No suitable terrain' : !canAfford ? `Need 🪵${bDef.cost.materials}` : '');
 
     html += `<button class="wf-build-btn${enabled ? '' : ' disabled'}"
       ${enabled ? `onclick="wfInitiateBuild('${key}')"` : 'disabled'}>

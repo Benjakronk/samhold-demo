@@ -90,8 +90,25 @@ function handleWindowMouseMove(e) {
       coordsEl.textContent = hex.revealed
         ? `${TERRAIN[hex.terrain].icon} ${TERRAIN[hex.terrain].name}${rv} (${h.col},${h.row})`
         : `Unexplored (${h.col},${h.row})`;
+
+      // Edge hover detection for fortify mode
+      if (gameState.unitInteractionMode === 'fortify') {
+        const hexCenter = window.hexToPixel(h.col, h.row, window.HEX_SIZE);
+        const dx = w.x - hexCenter.x;
+        const dy = w.y - hexCenter.y;
+        // Map angle to nearest edge: pointy-top hex edges at 0°, 60°, 120°, etc.
+        const angle = Math.atan2(dy, dx);
+        const edgeIndex = ((Math.round((angle + Math.PI / 6) / (Math.PI / 3)) % 6) + 6) % 6;
+        window.hoveredHex = { col: h.col, row: h.row };
+        window.hoveredEdge = edgeIndex;
+        if (window.render) window.render();
+      }
     } else {
       coordsEl.textContent = '—';
+      if (gameState.unitInteractionMode === 'fortify') {
+        window.hoveredHex = null;
+        window.hoveredEdge = null;
+      }
     }
   }
 }
@@ -164,6 +181,9 @@ function handleKeyDown(e) {
       document.getElementById('zoom-display').textContent = `Zoom: ${Math.round(gameState.camera.zoom * 100)}%`;
       break;
     case 'Escape':
+      // Clean up fortify mode hover state
+      window.hoveredHex = null;
+      window.hoveredEdge = null;
       if (window.deselectUnit) {
         window.deselectUnit();
       }

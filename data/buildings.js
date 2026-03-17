@@ -83,8 +83,61 @@ export const BUILDINGS = {
     foodBonus: 0,
     materialBonus: 0,
     maxWorkers: 2,
+    isSocietyBuilding: true,
     bondsYield: 0.1,      // Bonds accumulated per turn per worker (fractional accumulator)
     upkeepMaterials: 1,   // materials consumed per turn per worker
     description: 'A tended sacred site. Generates Bonds while staffed, but requires materials for upkeep.'
+  },
+  shrine: {
+    name: 'Shrine',
+    icon: '🕯️',
+    cost: { materials: 10 },
+    buildTurns: 4,
+    validTerrain: ['grassland', 'hills', 'forest', 'mountain', 'desert', 'wetland'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 2,
+    isSocietyBuilding: true,
+    identityYield: 0.15,
+    satisfactionYield: 0.05,
+    upkeepMaterials: 1,
+    description: 'A place of spiritual practice. Generates Identity and Satisfaction while staffed.'
+  },
+  monument: {
+    name: 'Monument',
+    icon: '🗿',
+    cost: { materials: 20 },
+    buildTurns: 8,
+    buildWorkers: 2,       // workers needed during construction
+    validTerrain: ['grassland', 'hills', 'forest', 'mountain', 'desert', 'wetland'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 0,         // no workers after completion — permanent passive effect
+    isSocietyBuilding: true,
+    permanentIdentityBonus: 3,
+    upkeepMaterials: 1,    // flat 1 material/turn regardless of state (paid from processSocietyBuildings)
+    description: 'A permanent monument commemorating your history. Grants Identity +3 on completion. Requires 1 material/turn upkeep.'
+  },
+  meeting_hall: {
+    name: 'Meeting Hall',
+    icon: '🏛️',
+    cost: { materials: 15 },
+    buildTurns: 5,
+    validTerrain: ['grassland', 'hills', 'forest'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 3,
+    isSocietyBuilding: true,
+    legitimacyYield: 0.12,
+    upkeepMaterials: 1,
+    description: 'A place for governance and deliberation. Generates Legitimacy and eases governance transitions.'
+  },
+  watchtower: {
+    name: 'Watchtower', icon: '🗼',
+    cost: { materials: 12 }, buildTurns: 3,
+    validTerrain: ['grassland', 'hills', 'forest', 'mountain'],
+    foodBonus: 0, materialBonus: 0, maxWorkers: 1,
+    visionRadius: 3,
+    description: 'Provides extended vision. Must be staffed.'
   }
 };

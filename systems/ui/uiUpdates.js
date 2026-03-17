@@ -88,7 +88,7 @@ function updateAllUI() {
 
 function updateCohesionDisplay() {
   const c = gameState.cohesion;
-  const total = c.total;
+  const total = Math.round(c.total);
   const sum = c.identity + c.legitimacy + c.satisfaction + c.bonds;
   const status = window.getCohesionStatus();
 
@@ -105,21 +105,30 @@ function updateCohesionDisplay() {
 
   // Compute projected next-turn deltas
   const projected = window.previewCohesionDeltas ? window.previewCohesionDeltas() : c.lastUpdate;
-  const fmt = (d) => d !== 0 ? ` (${d > 0 ? '+' : ''}${Math.round(d)})` : '';
+
+  // Show 1 decimal for sub-integer changes; suppress if negligible (< 0.05)
+  const fmtDelta = d => {
+    if (Math.abs(d) < 0.05) return '';
+    const sign = d > 0 ? '+' : '-';
+    const abs = Math.abs(d);
+    const str = abs % 1 < 0.05 ? Math.round(abs).toString() : (Math.round(abs * 10) / 10).toFixed(1);
+    return ` (${sign}${str})`;
+  };
+  const disp = p => Math.round(c[p]);
 
   const container = document.getElementById('cohesion-bar-container');
-  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${c.identity}${fmt(projected.identity)}\nLegitimacy: ${c.legitimacy}${fmt(projected.legitimacy)}\nSatisfaction: ${c.satisfaction}${fmt(projected.satisfaction)}\nBonds: ${c.bonds}${fmt(projected.bonds)}`;
+  container.title = `Cohesion: ${status.status} (${total}%)\nIdentity: ${disp('identity')}${fmtDelta(projected.identity)}\nLegitimacy: ${disp('legitimacy')}${fmtDelta(projected.legitimacy)}\nSatisfaction: ${disp('satisfaction')}${fmtDelta(projected.satisfaction)}\nBonds: ${disp('bonds')}${fmtDelta(projected.bonds)}`;
 
   for (const p of ['identity','legitimacy','satisfaction','bonds']) {
     const barEl = document.getElementById(`bar-${p}`);
     const valEl = document.getElementById(`val-${p}`);
     if (barEl && valEl) {
       barEl.style.width = c[p]+'%';
-      valEl.textContent = c[p];
+      valEl.textContent = disp(p);
 
-      const change = projected[p];
-      if (change !== 0) {
-        valEl.textContent += ` (${change > 0 ? '+' : ''}${Math.round(change)})`;
+      const deltaStr = fmtDelta(projected[p]);
+      if (deltaStr) {
+        valEl.textContent += deltaStr;
         valEl.style.fontWeight = '700';
       } else {
         valEl.style.fontWeight = '400';

@@ -9,6 +9,7 @@ export const MAP_PAD = 64; // pixel padding around map (same as HEX_SIZE)
 
 // Territory and population
 export const TERRITORY_RADIUS = 2; // hex radius for settlement territory
+export const SETTLEMENT_VISION = 2; // vision radius for settlements
 export const FOOD_PER_POP = 2; // food consumed per adult per turn
 export const FOOD_PER_CHILD = 1; // food consumed per child per turn
 export const BASE_BIRTH_RATE = 0.12; // slightly increased for better population growth dynamics

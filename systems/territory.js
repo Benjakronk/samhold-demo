@@ -17,9 +17,83 @@ function revealArea(cc, cr, radius) {
     for (let c = 0; c < window.MAP_COLS; c++) {
       if (window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(cc, cr)) <= radius) {
         gameState.map[r][c].revealed = true;
+        // Also update visibilityMap if it exists
+        if (gameState.visibilityMap && gameState.visibilityMap[r]) {
+          if (gameState.visibilityMap[r][c] < 2) gameState.visibilityMap[r][c] = 2;
+        }
       }
     }
   }
+  if (window.setMapDirty) window.setMapDirty(true);
+}
+
+// Recompute the 3-tier visibility map each turn or after unit movement.
+// 0 = unexplored (never seen), 1 = revealed (seen before, dimmed), 2 = visible (active sight)
+function recomputeVisibility() {
+  if (!gameState.visibilityMap || !gameState.visibilityMap.length) return;
+
+  // Skip recomputation if fog of war is disabled — everything stays at 2
+  if (window.isFogOfWarDisabled && window.isFogOfWarDisabled()) return;
+
+  const ROWS = window.MAP_ROWS;
+  const COLS = window.MAP_COLS;
+
+  // Step 1: Downgrade all visible (2) to revealed (1). Leave unexplored (0) as-is.
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (gameState.visibilityMap[r][c] === 2) {
+        gameState.visibilityMap[r][c] = 1;
+      }
+    }
+  }
+
+  // Helper: mark hexes within radius as visible (2)
+  function markVisible(centerCol, centerRow, radius) {
+    const centerCube = window.offsetToCube(centerCol, centerRow);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (window.cubeDistance(window.offsetToCube(c, r), centerCube) <= radius) {
+          gameState.visibilityMap[r][c] = 2;
+        }
+      }
+    }
+  }
+
+  // Step 2a: Friendly units — each provides vision based on their type
+  for (const unit of gameState.units) {
+    const unitType = window.UNIT_TYPES[unit.type];
+    const visionRadius = unitType?.vision ?? 1;
+    markVisible(unit.col, unit.row, visionRadius);
+  }
+
+  // Step 2b: Settlements — each provides SETTLEMENT_VISION radius
+  const settVision = window.SETTLEMENT_VISION ?? 2;
+  for (const s of gameState.settlements) {
+    markVisible(s.col, s.row, settVision);
+  }
+
+  // Step 2c: Completed, staffed watchtowers — use building def's visionRadius
+  const BUILDINGS = window.BUILDINGS;
+  if (BUILDINGS?.watchtower) {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const hex = gameState.map[r][c];
+        if (hex.building === 'watchtower' && hex.buildProgress <= 0 && hex.workers > 0) {
+          markVisible(c, r, BUILDINGS.watchtower.visionRadius);
+        }
+      }
+    }
+  }
+
+  // Step 3: Sync hex.revealed for backward compat (anything >= 1 should be revealed)
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (gameState.visibilityMap[r][c] >= 1) {
+        gameState.map[r][c].revealed = true;
+      }
+    }
+  }
+
   if (window.setMapDirty) window.setMapDirty(true);
 }
 
@@ -88,6 +162,7 @@ function foundSettlement(col, row) {
   gameState.cohesion.legitimacy = Math.min(100, gameState.cohesion.legitimacy + 5);
   gameState.cohesion.bonds = Math.max(0, gameState.cohesion.bonds - 8);
 
+  if (window.recomputeVisibility) window.recomputeVisibility();
   if (window.setMapDirty) window.setMapDirty(true);
   return true;
 }
@@ -117,6 +192,7 @@ export {
   initTerritory,
   hexHasRiver,
   revealArea,
+  recomputeVisibility,
   recalcTerritory,
   canFoundSettlement,
   foundSettlement,

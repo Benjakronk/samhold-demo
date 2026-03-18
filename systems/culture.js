@@ -131,7 +131,25 @@ function getTraditionBonusMultiplier(tradition) {
     ? Math.min(0.5, tradition.timesPerformed * 0.02)
     : 0;
 
-  return baseMultiplier + longevityBonus;
+  return baseMultiplier + longevityBonus + getFestivalGroundsAmplifier();
+}
+
+// Returns the tradition amplification bonus from staffed Festival Grounds in territory.
+// Each staffed worker on a completed festival_grounds adds its traditionAmplifier value.
+// Capped at 0.6 (two fully staffed festival grounds).
+function getFestivalGroundsAmplifier() {
+  let amplifier = 0;
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.building !== 'festival_grounds' || hex.buildProgress > 0 || hex.workers <= 0) continue;
+      const bDef = window.BUILDINGS.festival_grounds;
+      if (bDef?.traditionAmplifier) {
+        amplifier += bDef.traditionAmplifier * hex.workers;
+      }
+    }
+  }
+  return Math.min(0.6, amplifier);
 }
 
 export function getTraditionRemovalPenalty(tradition) {
@@ -309,7 +327,9 @@ function fireTradition(tradition, template, report) {
       return `${k} +${scaled}`;
     })
     .join(', ');
-  report.events.push(`${template.icon} ${displayName} was observed! (${effectStr})`);
+  const festivalAmp = getFestivalGroundsAmplifier();
+  const festivalNote = festivalAmp > 0 ? ' 🎪 Festival grounds enhanced the celebration!' : '';
+  report.events.push(`${template.icon} ${displayName} was observed! (${effectStr})${festivalNote}`);
 
   // Chronicle entry
   if (window.addChronicleEntry) {
@@ -1344,6 +1364,21 @@ export function processSocietyBuildings(report) {
     }
   }
 
+  // Second pass: hybrid buildings (e.g. Market) that produce economic yield AND cohesion side-effects.
+  // These are NOT isSocietyBuilding — their economic yield is handled by economy.js.
+  // Only their cohesion contribution (satisfactionPerWorker etc.) is processed here.
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (!hex.building || hex.buildProgress > 0 || hex.workers <= 0) continue;
+      const bDef = window.BUILDINGS[hex.building];
+      if (!bDef || bDef.isSocietyBuilding) continue; // already handled above
+      if (bDef.satisfactionPerWorker) {
+        accum.satisfaction += bDef.satisfactionPerWorker * hex.workers;
+      }
+    }
+  }
+
   // Clamp accumulators to prevent runaway negatives from going below -1
   for (const pillar of Object.keys(accum)) {
     if (accum[pillar] < -1) accum[pillar] = -1;
@@ -1468,6 +1503,32 @@ export function hasSettlementMeetingHall(col, row) {
       const hex = gameState.map[r][c];
       if (hex.building !== 'meeting_hall') continue;
       // Check if this meeting hall is in the same settlement's territory
+      const d = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nearestSettlement.col, nearestSettlement.row));
+      if (d <= window.TERRITORY_RADIUS) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Check if a settlement's territory already has a market.
+ */
+export function hasSettlementMarket(col, row) {
+  let nearestSettlement = null;
+  let nearestDist = Infinity;
+  for (const s of gameState.settlements) {
+    const d = window.cubeDistance(window.offsetToCube(col, row), window.offsetToCube(s.col, s.row));
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestSettlement = s;
+    }
+  }
+  if (!nearestSettlement) return false;
+
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.building !== 'market') continue;
       const d = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nearestSettlement.col, nearestSettlement.row));
       if (d <= window.TERRITORY_RADIUS) return true;
     }

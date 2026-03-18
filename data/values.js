@@ -93,6 +93,36 @@ export const VALUE_DEFINITIONS = {
     educationalNote: 'Progressive societies gain knowledge faster but may lose cultural grounding.'
   },
 
+  // Isolation axis (0-100)
+  isolation_high: {
+    name: 'Self-Reliance',
+    icon: '🏔️',
+    axis: 'isolation',
+    zone: 'high',
+    threshold: 70,
+    description: 'Our people trust only themselves and keep outsiders at a distance.',
+    educationalNote: 'Isolated societies preserve cultural purity but miss out on trade, knowledge, and genetic diversity.'
+  },
+  isolation_mid: {
+    name: 'Cautious Openness',
+    icon: '🚪',
+    axis: 'isolation',
+    zone: 'mid',
+    thresholdLow: 35,
+    thresholdHigh: 65,
+    description: 'Our people welcome contact but on their own terms.',
+    educationalNote: 'Most successful societies selectively engage with outsiders — trading ideas while guarding core identity.'
+  },
+  isolation_low: {
+    name: 'Hospitality',
+    icon: '🤗',
+    axis: 'isolation',
+    zone: 'low',
+    threshold: 30,
+    description: 'Our people believe in welcoming strangers and sharing freely.',
+    educationalNote: 'Open societies grow faster through cultural exchange, but risk losing cohesive identity.'
+  },
+
   // Working Age (6-16)
   workingAge_high: {
     name: 'Protected Childhood',

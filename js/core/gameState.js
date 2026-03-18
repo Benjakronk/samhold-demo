@@ -32,11 +32,31 @@ export function createGameState() {
         freedom: 50,        // 0-100: Control ←→ Freedom
         mercy: 50,          // 0-100: Severity ←→ Mercy
         tradition: 50,      // 0-100: Innovation ←→ Tradition
+        isolation: 50,      // 0-100: Open Borders ←→ Sealed Borders (also drives border openness for immigration: borderOpenness = 100 - isolation)
+        culturalOpenness: 50,   // 0-100: Conformity ←→ Tolerance
+        progressiveness: 50,    // 0-100: Passive ←→ Active integration
         rationPriority: 'people', // 'people' | 'military' | 'equal'
         // workingAge is global variable WORKING_AGE, not in policies
       },
       modelChangeTimer: 0,  // turns remaining for governance change transition
-      lastChanged: { model: 0, policies: { freedom: 0, mercy: 0, tradition: 0 } } // change tracking
+      lastChanged: { model: 0, policies: { freedom: 0, mercy: 0, tradition: 0, isolation: 0 } }, // change tracking
+      monarchy: {
+        dynastyName: null,
+        currentRuler: null,    // { name, quality (0-1), reignStart }
+        heir: null,            // { name, quality } or null
+        dynastyAge: 0,         // turns the dynasty has lasted
+        successionCrisisActive: false
+      },
+      militaryRule: {
+        commanderStrength: 1.0,
+        consecutiveVictories: 0,
+        turnsInPower: 0
+      },
+      democracy: {
+        pendingPolicyChanges: [], // [{ policy, newValue, turnsRemaining }]
+        electionTimer: 0,
+        voterSatisfaction: 50
+      }
     },
     victoryTracking: {
       minCohesion: 62, // initialized to starting cohesion
@@ -76,13 +96,97 @@ export function createGameState() {
       namedRegions: [],      // [{ id, name, centerCol, centerRow, hexes: ["col,row",...], strength, foundedYear, foundedSeason }]
       nextRegionId: 1,       // auto-incrementing region ID counter
     },
+    crime: {
+      theft: 0,
+      violence: 0,
+      transgression: 0,
+      overallSeverity: 0,
+      organizedPredation: false,
+      organizedPredationTurns: 0,
+      crackdownCooldown: 0,       // turns remaining before crackdown available again
+      lastCrimeReport: null       // snapshot for UI display
+    },
+    resistance: {
+      pressure: 0,
+      suppressionCount: 0,
+      recurrenceMultiplier: 1.0,
+      faction: {
+        active: false,
+        name: '',
+        disposition: 'cooperative', // cooperative | skeptical | hostile | radical
+        leader: '',
+        formalInfluence: null,
+        promiseRegistry: []  // [{ id, description, deadline, binding, fulfilled }]
+      },
+      tcConsensusPolicies: {},   // policy -> true for TC-consensus-passed policies
+      hostileCrossed: false,     // track if 80 threshold was crossed (one-time shift)
+      lastWarningTurn: 0         // cooldown for advisor warnings
+    },
+    policyLag: {
+      freedom: null,
+      mercy: null,
+      tradition: null,
+      isolation: null,
+      culturalOpenness: null,
+      progressiveness: null,
+      workingAge: null,
+      pending: {
+        freedom: null,
+        mercy: null,
+        tradition: null,
+        isolation: null,
+        culturalOpenness: null,
+        progressiveness: null,
+        workingAge: null
+      }
+    },
+    trust: {
+      institutional: 0.625,        // (legitimacy*0.55 + satisfaction*0.45) / 100
+      interpersonal: 0.57,         // (identity*0.4 + bonds*0.6) / 100
+      institutionalBaseline: 0.625,
+      interpersonalBaseline: 0.57,
+      deviations: { institutional: 0, interpersonal: 0 }
+    },
     values: [],    // recognized shared values: [{ id, turnsHeld, strength }]
     valueTracking: {
       freedom: { zone: null, turnsInZone: 0 },
       mercy: { zone: null, turnsInZone: 0 },
       tradition: { zone: null, turnsInZone: 0 },
+      isolation: { zone: null, turnsInZone: 0 },
       workingAge: { zone: null, turnsInZone: 0 },
       rationPriority: { zone: null, turnsInZone: 0 }
+    },
+    immigration: {
+      cohorts: [0, 0, 0, 0],    // [Arrival, Resident, Participant, Integrated]
+      parallelSociety: {
+        strength: 0,
+        population: 0,
+        childCohorts: [],        // [{age, count}] born inside PS
+      },
+      pressure: 0,
+      lastArrivals: 0,
+      lifetimeArrivals: 0,
+      lifetimeIntegrated: 0,
+      interventionActive: null,
+      interventionTurns: 0,
+      crystallizationEvents: {},
+    },
+    classSystem: {
+      active: false,
+      basis: null,              // 'property' | 'lineage' | 'religious' | 'military'
+      differentials: {
+        economic: 0,            // 0 = Equal, 1 = Preferential, 2 = Stratified
+        legal: 0,
+        political: 0,
+        social: 0
+      },
+      privilegedCount: 0,       // recalculated each turn for dynamic bases
+      privilegedRatio: 0,       // privilegedCount / population.total
+      activatedTurn: null,
+      dismantlementEffects: null,  // { satisfactionPenalty, turnsRemaining, trustDriftTurnsRemaining }
+      basisChangeEffects: null,    // { satisfactionPenalty, turnsRemaining }
+      lineageFamilies: 0,       // for lineage basis: fixed count at activation
+      pendingDifferentials: {},  // dimension -> { target, turnsRemaining, startTurn }
     },
     chronicle: [], // narrative history log of the civilization
     lastTurnReport: null,

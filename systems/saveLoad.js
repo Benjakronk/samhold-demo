@@ -106,6 +106,89 @@ function loadGameFromSlot(slotName) {
         rationPriority: { zone: null, turnsInZone: 0 }
       };
     }
+    // Migrate trust state for older saves
+    if (!loadedGameState.trust) {
+      const c = loadedGameState.cohesion || {};
+      const instBase = ((c.legitimacy || 70) * 0.55 + (c.satisfaction || 65) * 0.45) / 100;
+      const interBase = ((c.identity || 60) * 0.4 + (c.bonds || 55) * 0.6) / 100;
+      loadedGameState.trust = {
+        institutional: instBase,
+        interpersonal: interBase,
+        institutionalBaseline: instBase,
+        interpersonalBaseline: interBase,
+        deviations: { institutional: 0, interpersonal: 0 }
+      };
+    }
+
+    // Migrate policy lag state for older saves
+    if (!loadedGameState.policyLag) {
+      loadedGameState.policyLag = {
+        freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null,
+        pending: { freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null }
+      };
+    }
+
+    // Migrate crime state for older saves
+    if (!loadedGameState.crime) {
+      loadedGameState.crime = {
+        theft: 0, violence: 0, transgression: 0, overallSeverity: 0,
+        organizedPredation: false, organizedPredationTurns: 0,
+        crackdownCooldown: 0, lastCrimeReport: null
+      };
+    }
+
+    // Migrate resistance state for older saves
+    if (!loadedGameState.resistance) {
+      loadedGameState.resistance = {
+        pressure: 0, suppressionCount: 0, recurrenceMultiplier: 1.0,
+        faction: { active: false, name: '', disposition: 'cooperative', leader: '', formalInfluence: null, promiseRegistry: [] },
+        tcConsensusPolicies: {}, hostileCrossed: false, lastWarningTurn: 0
+      };
+    }
+
+    // Migrate immigration state for older saves
+    if (!loadedGameState.immigration) {
+      loadedGameState.immigration = {
+        cohorts: [0, 0, 0, 0],
+        parallelSociety: { strength: 0, population: 0, childCohorts: [] },
+        pressure: 0, lastArrivals: 0, lifetimeArrivals: 0, lifetimeIntegrated: 0,
+        interventionActive: null, interventionTurns: 0, crystallizationEvents: {}
+      };
+    }
+
+    // Migrate immigration policy sliders for older saves
+    if (loadedGameState.governance?.policies) {
+      if (loadedGameState.governance.policies.culturalOpenness === undefined) loadedGameState.governance.policies.culturalOpenness = 50;
+      if (loadedGameState.governance.policies.progressiveness === undefined) loadedGameState.governance.policies.progressiveness = 50;
+      // Remove deprecated borderOpenness — now derived from isolation slider
+      delete loadedGameState.governance.policies.borderOpenness;
+    }
+
+    // Migrate policyLag for immigration sliders
+    if (loadedGameState.policyLag) {
+      if (loadedGameState.policyLag.culturalOpenness === undefined) loadedGameState.policyLag.culturalOpenness = null;
+      if (loadedGameState.policyLag.progressiveness === undefined) loadedGameState.policyLag.progressiveness = null;
+      // Remove deprecated borderOpenness lag
+      delete loadedGameState.policyLag.borderOpenness;
+      if (loadedGameState.policyLag.pending) {
+        if (loadedGameState.policyLag.pending.culturalOpenness === undefined) loadedGameState.policyLag.pending.culturalOpenness = null;
+        if (loadedGameState.policyLag.pending.progressiveness === undefined) loadedGameState.policyLag.pending.progressiveness = null;
+        delete loadedGameState.policyLag.pending.borderOpenness;
+      }
+    }
+
+    // Migrate class system for older saves
+    if (!loadedGameState.classSystem) {
+      loadedGameState.classSystem = {
+        active: false, basis: null,
+        differentials: { economic: 0, legal: 0, political: 0, social: 0 },
+        privilegedCount: 0, privilegedRatio: 0,
+        activatedTurn: null,
+        dismantlementEffects: null, basisChangeEffects: null,
+        lineageFamilies: 0, pendingDifferentials: {}
+      };
+    }
+
     // Migrate fortifications and visibilityMap for older saves
     if (!loadedGameState.fortifications) loadedGameState.fortifications = {};
     if (!loadedGameState.visibilityMap || !loadedGameState.visibilityMap.length) {

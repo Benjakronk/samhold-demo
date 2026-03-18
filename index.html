@@ -70,6 +70,8 @@
     <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-satisfaction)"></div><span class="pillar-name">Satisfaction</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-satisfaction" style="background:var(--pillar-satisfaction);width:65%"></div></div><span class="pillar-value" id="val-satisfaction" style="color:var(--pillar-satisfaction)">65</span></div>
     <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-bonds)"></div><span class="pillar-name">Bonds</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-bonds" style="background:var(--pillar-bonds);width:55%"></div></div><span class="pillar-value" id="val-bonds" style="color:var(--pillar-bonds)">55</span></div>
 
+    <div id="trust-climate" style="margin-top:10px;"></div>
+
     <div class="policy-summary" style="margin-top:12px; padding:8px; background:rgba(120,120,120,0.1); border-radius:4px; font-size:11px;">
       <div style="font-weight:bold; margin-bottom:4px; color:var(--text-primary);">Current Policies</div>
       <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
@@ -198,6 +200,12 @@
       <button class="dev-tab" data-tab="buildings">Buildings</button>
       <button class="dev-tab" data-tab="events">Events</button>
       <button class="dev-tab" data-tab="units">Units</button>
+      <button class="dev-tab" data-tab="trust">Trust</button>
+      <button class="dev-tab" data-tab="policylag">Policy Lag</button>
+      <button class="dev-tab" data-tab="resistance">Resistance</button>
+      <button class="dev-tab" data-tab="crime">Crime</button>
+      <button class="dev-tab" data-tab="immigration">Immigration</button>
+      <button class="dev-tab" data-tab="class">Class</button>
     </div>
     <div id="dev-tab-content"></div>
     <div class="dev-actions">
@@ -298,6 +306,10 @@
     <div class="governance-tabs">
       <button class="governance-tab active" data-tab="governance">Governance</button>
       <button class="governance-tab" data-tab="policies">Policies</button>
+      <button class="governance-tab" data-tab="resistance">Resistance</button>
+      <button class="governance-tab" data-tab="crime">Crime</button>
+      <button class="governance-tab" data-tab="immigration">Immigration</button>
+      <button class="governance-tab" data-tab="class">Class</button>
     </div>
 
     <div class="governance-content">
@@ -338,6 +350,7 @@
         <span>Liberal</span>
         <span>Anarchic</span>
       </div>
+      <div class="policy-lag-status" id="policy-lag-freedom"></div>
 
       <div class="policy-category-header" id="policy-header-mercy">Justice & Punishment</div>
       <div class="policy-slider">
@@ -356,6 +369,7 @@
         <span>Lenient</span>
         <span>Merciful</span>
       </div>
+      <div class="policy-lag-status" id="policy-lag-mercy"></div>
 
       <div class="policy-category-header" id="policy-header-tradition">Culture & Change</div>
       <div class="policy-slider">
@@ -374,6 +388,26 @@
         <span>Conservative</span>
         <span>Ancient Ways</span>
       </div>
+      <div class="policy-lag-status" id="policy-lag-tradition"></div>
+
+      <div class="policy-category-header" id="policy-header-isolation">Borders & Contact</div>
+      <div class="policy-slider">
+        <div class="policy-label">Isolation</div>
+        <input type="range" class="policy-range" id="policy-isolation" min="0" max="100" value="50">
+        <div class="policy-value" id="policy-isolation-value">50</div>
+      </div>
+      <div class="policy-ends">
+        <span>Open Borders</span>
+        <span>Sealed Borders</span>
+      </div>
+      <div class="policy-labels">
+        <span>Cosmopolitan</span>
+        <span>Welcoming</span>
+        <span>Balanced</span>
+        <span>Guarded</span>
+        <span>Isolationist</span>
+      </div>
+      <div class="policy-lag-status" id="policy-lag-isolation"></div>
 
       <div class="policy-category-header" id="policy-header-working-age">Childhood & Labor</div>
       <div class="policy-slider">
@@ -392,6 +426,10 @@
         <span>Education</span>
         <span>Prosperity</span>
       </div>
+      <div class="policy-lag-status" id="policy-lag-workingAge"></div>
+
+      <div class="policy-batch-controls" id="policy-batch-controls"></div>
+
       <div class="policy-category-header">Ration Priority</div>
       <div class="policy-description">When food is scarce, who eats first?</div>
       <div class="ration-priority-options" id="ration-priority-options">
@@ -408,6 +446,81 @@
           <span class="ration-label"><strong>Equal rations</strong> — shortage split proportionally between population and units</span>
         </label>
       </div>
+        </div>
+      </div>
+
+      <div class="governance-tab-panel" id="resistance-tab-panel">
+        <div class="gov-section">
+          <div id="resistance-panel-content">
+            <!-- Populated by renderResistancePanel() -->
+          </div>
+        </div>
+      </div>
+
+      <div class="governance-tab-panel" id="crime-tab-panel">
+        <div class="gov-section">
+          <div id="crime-panel-content">
+            <!-- Populated by renderCrimePanel() -->
+          </div>
+        </div>
+      </div>
+
+      <div class="governance-tab-panel" id="immigration-tab-panel">
+        <div class="gov-section">
+          <div id="immigration-info-content">
+            <!-- Populated by renderImmigrationPanel() — pressure, pipeline, PS meter, interventions -->
+          </div>
+
+          <div class="policy-description" style="margin-top:8px;font-style:italic">Border openness is controlled by the <strong>Isolation</strong> slider in the Policy tab.</div>
+
+          <div class="policy-category-header" id="policy-header-culturalOpenness">Cultural Tolerance</div>
+          <div class="policy-slider">
+            <div class="policy-label">Cultural Openness</div>
+            <input type="range" class="policy-range" id="policy-culturalOpenness" min="0" max="100" value="50">
+            <div class="policy-value" id="policy-culturalOpenness-value">50</div>
+          </div>
+          <div class="policy-ends">
+            <span>Conformity</span>
+            <span>Tolerance</span>
+          </div>
+          <div class="policy-labels">
+            <span>Enforced</span>
+            <span>Expected</span>
+            <span>Moderate</span>
+            <span>Accepting</span>
+            <span>Tolerant</span>
+          </div>
+          <div class="policy-description">High tolerance removes urgency to integrate — newcomers feel less pressure to adopt local ways.</div>
+          <div class="policy-lag-status" id="policy-lag-culturalOpenness"></div>
+
+          <div class="policy-category-header" id="policy-header-progressiveness">Integration Effort</div>
+          <div class="policy-slider">
+            <div class="policy-label">Progressiveness</div>
+            <input type="range" class="policy-range" id="policy-progressiveness" min="0" max="100" value="50">
+            <div class="policy-value" id="policy-progressiveness-value">50</div>
+          </div>
+          <div class="policy-ends">
+            <span>Passive</span>
+            <span>Active</span>
+          </div>
+          <div class="policy-labels">
+            <span>None</span>
+            <span>Minimal</span>
+            <span>Moderate</span>
+            <span>Committed</span>
+            <span>Intensive</span>
+          </div>
+          <div class="policy-description">Active investment in shared institutions, festivals, and language programs to pull newcomers in.</div>
+          <div class="policy-lag-status" id="policy-lag-progressiveness"></div>
+        </div>
+      </div>
+    </div>
+
+      <div class="governance-tab-panel" id="class-tab-panel">
+        <div class="gov-section">
+          <div id="class-panel-content">
+            <!-- Populated by renderClassPanel() -->
+          </div>
         </div>
       </div>
     </div>

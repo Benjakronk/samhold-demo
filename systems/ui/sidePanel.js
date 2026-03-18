@@ -26,7 +26,7 @@ function _fortHexSVG(col, row, hexForts, selEdge) {
     for (const { edge, fort } of hexForts) fortByEdge[edge] = fort;
 
     let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block;margin:0 auto 6px">`;
-    svg += `<polygon points="${pts}" fill="rgba(40,32,24,0.75)" stroke="rgba(180,150,80,0.2)" stroke-width="1"/>`;
+    svg += `<polygon points="${pts}" fill="rgba(40,32,24,0.75)" stroke="rgba(180,150,80,0.2)" stroke-width="1" style="cursor:default" onclick="event.stopPropagation();window.deselectFortEdge(${col},${row})"/>`;
 
     for (let e = 0; e < 6; e++) {
         const v0 = verts[e], v1 = verts[(e + 1) % 6];
@@ -38,9 +38,9 @@ function _fortHexSVG(col, row, hexForts, selEdge) {
         const dash = fort?.buildProgress > 0 ? '4,3' : 'none';
         const opacity = fort?.buildProgress > 0 ? 0.6 : 1.0;
         // Visual line
-        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${dash}" opacity="${opacity}" pointer-events="none"/>`;
+        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt" stroke-dasharray="${dash}" opacity="${opacity}" pointer-events="none"/>`;
         // Hit area (on top)
-        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="transparent" stroke-width="14" style="cursor:pointer" onclick="window.selectFortEdge(${col},${row},${e})"/>`;
+        svg += `<line x1="${v0.x}" y1="${v0.y}" x2="${v1.x}" y2="${v1.y}" stroke="transparent" stroke-width="14" style="cursor:pointer" onclick="event.stopPropagation();window.selectFortEdge(${col},${row},${e})"/>`;
     }
     svg += `</svg>`;
     return svg;
@@ -61,14 +61,25 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
 
     if (!fort) {
         const mats = gameState.resources.materials;
-        const canPal = mats >= (FORTS?.palisade?.cost?.materials ?? 4);
-        const canGate = mats >= (FORTS?.gate?.cost?.materials ?? 8);
-        return `<div class="fort-edge-controls">
+        const palCost = FORTS?.palisade?.cost?.materials ?? 4;
+        const gateCost = FORTS?.gate?.cost?.materials ?? 8;
+        const canPal = mats >= palCost;
+        const canGate = mats >= gateCost;
+        const noIdle = gameState.population.idle <= 0;
+        const cheapest = Math.min(palCost, gateCost);
+        let warning = '';
+        if (mats < cheapest) {
+            warning = `<div class="yield-none" style="margin-top:4px">Not enough materials (need 🪵${cheapest - mats} more)</div>`;
+        } else if (noIdle) {
+            warning = `<div class="yield-none" style="margin-top:4px">No idle workers — construction will stall until one is free</div>`;
+        }
+        return `<div class="fort-edge-controls" onclick="event.stopPropagation()">
             <div class="fort-edge-label">${edgeNames[edge]} — unfortified</div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
-                <button class="detail-btn" ${canPal ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'palisade')">🪵 Palisade <span style="color:var(--text-dim)">(🪵${FORTS?.palisade?.cost?.materials ?? 4})</span></button>
-                <button class="detail-btn" ${canGate ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'gate')">🚪 Gate <span style="color:var(--text-dim)">(🪵${FORTS?.gate?.cost?.materials ?? 8})</span></button>
+                <button class="detail-btn" ${canPal ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'palisade')">🪵 Palisade <span style="color:var(--text-dim)">(🪵${palCost})</span></button>
+                <button class="detail-btn" ${canGate ? '' : 'disabled'} onclick="window.buildFortAt(${hex.col},${hex.row},${edge},'gate')">🚪 Gate <span style="color:var(--text-dim)">(🪵${gateCost})</span></button>
             </div>
+            ${warning}
         </div>`;
     }
 
@@ -79,7 +90,7 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
         const statusStr = wc > 0
             ? `<span class="yield-val" style="color:var(--text-gold)">Building... (${fort.buildProgress} turn${fort.buildProgress !== 1 ? 's' : ''} left)</span>`
             : `<span class="yield-none">stalled — assign a builder!</span>`;
-        return `<div class="fort-edge-controls">
+        return `<div class="fort-edge-controls" onclick="event.stopPropagation()">
             <div class="fort-edge-label">${def.icon} ${def.name} (${edgeNames[edge]})</div>
             <div class="worker-section" style="margin-top:4px">
                 <div class="worker-controls">
@@ -99,7 +110,7 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
     // Completed fort
     const canUpgrade = fort.type === 'palisade';
     const canAffordUpgrade = canUpgrade && gameState.resources.materials >= (FORTS?.wall?.upgradeCost?.materials ?? 6);
-    return `<div class="fort-edge-controls">
+    return `<div class="fort-edge-controls" onclick="event.stopPropagation()">
         <div class="fort-edge-label">${def.icon} ${def.name} (${edgeNames[edge]}) — ${fort.health}/${fort.maxHealth} HP</div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
             ${canUpgrade ? `<button class="detail-btn" ${canAffordUpgrade ? '' : 'disabled'} onclick="window.confirmUpgradeFortification(${hex.col},${hex.row},${edge})">🧱 Upgrade to Wall <span style="color:var(--text-dim)">(🪵${FORTS?.wall?.upgradeCost?.materials ?? 6})</span></button>` : ''}
@@ -109,7 +120,15 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
 }
 
 export function selectFortEdge(col, row, edge) {
-    _selectedFortEdge = { col, row, edge };
+    const alreadySel = _selectedFortEdge && _selectedFortEdge.col === col && _selectedFortEdge.row === row && _selectedFortEdge.edge === edge;
+    _selectedFortEdge = alreadySel ? null : { col, row, edge };
+    const hex = gameState?.map[row]?.[col];
+    if (hex) updateSidePanel(hex);
+}
+
+export function deselectFortEdge(col, row) {
+    if (!_selectedFortEdge) return;
+    _selectedFortEdge = null;
     const hex = gameState?.map[row]?.[col];
     if (hex) updateSidePanel(hex);
 }
@@ -189,17 +208,6 @@ export function updateSidePanel(hex) {
             }
             html += `</div>`;
         }
-    }
-
-    // Show fortifications on this hex's edges
-    if (inTerr && window.getHexFortifications) {
-        const hexForts = window.getHexFortifications(hex.col, hex.row);
-        const fortInner = _fortHexSVG(hex.col, hex.row, hexForts, _selectedFortEdge)
-                        + _fortEdgeControls(hex, hexForts, _selectedFortEdge);
-        html += `<div class="fortifications-section build-section">
-            <h4 onclick="toggleFortificationsSection()" style="cursor:pointer;">Fortifications <span class="section-toggle-hint">click to toggle</span></h4>
-            <div class="fort-content collapsed" id="fort-content">${fortInner}</div>
-        </div>`;
     }
 
     // Show units on this hex
@@ -393,6 +401,7 @@ export function updateSidePanel(hex) {
             if (key === 'sacred_site') continue; // handled separately below
             if (key === 'monument') continue;    // handled separately below
             if (key === 'meeting_hall') continue; // handled separately below
+            if (key === 'market') continue;       // handled separately below
             const terrainValid = bDef.validTerrain.includes(hex.terrain);
             const riverValid = bDef.validOnRiver && hexHasRiver(hex);
             const waterAdjValid = bDef.requiresAdjacentWater && hexAdjacentToWater(hex) && bDef.validTerrain.includes(hex.terrain);
@@ -492,12 +501,44 @@ export function updateSidePanel(hex) {
             </button>`;
         }
 
+        // Market — 1 per settlement territory, hybrid economic + satisfaction
+        const marketBDef = BUILDINGS.market;
+        if (marketBDef && marketBDef.validTerrain.includes(hex.terrain)) {
+            const hasMarket = window.hasSettlementMarket ? window.hasSettlementMarket(hex.col, hex.row) : false;
+            const canAffordMarket = gameState.resources.materials >= marketBDef.cost.materials;
+            const marketEnabled = canAffordMarket && !hasMarket;
+            const marketReason = hasMarket ? 'Already have a Market in this settlement' : !canAffordMarket ? `Need ${marketBDef.cost.materials} materials` : '';
+            const freshWater = hexHasFreshWater(hex);
+            const riverBase = freshWater ? 1 : 0;
+            const terrMat = t.materials + marketBDef.materialBonus;
+            buildHtml += `<button class="build-btn" ${marketEnabled ? '' : 'disabled'} onclick="confirmBuildBuilding(${hex.col},${hex.row},'market')" title="${marketReason}">
+                <span class="b-icon">${marketBDef.icon}</span>
+                <span class="b-info">
+                    <span class="b-name">${marketBDef.name}</span><br>
+                    <span class="b-cost">🪵${marketBDef.cost.materials} · 🔨${marketBDef.buildTurns} work · 👥${marketBDef.maxWorkers}</span>
+                    <span class="b-yield"> → 🪵${terrMat} · 😊+${(marketBDef.satisfactionPerWorker * marketBDef.maxWorkers).toFixed(2)} Satisfaction</span>
+                    ${hasMarket ? '<span class="b-yield" style="color:var(--text-dim)"> (limit: 1 per settlement)</span>' : ''}
+                </span>
+            </button>`;
+        }
+
         if (buildHtml) {
             html += `<div class="build-section">
                 <h4 onclick="toggleBuildSection()" style="cursor: pointer;">Build <span class="section-toggle-hint">click to toggle</span></h4>
                 <div class="build-content collapsed" id="build-content">${buildHtml}</div>
             </div>`;
         }
+    }
+
+    // Show fortifications on this hex's edges
+    if (inTerr && window.getHexFortifications) {
+        const hexForts = window.getHexFortifications(hex.col, hex.row);
+        const fortInner = _fortHexSVG(hex.col, hex.row, hexForts, _selectedFortEdge)
+                        + _fortEdgeControls(hex, hexForts, _selectedFortEdge);
+        html += `<div class="fortifications-section build-section">
+            <h4 onclick="toggleFortificationsSection()" style="cursor:pointer;">Fortifications <span class="section-toggle-hint">click to toggle</span></h4>
+            <div class="fort-content collapsed" id="fort-content" onclick="window.deselectFortEdge(${hex.col},${hex.row})">${fortInner}</div>
+        </div>`;
     }
 
     // Show unit training options if in territory and on/adjacent to settlement

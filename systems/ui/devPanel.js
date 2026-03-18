@@ -148,16 +148,63 @@ export function renderDevTabContent() {
 
     html += `</div></div>`;
   } else if (devActiveTab === 'economy') {
-    html = `<div class="dev-grid-2col">
-      <div>` +
-      devGroup('\u2696\uFE0F', 'Consumption', [
-        devRow('Food per pop/turn', 'dev-food-per-pop', window.FOOD_PER_POP),
-      ]) + `</div><div>` +
-      devGroup('\u{1F3E0}', 'Starting Conditions', [
-        devRow('Starting food', 'dev-start-food', 200),
-        devRow('Starting materials', 'dev-start-mats', 50),
-        devRow('Starting pop', 'dev-start-pop', 18),
-      ]) + `</div></div>`;
+    const res = gameState.resources;
+    html = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+
+      <div class="dev-group">
+        <div class="dev-group-title">🌾 Food &amp; 🪵 Materials — Live</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:3px">Food (current: ${Math.floor(res.food)})</div>
+            <div style="display:flex;gap:4px">
+              <input id="dev-set-food" type="number" value="${Math.floor(res.food)}" style="width:70px;font-size:12px" />
+              <button class="dev-btn" onclick="devSetResource('food',document.getElementById('dev-set-food').value)">Set</button>
+            </div>
+            <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+              <button class="dev-btn" onclick="devAddResource('food',50)">+50</button>
+              <button class="dev-btn" onclick="devAddResource('food',200)">+200</button>
+              <button class="dev-btn" onclick="devAddResource('food',-50)" style="color:var(--accent-red)">−50</button>
+              <button class="dev-btn" onclick="devSetResource('food',0)" style="color:var(--accent-red)">Zero</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:3px">Materials (current: ${Math.floor(res.materials)})</div>
+            <div style="display:flex;gap:4px">
+              <input id="dev-set-mats" type="number" value="${Math.floor(res.materials)}" style="width:70px;font-size:12px" />
+              <button class="dev-btn" onclick="devSetResource('materials',document.getElementById('dev-set-mats').value)">Set</button>
+            </div>
+            <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+              <button class="dev-btn" onclick="devAddResource('materials',20)">+20</button>
+              <button class="dev-btn" onclick="devAddResource('materials',100)">+100</button>
+              <button class="dev-btn" onclick="devAddResource('materials',-20)" style="color:var(--accent-red)">−20</button>
+              <button class="dev-btn" onclick="devSetResource('materials',0)" style="color:var(--accent-red)">Zero</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:6px">
+          <button class="dev-btn" style="width:100%" onclick="devAddResource('food',500);devAddResource('materials',200)">💰 Flood both (+500 food, +200 mats)</button>
+        </div>
+      </div>
+
+      <div class="dev-group">
+        <div class="dev-group-title">⚖️ Consumption Rates (Apply Live)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          ${devRow('Food per pop/turn', 'dev-food-per-pop', window.FOOD_PER_POP)}
+          ${devRow('Food per child/turn', 'dev-food-per-child', window.FOOD_PER_CHILD)}
+        </div>
+      </div>
+
+      <div class="dev-group">
+        <div class="dev-group-title">🏠 Starting Conditions (Apply &amp; Restart)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">
+          ${devRow('Starting food', 'dev-start-food', 200)}
+          ${devRow('Starting mats', 'dev-start-mats', 50)}
+          ${devRow('Starting pop', 'dev-start-pop', 18)}
+        </div>
+      </div>
+
+    </div>`;
   } else if (devActiveTab === 'population') {
     html = `<div class="dev-grid-2col">
       <div>` +
@@ -380,6 +427,292 @@ export function renderDevTabContent() {
     html += `
       </div>
     </div>`;
+  } else if (devActiveTab === 'trust') {
+    const t = window.getTrustState ? window.getTrustState() : null;
+    if (t) {
+      const fmtPct = v => (v * 100).toFixed(1) + '%';
+      const fmtDev = v => (v >= 0 ? '+' : '') + v.toFixed(3);
+      const barColor = v => v >= 0.7 ? '#5a8a4a' : v >= 0.4 ? '#c9a84c' : '#a94442';
+      const barW = v => Math.round(v * 100) + '%';
+
+      html = `<div class="dev-grid-2col">
+        <div>
+          <h3 style="color:var(--text-gold);margin:0 0 8px">🏛️ Institutional Trust</h3>
+          <div style="background:rgba(0,0,0,0.3);border-radius:4px;padding:8px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span>Current</span><span style="color:var(--text-light);font-weight:bold">${fmtPct(t.institutional)}</span>
+            </div>
+            <div style="background:rgba(0,0,0,0.4);border-radius:3px;height:12px;overflow:hidden">
+              <div style="background:${barColor(t.institutional)};height:100%;width:${barW(t.institutional)};transition:width 0.3s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:6px">
+              <span>Baseline: ${fmtPct(t.institutionalBaseline)}</span>
+              <span>Deviation: ${fmtDev(t.deviations.institutional)}</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim)">
+            <div>= legitimacy × 0.55 + satisfaction × 0.45</div>
+            <div style="margin-top:4px">Drives: resistance, policy compliance</div>
+          </div>
+        </div>
+        <div>
+          <h3 style="color:var(--text-gold);margin:0 0 8px">🫂 Interpersonal Trust</h3>
+          <div style="background:rgba(0,0,0,0.3);border-radius:4px;padding:8px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span>Current</span><span style="color:var(--text-light);font-weight:bold">${fmtPct(t.interpersonal)}</span>
+            </div>
+            <div style="background:rgba(0,0,0,0.4);border-radius:3px;height:12px;overflow:hidden">
+              <div style="background:${barColor(t.interpersonal)};height:100%;width:${barW(t.interpersonal)};transition:width 0.3s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:6px">
+              <span>Baseline: ${fmtPct(t.interpersonalBaseline)}</span>
+              <span>Deviation: ${fmtDev(t.deviations.interpersonal)}</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim)">
+            <div>= identity × 0.4 + bonds × 0.6</div>
+            <div style="margin-top:4px">Drives: crime rates, identity/bonds growth</div>
+            <div style="margin-top:4px">Rate limiter: <span style="color:var(--text-light)">${(t.rateLimiter * 100).toFixed(0)}%</span>
+              ${t.rateLimiter < 1 ? ' <span style="color:#c9a84c">(limiting growth)</span>' : ' <span style="color:#5a8a4a">(no limit)</span>'}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <h4 style="color:var(--text-light);margin:0 0 8px;font-size:14px">🔧 Dev Controls</h4>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="dev-btn" onclick="window.applyTrustDeviation('institutional', -0.10); renderDevTabContent();" style="font-size:11px">Inst −0.10</button>
+          <button class="dev-btn" onclick="window.applyTrustDeviation('institutional', 0.05); renderDevTabContent();" style="font-size:11px">Inst +0.05</button>
+          <button class="dev-btn" onclick="window.applyTrustDeviation('interpersonal', -0.10); renderDevTabContent();" style="font-size:11px">Inter −0.10</button>
+          <button class="dev-btn" onclick="window.applyTrustDeviation('interpersonal', 0.05); renderDevTabContent();" style="font-size:11px">Inter +0.05</button>
+        </div>
+        <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">
+          Drift rate: 0.005/turn (40 turns to recover −0.20 shock)
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Trust system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'policylag') {
+    const pl = gameState.policyLag;
+    if (pl) {
+      const policies = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge'];
+      const hallRed = window.getAdminHallReduction ? window.getAdminHallReduction() : 0;
+      const model = gameState.governance.model;
+      const govMult = window.GOVERNANCE_MODELS?.[model]?.lagMultiplier ?? 1.0;
+
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">📋 Policy Lag State</h3>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">
+          Gov model: <span style="color:var(--text-light)">${model} (×${govMult})</span>
+          &nbsp;|&nbsp; Admin Hall reduction: <span style="color:var(--text-light)">${(hallRed * 100).toFixed(0)}%</span>
+          &nbsp;|&nbsp; Legitimacy: <span style="color:var(--text-light)">${Math.round(gameState.cohesion.legitimacy)}</span>
+        </div>`;
+
+      for (const p of policies) {
+        const lag = pl[p];
+        const pending = pl.pending?.[p];
+        const effective = p === 'workingAge' ? window.WORKING_AGE : gameState.governance.policies[p];
+
+        html += `<div style="padding:4px 8px;background:rgba(0,0,0,0.15);border-radius:3px;margin-bottom:4px;font-size:12px">
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-weight:bold;color:var(--text-light)">${p}</span>
+            <span>effective: <span style="color:var(--text-gold)">${effective}</span></span>
+          </div>`;
+
+        if (pending !== null && pending !== undefined) {
+          html += `<div style="color:#c9a84c;font-size:11px">📝 Pending: → ${pending}</div>`;
+        }
+        if (lag) {
+          const progress = Math.round((1 - lag.turnsRemaining / lag.lagTurns) * 100);
+          html += `<div style="color:#6ca0dc;font-size:11px">⏳ ${lag.startValue} → ${lag.target} | ${lag.turnsRemaining}/${lag.lagTurns}t | ${lag.category} | ${progress}%</div>`;
+        }
+        if (!lag && (pending === null || pending === undefined)) {
+          html += `<div style="color:var(--text-dim);font-size:11px">— no activity —</div>`;
+        }
+
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Policy lag system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'resistance') {
+    const r = gameState.resistance;
+    if (r) {
+      const faction = r.faction;
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">✊ Resistance State</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span>Pressure:</span>
+            <span style="color:var(--text-gold);font-weight:bold">${r.pressure.toFixed(1)}</span>
+          </div>
+          <div style="height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden;margin-bottom:6px">
+            <div style="height:100%;width:${Math.min(100,r.pressure)}%;background:${r.pressure >= 60 ? '#cc6633' : r.pressure >= 25 ? '#ccaa33' : '#666'};transition:width 0.3s"></div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+            <button class="dev-btn" onclick="gameState.resistance.pressure=0; renderDevTabContent();" style="font-size:11px">Set 0</button>
+            <button class="dev-btn" onclick="gameState.resistance.pressure=25; renderDevTabContent();" style="font-size:11px">Set 25</button>
+            <button class="dev-btn" onclick="gameState.resistance.pressure=40; renderDevTabContent();" style="font-size:11px">Set 40</button>
+            <button class="dev-btn" onclick="gameState.resistance.pressure=60; renderDevTabContent();" style="font-size:11px">Set 60</button>
+            <button class="dev-btn" onclick="gameState.resistance.pressure=80; renderDevTabContent();" style="font-size:11px">Set 80</button>
+            <button class="dev-btn" onclick="gameState.resistance.pressure=95; renderDevTabContent();" style="font-size:11px">Set 95</button>
+          </div>
+        </div>
+
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>Suppression count: <strong>${r.suppressionCount}</strong></div>
+          <div>Recurrence multiplier: <strong>${r.recurrenceMultiplier.toFixed(2)}×</strong></div>
+        </div>
+
+        <h4 style="color:var(--text-light);margin:8px 0 4px">Faction</h4>
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>Active: <strong>${faction.active ? 'Yes' : 'No'}</strong></div>
+          ${faction.active ? `<div>Name: <strong>${faction.name}</strong></div>
+          <div>Leader: <strong>${faction.leader}</strong></div>
+          <div>Disposition: <strong>${faction.disposition}</strong></div>
+          <div>Formal influence: <strong>${faction.formalInfluence ? 'Yes' : 'No'}</strong></div>
+          <div>Promises: <strong>${faction.promiseRegistry.length}</strong></div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          ${!faction.active ? `<button class="dev-btn" onclick="gameState.resistance.pressure=42; if(window.processResistance)window.processResistance({events:[]}); renderDevTabContent();" style="font-size:11px">Activate Faction</button>` : ''}
+          ${faction.active ? `<button class="dev-btn" onclick="window.shiftDisposition(-1); renderDevTabContent();" style="font-size:11px">Disposition −</button>
+          <button class="dev-btn" onclick="window.shiftDisposition(1); renderDevTabContent();" style="font-size:11px">Disposition +</button>
+          <button class="dev-btn" onclick="window.addPromise('Dev test promise', gameState.turn+8, true); renderDevTabContent();" style="font-size:11px">Add Promise</button>` : ''}
+        </div>
+
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          TC consensus policies: ${Object.keys(r.tcConsensusPolicies).filter(k => r.tcConsensusPolicies[k]).join(', ') || 'none'}
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Resistance system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'crime') {
+    const c = gameState.crime;
+    if (c) {
+      const detection = window.getJusticeHallDetection ? window.getJusticeHallDetection() : 0;
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">⚖️ Crime State</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Theft:</span><span style="color:#ccaa33;font-weight:bold">${c.theft.toFixed(2)}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Violence:</span><span style="color:#cc6633;font-weight:bold">${c.violence.toFixed(2)}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Transgression:</span><span style="color:#9966cc;font-weight:bold">${c.transgression.toFixed(2)}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;border-top:1px solid rgba(255,255,255,0.1);padding-top:4px"><span>Overall Severity:</span><span style="font-weight:bold">${c.overallSeverity.toFixed(2)}</span></div>
+        </div>
+
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>Organized predation: <strong>${c.organizedPredation ? 'YES' : 'No'}</strong> (${c.organizedPredationTurns} turns above threshold)</div>
+          <div>Crackdown cooldown: <strong>${c.crackdownCooldown}</strong></div>
+          <div>Justice Hall detection: <strong>${detection}</strong>/3</div>
+        </div>
+
+        <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">🔧 Dev Controls</h4>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="gameState.crime.theft=0;gameState.crime.violence=0;gameState.crime.transgression=0;gameState.crime.overallSeverity=0;gameState.crime.organizedPredation=false;gameState.crime.organizedPredationTurns=0; renderDevTabContent();" style="font-size:11px">Reset All</button>
+          <button class="dev-btn" onclick="gameState.crime.theft=8;gameState.crime.violence=4;gameState.crime.transgression=3;gameState.crime.overallSeverity=15; renderDevTabContent();" style="font-size:11px">Set High</button>
+          <button class="dev-btn" onclick="gameState.crime.theft=12;gameState.crime.violence=8;gameState.crime.transgression=6;gameState.crime.overallSeverity=26;gameState.crime.organizedPredation=true;gameState.crime.organizedPredationTurns=5; renderDevTabContent();" style="font-size:11px">Set Organized</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="gameState.crime.theft+=3; gameState.crime.overallSeverity=gameState.crime.theft+gameState.crime.violence+gameState.crime.transgression; renderDevTabContent();" style="font-size:11px">Theft +3</button>
+          <button class="dev-btn" onclick="gameState.crime.violence+=3; gameState.crime.overallSeverity=gameState.crime.theft+gameState.crime.violence+gameState.crime.transgression; renderDevTabContent();" style="font-size:11px">Violence +3</button>
+          <button class="dev-btn" onclick="gameState.crime.transgression+=3; gameState.crime.overallSeverity=gameState.crime.theft+gameState.crime.violence+gameState.crime.transgression; renderDevTabContent();" style="font-size:11px">Transgression +3</button>
+          <button class="dev-btn" onclick="if(window.performCrackdown)window.performCrackdown(); renderDevTabContent();" style="font-size:11px">Crackdown</button>
+        </div>
+
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          Crime is driven by low interpersonal trust and material scarcity. Justice Hall suppresses crime when staffed.
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Crime system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'immigration') {
+    const imm = gameState.immigration;
+    if (imm) {
+      const ps = imm.parallelSociety;
+      const totalPipeline = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2];
+      const psChildren = ps.childCohorts.reduce((s, c) => s + c.count, 0);
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">🚶 Immigration State</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Pressure:</span><span style="font-weight:bold">${imm.pressure}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:2px"><span>Last arrivals:</span><span style="font-weight:bold">${imm.lastArrivals}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;border-top:1px solid rgba(255,255,255,0.1);padding-top:4px">
+            <span>Pipeline total:</span><span style="font-weight:bold">${totalPipeline}</span>
+          </div>
+        </div>
+
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>Arrivals (C0): <strong>${imm.cohorts[0]}</strong></div>
+          <div>Residents (C1): <strong>${imm.cohorts[1]}</strong></div>
+          <div>Participants (C2): <strong>${imm.cohorts[2]}</strong></div>
+          <div>Integrating (C3): <strong>${imm.cohorts[3]}</strong></div>
+        </div>
+
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>PS Strength: <strong>${(ps.strength * 100).toFixed(1)}%</strong></div>
+          <div>PS Population: <strong>${ps.population}</strong> adults, <strong>${psChildren}</strong> children</div>
+          <div>Intervention: <strong>${imm.interventionActive || 'none'}</strong> (${imm.interventionTurns}t)</div>
+          <div>Lifetime: <strong>${imm.lifetimeArrivals}</strong> arrived, <strong>${imm.lifetimeIntegrated}</strong> integrated</div>
+        </div>
+
+        <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">🔧 Dev Controls</h4>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="gameState.immigration.cohorts[0]+=5; renderDevTabContent();" style="font-size:11px">+5 Arrivals</button>
+          <button class="dev-btn" onclick="gameState.immigration.cohorts[0]+=20; renderDevTabContent();" style="font-size:11px">+20 Arrivals</button>
+          <button class="dev-btn" onclick="gameState.immigration.cohorts=[0,0,0,0]; renderDevTabContent();" style="font-size:11px">Clear Pipeline</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="gameState.immigration.parallelSociety.strength=0.20; gameState.immigration.parallelSociety.population=5; renderDevTabContent();" style="font-size:11px">PS 20%</button>
+          <button class="dev-btn" onclick="gameState.immigration.parallelSociety.strength=0.50; gameState.immigration.parallelSociety.population=15; renderDevTabContent();" style="font-size:11px">PS 50%</button>
+          <button class="dev-btn" onclick="gameState.immigration.parallelSociety.strength=0.80; gameState.immigration.parallelSociety.population=30; renderDevTabContent();" style="font-size:11px">PS 80%</button>
+          <button class="dev-btn" onclick="gameState.immigration.parallelSociety.strength=0; gameState.immigration.parallelSociety.population=0; gameState.immigration.parallelSociety.childCohorts=[]; renderDevTabContent();" style="font-size:11px">Reset PS</button>
+        </div>
+
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+          Immigration starts at turn 12. Pipeline gated by trust thresholds. PS crystallizes at 18% unintegrated ratio.
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Immigration system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'class') {
+    const cs = gameState.classSystem;
+    if (cs) {
+      const BASES = window.STRATIFICATION_BASES;
+      const basisName = cs.basis ? BASES[cs.basis]?.name : 'None';
+      const d = cs.differentials;
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">⚖️ Class System State</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div>Active: <strong style="color:${cs.active ? '#6cb66c' : '#cc6644'}">${cs.active}</strong></div>
+          <div>Basis: <strong>${basisName}</strong></div>
+          <div>Privileged: <strong>${cs.privilegedCount}</strong> (${Math.round(cs.privilegedRatio * 100)}%)</div>
+          <div>Differentials: Econ=${d.economic} Legal=${d.legal} Polit=${d.political} Social=${d.social}</div>
+          <div>Crime multiplier: <strong>${window.getClassMultiplier ? window.getClassMultiplier().toFixed(2) : '1.00'}</strong></div>
+          <div>Trust reduction: <strong>${window.getInterpersonalTrustReduction ? window.getInterpersonalTrustReduction().toFixed(3) : '0'}</strong></div>
+          ${cs.dismantlementEffects ? `<div style="color:#cc6644">Dismantlement aftermath: ${cs.dismantlementEffects.turnsRemaining}t sat / ${cs.dismantlementEffects.trustDriftTurnsRemaining}t trust</div>` : ''}
+          ${cs.basisChangeEffects ? `<div style="color:#ccaa33">Basis change disruption: ${cs.basisChangeEffects.turnsRemaining}t</div>` : ''}
+          ${Object.keys(cs.pendingDifferentials).length > 0 ? `<div style="color:#ccaa33">Pending: ${Object.entries(cs.pendingDifferentials).map(([k,v]) => `${k}→${v.target} (${v.turnsRemaining}t)`).join(', ')}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="if(!gameState.classSystem.active){window.activateClassSystem('property');} renderDevTabContent();" style="font-size:11px">Activate (Property)</button>
+          <button class="dev-btn" onclick="if(!gameState.classSystem.active){window.activateClassSystem('lineage');} renderDevTabContent();" style="font-size:11px">Activate (Lineage)</button>
+          <button class="dev-btn" onclick="if(!gameState.classSystem.active){window.activateClassSystem('religious');} renderDevTabContent();" style="font-size:11px">Activate (Religious)</button>
+          <button class="dev-btn" onclick="if(!gameState.classSystem.active){window.activateClassSystem('military');} renderDevTabContent();" style="font-size:11px">Activate (Military)</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="if(gameState.classSystem.active){gameState.classSystem.differentials={economic:2,legal:2,political:2,social:2};} renderDevTabContent();" style="font-size:11px">Max Differentials</button>
+          <button class="dev-btn" onclick="if(gameState.classSystem.active){gameState.classSystem.differentials={economic:0,legal:0,political:0,social:0};} renderDevTabContent();" style="font-size:11px">Zero Differentials</button>
+          <button class="dev-btn" onclick="if(gameState.classSystem.active){window.dismantleClassSystem();} renderDevTabContent();" style="font-size:11px">Dismantle</button>
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Class system not initialized</div>`;
+    }
   }
 
   container.innerHTML = html;
@@ -635,6 +968,20 @@ export function devCreateUnit(unitType) {
   }
 }
 
+export function devSetResource(key, value) {
+  const v = parseFloat(value);
+  if (isNaN(v)) return;
+  gameState.resources[key] = Math.max(0, v);
+  renderDevTabContent();
+  window.updateAllUI();
+}
+
+export function devAddResource(key, amount) {
+  gameState.resources[key] = Math.max(0, (gameState.resources[key] || 0) + amount);
+  renderDevTabContent();
+  window.updateAllUI();
+}
+
 export function devGiveResources() {
   gameState.resources.materials += 50;
   gameState.population.idle += 25;
@@ -699,47 +1046,22 @@ export function toggleFogOfWar() {
   fogOfWarDisabled = !fogOfWarDisabled;
 
   if (fogOfWarDisabled) {
+    // Mark everything visible
     for (let r = 0; r < window.MAP_ROWS; r++) {
       for (let c = 0; c < window.MAP_COLS; c++) {
+        gameState.visibilityMap[r][c] = 2;
         gameState.map[r][c].revealed = true;
       }
     }
   } else {
+    // Reset all to unexplored, then recompute from current sources
     for (let r = 0; r < window.MAP_ROWS; r++) {
       for (let c = 0; c < window.MAP_COLS; c++) {
+        gameState.visibilityMap[r][c] = 0;
         gameState.map[r][c].revealed = false;
       }
     }
-
-    for (const settlement of gameState.settlements) {
-      window.revealArea(settlement.col, settlement.row, 3);
-    }
-
-    for (let r = 0; r < window.MAP_ROWS; r++) {
-      for (let c = 0; c < window.MAP_COLS; c++) {
-        if (window.isInTerritory(c, r)) {
-          gameState.map[r][c].revealed = true;
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const nr = r + dr;
-              const nc = c + dc;
-              if (nr >= 0 && nr < window.MAP_ROWS && nc >= 0 && nc < window.MAP_COLS) {
-                const distance = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nc, nr));
-                if (distance <= 1) {
-                  gameState.map[nr][nc].revealed = true;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    for (const unit of gameState.units) {
-      if (unit.type === 'scout') {
-        window.revealArea(unit.col, unit.row, 2);
-      }
-    }
+    if (window.recomputeVisibility) window.recomputeVisibility();
   }
 
   updateDevBadge();

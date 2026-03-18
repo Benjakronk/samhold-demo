@@ -61,6 +61,13 @@ export function resolveCombat(unit, threat) {
   let unitCombat = unitType.combat * (unit.health / 100); // reduced by damage
   let threatCombat = threatType.combat * (threat.health / threat.maxHealth);
 
+  // Apply military rule combat bonuses if active
+  const milBonuses = window.getMilitaryCombatBonuses ? window.getMilitaryCombatBonuses() : null;
+  if (milBonuses) {
+    unitCombat *= (1 + milBonuses.attackBonus);
+    threatCombat *= (1 - milBonuses.defenseBonus);
+  }
+
   // Add some randomness (±25%)
   const unitRoll = 0.75 + Math.random() * 0.5;
   const threatRoll = 0.75 + Math.random() * 0.5;
@@ -152,6 +159,9 @@ export function processCombatPhase(report) {
       window.gameState.population.employed -= unitType.cost.population;
       window.gameState.population.total -= unitType.cost.population;
 
+      // Notify governance system of combat defeat (military rule fragility)
+      if (window.onCombatDefeat) window.onCombatDefeat();
+
       // Loss affects cohesion differently based on unit type
       if (deadUnit.type === 'elder') {
         window.gameState.cohesion.identity = Math.max(0, window.gameState.cohesion.identity - 20);
@@ -176,6 +186,9 @@ export function processCombatPhase(report) {
       window.gameState.cohesion.satisfaction = Math.min(100, window.gameState.cohesion.satisfaction + 5);
       const threatName = window.THREAT_TYPES[deadThreat.type]?.name || 'threat';
       if (window.addChronicleEntry) window.addChronicleEntry(`The ${threatName} were defeated. The people celebrated their defenders and felt safer in their land.`, 'military');
+
+      // Notify governance system of combat victory (military rule commander strength)
+      if (window.onCombatVictory) window.onCombatVictory();
     }
   }
 

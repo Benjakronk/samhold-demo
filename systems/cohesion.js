@@ -401,7 +401,14 @@ export function calculateIdentityPillar() {
     identity = Math.min(identity + 0.2, 70);
   }
 
-  window.gameState.cohesion.identity = Math.max(0, Math.min(100, identity));
+  // Apply interpersonal trust rate limiter to positive growth only
+  const prevIdentity = window.gameState.cohesion.identity;
+  identity = Math.max(0, Math.min(100, identity));
+  if (identity > prevIdentity && window.getInterpersonalRateLimiter) {
+    const limiter = window.getInterpersonalRateLimiter();
+    identity = prevIdentity + (identity - prevIdentity) * limiter;
+  }
+  window.gameState.cohesion.identity = identity;
 }
 
 /**
@@ -528,7 +535,14 @@ export function calculateBondsPillar() {
     bonds = Math.min(45, bonds + baseDecay);
   }
 
-  window.gameState.cohesion.bonds = Math.max(0, Math.min(100, bonds));
+  // Apply interpersonal trust rate limiter to positive growth only
+  const prevBonds = window.gameState.cohesion.bonds;
+  bonds = Math.max(0, Math.min(100, bonds));
+  if (bonds > prevBonds && window.getInterpersonalRateLimiter) {
+    const limiter = window.getInterpersonalRateLimiter();
+    bonds = prevBonds + (bonds - prevBonds) * limiter;
+  }
+  window.gameState.cohesion.bonds = bonds;
 }
 
 /**

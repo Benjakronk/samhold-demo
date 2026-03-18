@@ -118,6 +118,20 @@ export const BUILDINGS = {
     upkeepMaterials: 1,    // flat 1 material/turn regardless of state (paid from processSocietyBuildings)
     description: 'A permanent monument commemorating your history. Grants Identity +3 on completion. Requires 1 material/turn upkeep.'
   },
+  admin_hall: {
+    name: 'Administrative Hall',
+    icon: '📜',
+    cost: { materials: 12 },
+    buildTurns: 3,
+    validTerrain: ['grassland', 'hills'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 3,
+    isSocietyBuilding: true,
+    legitimacyYield: 0.08,
+    upkeepMaterials: 1,
+    description: 'The seat of governance. Staffed workers reduce policy lag by up to 30%. Generates Legitimacy.'
+  },
   meeting_hall: {
     name: 'Meeting Hall',
     icon: '🏛️',
@@ -131,6 +145,47 @@ export const BUILDINGS = {
     legitimacyYield: 0.12,
     upkeepMaterials: 1,
     description: 'A place for governance and deliberation. Generates Legitimacy and eases governance transitions.'
+  },
+  market: {
+    name: 'Market',
+    icon: '🏪',
+    cost: { materials: 12 },
+    buildTurns: 3,
+    validTerrain: ['grassland', 'hills', 'forest'],
+    foodBonus: 0,
+    materialBonus: 2,
+    maxWorkers: 2,
+    satisfactionPerWorker: 0.10, // hybrid: economic yield + satisfaction side-effect
+    description: 'A gathering place for trade. Generates materials from commerce and boosts Satisfaction.'
+  },
+  festival_grounds: {
+    name: 'Festival Grounds',
+    icon: '🎪',
+    cost: { materials: 14 },
+    buildTurns: 4,
+    validTerrain: ['grassland', 'hills', 'forest'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 2,
+    isSocietyBuilding: true,
+    satisfactionYield: 0.08,
+    upkeepMaterials: 0,
+    traditionAmplifier: 0.15, // per staffed worker, adds to tradition bonus multiplier when traditions fire
+    description: 'Open grounds for celebrations. Amplifies the effects of traditions and generates Satisfaction.'
+  },
+  justice_hall: {
+    name: 'Justice Hall',
+    icon: '⚖️',
+    cost: { materials: 10 },
+    buildTurns: 3,
+    validTerrain: ['grassland', 'hills', 'forest'],
+    foodBonus: 0,
+    materialBonus: 0,
+    maxWorkers: 3,
+    isSocietyBuilding: true,
+    legitimacyYield: 0.06,
+    upkeepMaterials: 1,
+    description: 'Detects and suppresses crime. Staffed workers reveal crime rates and reduce criminal activity. Generates Legitimacy.'
   },
   watchtower: {
     name: 'Watchtower', icon: '🗼',

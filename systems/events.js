@@ -1,410 +1,14 @@
 // Event System for Samhold
 // Extracted from main game file for modular architecture
 
+// Event Library - single source of truth in data/events.js
+import { EVENT_LIBRARY } from '../data/events.js';
+
 // Constants (access from window object for compatibility)
 const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
 const FOOD_PER_POP = 2;
 const FOOD_PER_CHILD = 1;
 let WORKING_AGE = 10;
-
-// Event Library - All game events defined here
-const EVENT_LIBRARY = {
-  harshWinter: {
-    id: 'harshWinter',
-    title: 'Harsh Winter Approaches',
-    category: 'environmental',
-    triggers: {
-      seasons: ['autumn'],
-      minTurn: 8,
-      probability: 0.20,
-      conditions: [
-        { type: 'resource', resource: 'food', operator: '<', value: 200 }
-      ]
-    },
-    description: 'Weather signs suggest this winter will be especially harsh. Your people look to you for guidance on how to prepare.',
-    choices: [
-      {
-        id: 'stockpile',
-        text: 'Mandate food stockpiling',
-        description: 'Force all families to save extra food for the harsh months ahead',
-        consequences: {
-          immediate: { satisfaction: -8, legitimacy: -3 },
-          winter: { winterFoodReduction: 0.3 }
-        }
-      },
-      {
-        id: 'gather',
-        text: 'Organize gathering expeditions',
-        description: 'Send workers to collect winter provisions from the wilderness',
-        consequences: {
-          immediate: { food: 25, satisfaction: 3, materials: 5 },
-          requirements: { population: 15 }
-        }
-      },
-      {
-        id: 'trust',
-        text: 'Trust in our resilience',
-        description: 'Have faith that we will endure as we always have',
-        consequences: {
-          immediate: { identity: 5, bonds: 3, legitimacy: 2 },
-          winter: { starvationMultiplier: 1.3 }
-        }
-      }
-    ]
-  },
-
-  religiousSchism: {
-    id: 'religiousSchism',
-    title: 'Religious Disagreement',
-    category: 'social',
-    triggers: {
-      seasons: ['spring', 'summer', 'autumn'],
-      minTurn: 12,
-      probability: 0.15,
-      conditions: [
-        { type: 'governance', model: 'theocracy', negate: true },
-        { type: 'cohesion', pillar: 'identity', operator: '>', value: 65 }
-      ]
-    },
-    description: 'A dispute has arisen about proper rituals and beliefs. Some call for returning to older ways, while others embrace new interpretations.',
-    choices: [
-      {
-        id: 'enforce',
-        text: 'Enforce orthodox practices',
-        description: 'Firmly establish which beliefs are correct',
-        consequences: {
-          immediate: { legitimacy: 6, identity: -4, satisfaction: -5 },
-          effects: { traditionBonus: 3 }
-        }
-      },
-      {
-        id: 'allow',
-        text: 'Allow diverse interpretations',
-        description: 'Let people practice as they see fit',
-        consequences: {
-          immediate: { satisfaction: 4, identity: -2, bonds: -3 },
-          effects: { freedomBonus: 2 }
-        }
-      },
-      {
-        id: 'council',
-        text: 'Call a council of elders',
-        description: 'Let the community decide together',
-        consequences: {
-          immediate: { legitimacy: 2, bonds: 4 },
-          requirements: { governance: 'tribalCouncil' },
-          delay: 2
-        }
-      }
-    ]
-  },
-
-  refugeeArrival: {
-    id: 'refugeeArrival',
-    title: 'Refugees Seek Shelter',
-    category: 'external',
-    triggers: {
-      seasons: ['spring', 'summer'],
-      minTurn: 15,
-      probability: 0.12,
-      conditions: [
-        { type: 'cohesion', pillar: 'satisfaction', operator: '>', value: 50 }
-      ]
-    },
-    description: 'A small group of displaced people arrives at your borders, seeking shelter from troubles in distant lands. They look hungry and desperate.',
-    choices: [
-      {
-        id: 'welcome',
-        text: 'Welcome them warmly',
-        description: 'Offer food, shelter, and full membership in our society',
-        consequences: {
-          immediate: { population: 4, food: -30, satisfaction: 3, bonds: 5 },
-          effects: { identityDilution: true }
-        }
-      },
-      {
-        id: 'cautious',
-        text: 'Accept with conditions',
-        description: 'Allow them to stay but they must prove their worth',
-        consequences: {
-          immediate: { population: 2, food: -15, legitimacy: 2 },
-          delay: 4,
-          followUp: 'refugeeIntegration'
-        }
-      },
-      {
-        id: 'refuse',
-        text: 'Turn them away',
-        description: 'We cannot afford to feed more mouths',
-        consequences: {
-          immediate: { identity: -6, satisfaction: -8, legitimacy: -4 },
-          effects: { isolationBonus: 2 }
-        }
-      }
-    ]
-  },
-
-  tradeOpportunity: {
-    id: 'tradeOpportunity',
-    title: 'Traveling Merchants',
-    category: 'economic',
-    triggers: {
-      seasons: ['spring', 'summer', 'autumn'],
-      minTurn: 10,
-      probability: 0.18,
-      conditions: [
-        { type: 'resource', resource: 'materials', operator: '>', value: 50 }
-      ]
-    },
-    description: 'A group of traveling merchants has arrived, offering to trade exotic goods for your materials. Their wares could benefit your people, but at a cost.',
-    choices: [
-      {
-        id: 'trade',
-        text: 'Accept the trade',
-        description: 'Exchange materials for exotic goods and knowledge',
-        consequences: {
-          immediate: { materials: -40, satisfaction: 6, knowledge: 8 }
-        }
-      },
-      {
-        id: 'negotiate',
-        text: 'Attempt to negotiate',
-        description: 'Try to get better terms through diplomacy',
-        consequences: {
-          immediate: { materials: -25, satisfaction: 3, knowledge: 4, legitimacy: 2 },
-          requirements: { governance: 'chieftainship', negate: true }
-        }
-      },
-      {
-        id: 'decline',
-        text: 'Politely decline',
-        description: 'Keep our resources but miss the opportunity',
-        consequences: {
-          immediate: { identity: 3, satisfaction: -2 }
-        }
-      }
-    ]
-  },
-
-  powerStruggle: {
-    id: 'powerStruggle',
-    title: 'Challenge to Leadership',
-    category: 'governance',
-    triggers: {
-      seasons: ['spring', 'summer', 'autumn', 'winter'],
-      minTurn: 20,
-      probability: 0.12,
-      conditions: [
-        { type: 'cohesion', pillar: 'legitimacy', operator: '<', value: 40 },
-        { type: 'population', operator: '>', value: 25 }
-      ]
-    },
-    description: 'A charismatic rival has emerged, questioning your leadership and promising a different path for the settlement. Support is growing for their vision.',
-    choices: [
-      {
-        id: 'confront',
-        text: 'Confront them directly',
-        description: 'Challenge their claims in a public forum',
-        consequences: {
-          immediate: { legitimacy: 8, satisfaction: -4, bonds: -5 },
-          requirements: { governance: 'autocracy' }
-        }
-      },
-      {
-        id: 'compromise',
-        text: 'Seek compromise',
-        description: 'Offer to share power and incorporate their ideas',
-        consequences: {
-          immediate: { legitimacy: 3, satisfaction: 5, bonds: 2, identity: -2 },
-          effects: { sharedPower: true }
-        }
-      },
-      {
-        id: 'step_down',
-        text: 'Consider stepping aside',
-        description: 'Perhaps new leadership is what the people need',
-        consequences: {
-          immediate: { legitimacy: -10, satisfaction: 3, bonds: 6, identity: 4 },
-          effects: { leadershipChange: true }
-        }
-      }
-    ]
-  },
-
-  mysteriousDisease: {
-    id: 'mysteriousDisease',
-    title: 'Strange Illness Spreads',
-    category: 'crisis',
-    triggers: {
-      seasons: ['autumn', 'winter'],
-      minTurn: 12,
-      probability: 0.08,
-      conditions: [
-        { type: 'population', operator: '>', value: 30 }
-      ]
-    },
-    description: 'A mysterious ailment has begun affecting your people. They suffer from weakness and fever. The elders debate whether this is natural or supernatural.',
-    choices: [
-      {
-        id: 'quarantine',
-        text: 'Enforce strict quarantine',
-        description: 'Isolate the sick to prevent further spread',
-        consequences: {
-          immediate: { satisfaction: -6, bonds: -4, legitimacy: 3 },
-          effects: { diseaseContained: true }
-        }
-      },
-      {
-        id: 'herbs',
-        text: 'Gather medicinal herbs',
-        description: 'Send expeditions to find healing plants',
-        consequences: {
-          immediate: { satisfaction: 4, bonds: 2, population: -2 },
-          requirements: { buildings: ['Hunting Camp'], minCount: 1 }
-        }
-      },
-      {
-        id: 'ritual',
-        text: 'Perform healing rituals',
-        description: 'Call upon spiritual forces for aid',
-        consequences: {
-          immediate: { identity: 6, satisfaction: 3, legitimacy: 2 },
-          effects: { spiritualHealing: true }
-        }
-      }
-    ]
-  },
-
-  abundantHarvest: {
-    id: 'abundantHarvest',
-    title: 'Exceptional Harvest',
-    category: 'environmental',
-    triggers: {
-      seasons: ['autumn'],
-      minTurn: 6,
-      probability: 0.15,
-      conditions: [
-        { type: 'buildings', building: 'Farm', operator: '>=', value: 2 }
-      ]
-    },
-    description: 'The harvest this season has exceeded all expectations. Your granaries overflow with grain, and your people speak of prosperity.',
-    choices: [
-      {
-        id: 'celebrate',
-        text: 'Hold a great feast',
-        description: 'Celebrate our good fortune with the entire community',
-        consequences: {
-          immediate: { food: -30, satisfaction: 8, bonds: 6, identity: 4 }
-        }
-      },
-      {
-        id: 'store',
-        text: 'Store the surplus',
-        description: 'Save the extra food for leaner times',
-        consequences: {
-          immediate: { food: 60, satisfaction: 2, legitimacy: 3 }
-        }
-      },
-      {
-        id: 'expand',
-        text: 'Plan expansion',
-        description: 'Use our prosperity to grow the settlement',
-        consequences: {
-          immediate: { food: 20, materials: 15, satisfaction: 4 },
-          effects: { expansionBonus: 2 }
-        }
-      }
-    ]
-  },
-
-  explorerReturn: {
-    id: 'explorerReturn',
-    title: 'Explorer Returns with News',
-    category: 'exploration',
-    triggers: {
-      seasons: ['spring', 'summer'],
-      minTurn: 18,
-      probability: 0.10,
-      conditions: [
-        { type: 'revealed_hexes', operator: '>', value: 150 }
-      ]
-    },
-    description: 'One of your scouts has returned from a long journey to distant lands, bringing tales of what lies beyond your territory.',
-    choices: [
-      {
-        id: 'new_site',
-        text: 'Investigate the new site',
-        description: 'Send a party to explore the promising location they described',
-        consequences: {
-          immediate: { satisfaction: 5, knowledge: 6, population: -2 },
-          delay: 6,
-          followUp: 'explorationResult'
-        }
-      },
-      {
-        id: 'trade_route',
-        text: 'Establish trade contact',
-        description: 'Focus on building relationships with distant settlements',
-        consequences: {
-          immediate: { materials: 20, satisfaction: 3, bonds: -2 },
-          effects: { tradeRoute: true }
-        }
-      },
-      {
-        id: 'stay_home',
-        text: 'Focus on home',
-        description: 'The outside world is interesting, but we have work here',
-        consequences: {
-          immediate: { identity: 4, legitimacy: 2, satisfaction: -1 }
-        }
-      }
-    ]
-  },
-
-  innovationBreakthrough: {
-    id: 'innovationBreakthrough',
-    title: 'Technological Discovery',
-    category: 'cultural',
-    triggers: {
-      seasons: ['spring', 'summer', 'autumn', 'winter'],
-      minTurn: 15,
-      probability: 0.12,
-      conditions: [
-        { type: 'resource', resource: 'knowledge', operator: '>', value: 60 },
-        { type: 'buildings', building: 'Lumber Camp', operator: '>=', value: 1 }
-      ]
-    },
-    description: 'Your craftspeople have developed an improved technique that could benefit the entire settlement. The question is how to implement this advancement.',
-    choices: [
-      {
-        id: 'share_freely',
-        text: 'Share knowledge freely',
-        description: 'Teach everyone the new methods immediately',
-        consequences: {
-          immediate: { satisfaction: 6, bonds: 4, materials: 10, legitimacy: 2 }
-        }
-      },
-      {
-        id: 'guild_control',
-        text: 'Form a craft guild',
-        description: 'Create a formal organization to control and refine the technique',
-        consequences: {
-          immediate: { materials: 5, legitimacy: 4, bonds: -2, satisfaction: -3 },
-          effects: { craftGuild: true }
-        }
-      },
-      {
-        id: 'leadership_only',
-        text: 'Keep it restricted',
-        description: 'Only trusted leaders should control this knowledge',
-        consequences: {
-          immediate: { legitimacy: 6, satisfaction: -8, bonds: -6, identity: -3 },
-          effects: { secretKnowledge: true }
-        }
-      }
-    ]
-  }
-};
 
 // Event game state tracking
 let activeEvents = [];
@@ -517,19 +121,147 @@ function evaluateCondition(condition) {
       result = evaluateOperator(gameState.population.total, operator, value);
       break;
 
-    case 'buildings':
+    case 'buildings': {
       if (condition.building) {
-        const buildingCount = gameState.buildings.filter(b =>
-          b.type === condition.building && b.constructionTurns === 0
-        ).length;
+        // Scan the map grid for completed buildings matching by key or display name
+        let buildingCount = 0;
+        const bKey = condition.building.toLowerCase().replace(/\s+/g, '_');
+        for (let r = 0; r < (window.MAP_ROWS || 16); r++) {
+          for (let c = 0; c < (window.MAP_COLS || 20); c++) {
+            const hex = gameState.map?.[r]?.[c];
+            if (!hex || !hex.building || (hex.buildProgress ?? 0) > 0) continue;
+            if (hex.building === bKey || window.BUILDINGS?.[hex.building]?.name === condition.building) {
+              buildingCount++;
+            }
+          }
+        }
         result = evaluateOperator(buildingCount, operator, value);
       }
       break;
+    }
 
-    case 'revealed_hexes':
-      const revealedCount = gameState.revealedHexes ? gameState.revealedHexes.size : 0;
+    case 'revealed_hexes': {
+      let revealedCount = 0;
+      if (gameState.visibilityMap) {
+        for (let r = 0; r < gameState.visibilityMap.length; r++) {
+          for (let c = 0; c < (gameState.visibilityMap[r]?.length ?? 0); c++) {
+            if (gameState.visibilityMap[r][c] > 0) revealedCount++;
+          }
+        }
+      }
       result = evaluateOperator(revealedCount, operator, value);
       break;
+    }
+
+    case 'policy': {
+      const policyValue = gameState.governance?.policies?.[condition.policy] ?? 50;
+      result = evaluateOperator(policyValue, operator, value);
+      break;
+    }
+
+    case 'tradition_count':
+      result = evaluateOperator(gameState.traditions?.length ?? 0, operator, value);
+      break;
+
+    case 'has_stories':
+      result = evaluateOperator(gameState.culture?.stories?.length ?? 0, operator, value);
+      break;
+
+    case 'has_sacred_site':
+      result = gameState.culture?.sacredSiteBuilt ? Object.values(gameState.culture.sacredSiteBuilt).some(v => v) : false;
+      break;
+
+    case 'warriors': {
+      const warriorCount = (gameState.units ?? []).filter(u => u.type === 'warrior').length;
+      result = evaluateOperator(warriorCount, operator, value);
+      break;
+    }
+
+    case 'threats_active':
+      result = evaluateOperator((gameState.externalThreats ?? []).length, operator, value);
+      break;
+
+    case 'custom': {
+      const r = gameState.resistance;
+      switch (condition.check) {
+        case 'resistanceFactionActive':
+          result = r?.faction?.active === true;
+          break;
+        case 'resistancePressureAbove50':
+          result = (r?.pressure ?? 0) > 50;
+          break;
+        case 'resistanceOrganized':
+          result = (r?.pressure ?? 0) >= 60;
+          break;
+        case 'resistanceRadical':
+          result = (r?.pressure ?? 0) >= 95;
+          break;
+        case 'resistancePressureBelow30':
+          result = r?.faction?.active === true && (r?.pressure ?? 0) < 30;
+          break;
+        case 'crimeOverallAbove5':
+          result = (gameState.crime?.overallSeverity ?? 0) > 5;
+          break;
+        case 'crimeOverallAbove8':
+          result = (gameState.crime?.overallSeverity ?? 0) > 8;
+          break;
+        case 'crimeOrganized':
+          result = gameState.crime?.organizedPredation === true;
+          break;
+        case 'justiceHallDetectionAbove0':
+          result = (window.getJusticeHallDetection ? window.getJusticeHallDetection() : 0) > 0;
+          break;
+        case 'immigrationPressureHigh':
+          result = (gameState.immigration?.pressure ?? 0) >= 5;
+          break;
+        case 'borderClosed':
+          result = (gameState.governance?.policies?.isolation ?? 50) >= 80;
+          break;
+        case 'immigrationPipelineActive': {
+          const imm = gameState.immigration;
+          result = imm && (imm.cohorts[1] + imm.cohorts[2]) >= 3;
+          break;
+        }
+        case 'parallelSocietyAbove40':
+          result = (gameState.immigration?.parallelSociety?.strength ?? 0) >= 0.40;
+          break;
+        case 'coerciveInterventionActive':
+          result = gameState.immigration?.interventionActive === 'coercive';
+          break;
+        case 'recentLargeIntake':
+          result = (gameState.immigration?.lastArrivals ?? 0) >= 4;
+          break;
+        // Class system conditions
+        case 'classSystemActive':
+          result = gameState.classSystem?.active === true;
+          break;
+        case 'classHighDifferential': {
+          const diffs = gameState.classSystem?.differentials;
+          result = diffs && (diffs.economic + diffs.legal + diffs.political + diffs.social) >= 3;
+          break;
+        }
+        case 'recentDifferentialReduction':
+          // True if any pending differential is a decrease (tracked by recent application)
+          result = gameState.classSystem?.active === true &&
+            Object.values(gameState.classSystem?.pendingDifferentials || {}).some(p => !p.isIncrease);
+          break;
+        case 'classLineageBasis':
+          result = gameState.classSystem?.basis === 'lineage';
+          break;
+        case 'classReligiousBasis':
+          result = gameState.classSystem?.basis === 'religious';
+          break;
+        case 'classMilitaryBasis':
+          result = gameState.classSystem?.basis === 'military';
+          break;
+        case 'fewActiveThreats':
+          result = (gameState.externalThreats?.length ?? 0) <= 1;
+          break;
+        default:
+          result = false;
+      }
+      break;
+    }
   }
 
   return negate ? !result : result;
@@ -727,6 +459,61 @@ function generateEventFeedback(stateBefore, consequences) {
     feedback.push(`📜 This decision may lead to future events`);
   }
 
+  // Trust effects feedback
+  const trustEffects = consequences.immediate?.trustEffects;
+  if (trustEffects) {
+    if (trustEffects.institutional) {
+      const dir = trustEffects.institutional > 0 ? 'strengthened' : 'shaken';
+      feedback.push(`🏛️ Trust in institutions was ${dir}`);
+    }
+    if (trustEffects.interpersonal) {
+      const dir = trustEffects.interpersonal > 0 ? 'strengthened' : 'damaged';
+      feedback.push(`🫂 Trust between people was ${dir}`);
+    }
+  }
+
+  // Resistance effects feedback
+  const resistanceEffects = consequences.immediate?.resistanceEffects;
+  if (resistanceEffects) {
+    if (resistanceEffects.suppress) {
+      feedback.push('✊ The resistance was suppressed by force');
+    } else if (resistanceEffects.pressureChange) {
+      const dir = resistanceEffects.pressureChange < 0 ? 'eased' : 'intensified';
+      feedback.push(`✊ Political tensions ${dir}`);
+    }
+    if (resistanceEffects.dispositionShift) {
+      const dir = resistanceEffects.dispositionShift < 0 ? 'softened' : 'hardened';
+      feedback.push(`✊ The opposition's stance has ${dir}`);
+    }
+    if (resistanceEffects.promise) {
+      feedback.push('📜 A binding promise was made to the opposition');
+    }
+    if (resistanceEffects.formalInfluence) {
+      feedback.push('🏛️ The opposition was granted formal influence');
+    }
+  }
+
+  // Immigration effects feedback
+  const immigrationEffects = consequences.immediate?.immigrationEffects;
+  if (immigrationEffects) {
+    if (immigrationEffects.addArrivals) {
+      feedback.push(`🚶 ${immigrationEffects.addArrivals} immigrants entered the community`);
+    }
+    if (immigrationEffects.cancelIntervention) {
+      feedback.push('📜 The intervention policy was abandoned');
+    }
+  }
+
+  // Crime effects feedback
+  const crimeEffects = consequences.immediate?.crimeEffects;
+  if (crimeEffects) {
+    if (crimeEffects.severityReduction > 0) {
+      feedback.push('⚖️ Crime has been reduced');
+    } else if (crimeEffects.severityReduction < 0) {
+      feedback.push('⚖️ Crime may worsen as a result');
+    }
+  }
+
   return feedback;
 }
 
@@ -883,6 +670,66 @@ function applyImmediateEffects(effects) {
       ));
     }
   });
+
+  // Apply trust deviations if specified
+  if (effects.trustEffects && window.applyTrustDeviation) {
+    if (effects.trustEffects.institutional) {
+      window.applyTrustDeviation('institutional', effects.trustEffects.institutional);
+    }
+    if (effects.trustEffects.interpersonal) {
+      window.applyTrustDeviation('interpersonal', effects.trustEffects.interpersonal);
+    }
+  }
+
+  // Apply resistance effects if specified
+  if (effects.resistanceEffects) {
+    const re = effects.resistanceEffects;
+    if (re.pressureChange && window.addResistancePressure) {
+      window.addResistancePressure(re.pressureChange);
+    }
+    if (re.dispositionShift && window.shiftDisposition) {
+      window.shiftDisposition(re.dispositionShift);
+    }
+    if (re.suppress && window.suppressResistance) {
+      window.suppressResistance();
+    }
+    if (re.formalInfluence && gameState.resistance?.faction) {
+      gameState.resistance.faction.formalInfluence = { granted: gameState.turn };
+    }
+    if (re.promise && window.addPromise) {
+      window.addPromise(re.promise.description, gameState.turn + (re.promise.turns || 16), re.promise.binding !== false);
+    }
+  }
+
+  // Apply immigration effects if specified
+  if (effects.immigrationEffects) {
+    const ie = effects.immigrationEffects;
+    if (ie.addArrivals && gameState.immigration) {
+      gameState.immigration.cohorts[0] += ie.addArrivals;
+      gameState.immigration.lifetimeArrivals += ie.addArrivals;
+    }
+    if (ie.cancelIntervention && gameState.immigration) {
+      gameState.immigration.interventionActive = null;
+      gameState.immigration.interventionTurns = 0;
+    }
+  }
+
+  // Apply crime effects if specified
+  if (effects.crimeEffects) {
+    const ce = effects.crimeEffects;
+    if (ce.severityReduction && gameState.crime) {
+      const reduction = ce.severityReduction;
+      // Distribute reduction across tracks proportionally
+      const c = gameState.crime;
+      const total = c.theft + c.violence + c.transgression;
+      if (total > 0) {
+        c.theft = Math.max(0, c.theft - reduction * (c.theft / total));
+        c.violence = Math.max(0, c.violence - reduction * (c.violence / total));
+        c.transgression = Math.max(0, c.transgression - reduction * (c.transgression / total));
+        c.overallSeverity = c.theft + c.violence + c.transgression;
+      }
+    }
+  }
 }
 
 function calculateContextualModifiers(effects) {

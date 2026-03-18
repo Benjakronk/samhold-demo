@@ -66,10 +66,12 @@ function recomputeVisibility() {
     markVisible(unit.col, unit.row, visionRadius);
   }
 
-  // Step 2b: Settlements — each provides SETTLEMENT_VISION radius
-  const settVision = window.SETTLEMENT_VISION ?? 2;
-  for (const s of gameState.settlements) {
-    markVisible(s.col, s.row, settVision);
+  // Step 2b: Territory hexes — mark each territory hex and 1 hex beyond it visible.
+  // Iterating all territory hexes (not just settlement center) means vision correctly
+  // follows territory shape, including future expansions.
+  for (const key of gameState.territory) {
+    const [tc, tr] = key.split(',').map(Number);
+    markVisible(tc, tr, 1);
   }
 
   // Step 2c: Completed, staffed watchtowers — use building def's visionRadius

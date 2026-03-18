@@ -224,6 +224,34 @@ function drawHexStatic(hex, size) {
     mapCtx.restore();
   }
 
+  // Market marker — light yellow-green commercial glow
+  if (hex.building === 'market' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.2, dx, dy, size * 1.0);
+    grd.addColorStop(0, 'rgba(180,200,60,0)');
+    grd.addColorStop(0.5, 'rgba(180,200,60,0.15)');
+    grd.addColorStop(1, 'rgba(160,190,50,0.40)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
+  // Festival Grounds marker — warm amber/festive glow
+  if (hex.building === 'festival_grounds' && hex.buildProgress <= 0) {
+    mapCtx.save();
+    drawHexPath(mapCtx, dx, dy, size);
+    mapCtx.clip();
+    const grd = mapCtx.createRadialGradient(dx, dy, size * 0.2, dx, dy, size * 1.0);
+    grd.addColorStop(0, 'rgba(240,180,60,0)');
+    grd.addColorStop(0.5, 'rgba(240,180,60,0.18)');
+    grd.addColorStop(1, 'rgba(220,140,40,0.45)');
+    mapCtx.fillStyle = grd;
+    mapCtx.fillRect(dx - size, dy - size, size * 2, size * 2);
+    mapCtx.restore();
+  }
+
   // Named terrain feature label is drawn in screen-space in drawFeatureLabels()
   // so that font size stays legible regardless of zoom level.
 

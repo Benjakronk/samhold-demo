@@ -81,7 +81,7 @@ function zoneDistance(from, to) {
 export function processValues(report) {
   if (!gameState.valueTracking) return;
 
-  const axes = ['freedom', 'mercy', 'tradition', 'workingAge', 'rationPriority'];
+  const axes = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge', 'rationPriority'];
 
   for (const axis of axes) {
     const tracking = gameState.valueTracking[axis];
@@ -210,7 +210,7 @@ export function getRecognizedValues() {
 // Get tracking status for all axes (for UI display of progress toward crystallization)
 export function getValueTrackingStatus() {
   const status = [];
-  const axes = ['freedom', 'mercy', 'tradition', 'workingAge', 'rationPriority'];
+  const axes = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge', 'rationPriority'];
 
   for (const axis of axes) {
     const tracking = gameState.valueTracking[axis];

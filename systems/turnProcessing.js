@@ -230,12 +230,33 @@ function processTurn() {
   // Process fortification construction
   if (window.processFortificationConstruction) window.processFortificationConstruction();
 
+  // Process policy lag (advance in-progress policy changes, update effective values)
+  if (window.processPolicyLag) window.processPolicyLag(report);
+
+  // Process resistance (pressure generation, faction effects, promise checks)
+  if (window.processResistance) window.processResistance(report);
+
+  // Process crime (theft, violence, transgression — reads trust, feeds into resistance)
+  if (window.processCrime) window.processCrime(report);
+
+  // Process immigration (pipeline advancement, parallel society, cohort drain)
+  if (window.processImmigration) window.processImmigration(report);
+
+  // Process governance model-specific effects (monarchy succession, military decay, democracy votes)
+  if (window.processGovernanceTurn) window.processGovernanceTurn(report);
+
   // Process shared values (crystallization, violation, bonuses)
   if (window.processValues) window.processValues(report);
+
+  // Process class system (differential effects, privileged class recalc, temporary effects)
+  if (window.processClassSystem) window.processClassSystem(report);
 
   // Calculate cohesion system (includes Working Age effects)
   window.calculateCohesion();
   window.applyCohesionEffects();
+
+  // Process trust system (drifts trust toward baselines after cohesion update)
+  if (window.processTrust) window.processTrust();
 
   // DEBUG: log food and satisfaction state after turn processing
   {

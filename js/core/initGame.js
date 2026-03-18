@@ -261,6 +261,36 @@ export function initGameCore(seed) {
     console.log('🧭 Values system initialized');
   }
 
+  if (window.initTrust) {
+    window.initTrust(gameState);
+    console.log('🤝 Trust system initialized');
+  }
+
+  if (window.initPolicyLag) {
+    window.initPolicyLag(gameState);
+    console.log('📋 Policy lag system initialized');
+  }
+
+  if (window.initResistance) {
+    window.initResistance(gameState);
+    console.log('✊ Resistance system initialized');
+  }
+
+  if (window.initCrime) {
+    window.initCrime(gameState);
+    console.log('⚖️ Crime system initialized');
+  }
+
+  if (window.initImmigration) {
+    window.initImmigration(gameState);
+    console.log('🚶 Immigration system initialized');
+  }
+
+  if (window.initClassSystem) {
+    window.initClassSystem(gameState);
+    console.log('⚖️ Class system initialized');
+  }
+
   if (window.initFortifications) {
     window.initFortifications(gameState);
     console.log('🛡️ Fortifications system initialized');

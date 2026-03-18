@@ -47,8 +47,19 @@ import * as BuildingActions from '../systems/buildingActions.js';
 import * as Chronicle from '../systems/chronicle.js';
 import * as Culture from '../systems/culture.js';
 import * as Values from '../systems/values.js';
+import * as Trust from '../systems/trust.js';
+import * as PolicyLag from '../systems/policyLag.js';
+import * as Resistance from '../systems/resistance.js';
+import * as Crime from '../systems/crime.js';
+import * as Immigration from '../systems/immigration.js';
 import * as Fortifications from '../systems/fortifications.js';
+import * as ClassSystem from '../systems/classSystem.js';
 import { FORTIFICATIONS, WALL_INSET } from '../data/fortifications.js';
+import {
+  STRATIFICATION_BASES, DIFFERENTIALS, ACTIVATION_COSTS, DISMANTLEMENT_COSTS,
+  BASIS_CHANGE_COSTS, MIN_TURNS_FOR_ACTIVATION, AFFINITY_BONUS, AFFINITY_PENALTY,
+  CRIME_MULTIPLIER_WEIGHTS, ALIGNMENT_MULTIPLIERS
+} from '../data/classSystem.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -59,6 +70,16 @@ window.GOVERNANCE_MODELS = GOVERNANCE_MODELS;
 window.EVENT_LIBRARY = EVENT_LIBRARY;
 window.FORTIFICATIONS = FORTIFICATIONS;
 window.WALL_INSET = WALL_INSET;
+window.STRATIFICATION_BASES = STRATIFICATION_BASES;
+window.DIFFERENTIALS = DIFFERENTIALS;
+window.ACTIVATION_COSTS = ACTIVATION_COSTS;
+window.DISMANTLEMENT_COSTS = DISMANTLEMENT_COSTS;
+window.BASIS_CHANGE_COSTS = BASIS_CHANGE_COSTS;
+window.MIN_TURNS_FOR_ACTIVATION = MIN_TURNS_FOR_ACTIVATION;
+window.AFFINITY_BONUS = AFFINITY_BONUS;
+window.AFFINITY_PENALTY = AFFINITY_PENALTY;
+window.CRIME_MULTIPLIER_WEIGHTS = CRIME_MULTIPLIER_WEIGHTS;
+window.ALIGNMENT_MULTIPLIERS = ALIGNMENT_MULTIPLIERS;
 
 // Export constants individually for compatibility
 window.MAP_COLS = CONSTANTS.MAP_COLS;
@@ -66,7 +87,6 @@ window.MAP_ROWS = CONSTANTS.MAP_ROWS;
 window.HEX_SIZE = CONSTANTS.HEX_SIZE;
 window.MAP_PAD = CONSTANTS.MAP_PAD;
 window.TERRITORY_RADIUS = CONSTANTS.TERRITORY_RADIUS;
-window.SETTLEMENT_VISION = CONSTANTS.SETTLEMENT_VISION;
 window.FOOD_PER_POP = CONSTANTS.FOOD_PER_POP;
 window.FOOD_PER_CHILD = CONSTANTS.FOOD_PER_CHILD;
 window.WORKING_AGE_MIN = CONSTANTS.WORKING_AGE_MIN;
@@ -116,6 +136,12 @@ window.adjustWorkingAge = Governance.adjustWorkingAge;
 window.getPolicyLabel = Governance.getPolicyLabel;
 window.getWorkingAgeLabel = Governance.getWorkingAgeLabel;
 window.updatePolicySummary = Governance.updatePolicySummary;
+window.checkModelRequirements = Governance.checkModelRequirements;
+window.processGovernanceTurn = Governance.processGovernanceTurn;
+window.getMilitaryCombatBonuses = Governance.getMilitaryCombatBonuses;
+window.onCombatVictory = Governance.onCombatVictory;
+window.onCombatDefeat = Governance.onCombatDefeat;
+window.getPolicyConstraints = Governance.getPolicyConstraints;
 
 // Event system
 window.checkEventTriggers = Events.checkEventTriggers;
@@ -252,6 +278,7 @@ window.toggleTrainingSection = SidePanel.toggleTrainingSection;
 window.toggleCultureSection = SidePanel.toggleCultureSection;
 window.toggleFortificationsSection = SidePanel.toggleFortificationsSection;
 window.selectFortEdge = SidePanel.selectFortEdge;
+window.deselectFortEdge = SidePanel.deselectFortEdge;
 
 // Overlay Manager system
 window.initOverlayManager = OverlayManager.initOverlayManager;
@@ -316,6 +343,8 @@ window.devTriggerEvent = DevPanel.devTriggerEvent;
 window.devClearEventCooldowns = DevPanel.devClearEventCooldowns;
 window.devCreateUnit = DevPanel.devCreateUnit;
 window.devGiveResources = DevPanel.devGiveResources;
+window.devSetResource = DevPanel.devSetResource;
+window.devAddResource = DevPanel.devAddResource;
 window.devSpawnThreat = DevPanel.devSpawnThreat;
 window.devAddPopulation = DevPanel.devAddPopulation;
 window.devMaxCohesion = DevPanel.devMaxCohesion;
@@ -584,6 +613,7 @@ window.processSacredPlaces = Culture.processSacredPlaces;
 window.processSocietyBuildings = Culture.processSocietyBuildings;
 window.confirmBuildMonument = Culture.confirmBuildMonument;
 window.hasSettlementMeetingHall = Culture.hasSettlementMeetingHall;
+window.hasSettlementMarket = Culture.hasSettlementMarket;
 window.getMonumentRestoreCost = Culture.getMonumentRestoreCost;
 window.activateStewardTend = Culture.activateStewardTend;
 window.deactivateStewardTend = Culture.deactivateStewardTend;
@@ -615,6 +645,182 @@ window.getValueTrackingStatus = Values.getValueTrackingStatus;
 window.openValuesOverlay = Values.openValuesOverlay;
 window.closeValuesOverlay = Values.closeValuesOverlay;
 window.VALUE_DEFINITIONS = Values.VALUE_DEFINITIONS;
+
+// Trust system
+window.initTrust = Trust.initTrust;
+window.processTrust = Trust.processTrust;
+window.applyTrustDeviation = Trust.applyTrustDeviation;
+window.getInterpersonalRateLimiter = Trust.getInterpersonalRateLimiter;
+window.getTrustState = Trust.getTrustState;
+window.calculateTrustBaselines = Trust.calculateTrustBaselines;
+
+// Policy Lag system
+window.initPolicyLag = PolicyLag.initPolicyLag;
+window.processPolicyLag = PolicyLag.processPolicyLag;
+window.setPendingPolicy = PolicyLag.setPendingPolicy;
+window.discardPendingPolicy = PolicyLag.discardPendingPolicy;
+window.discardAllPending = PolicyLag.discardAllPending;
+window.commitPolicyChange = PolicyLag.commitPolicyChange;
+window.commitAllPending = PolicyLag.commitAllPending;
+window.abandonPolicyChange = PolicyLag.abandonPolicyChange;
+window.forcePolicyChange = PolicyLag.forcePolicyChange;
+window.getPolicyLagState = PolicyLag.getPolicyLagState;
+window.hasAnyPolicyActivity = PolicyLag.hasAnyPolicyActivity;
+window.activeLagCount = PolicyLag.activeLagCount;
+window.pendingCount = PolicyLag.pendingCount;
+window.classifyPolicyChange = PolicyLag.classifyPolicyChange;
+window.calculateEffectiveLag = PolicyLag.calculateEffectiveLag;
+window.getAdminHallReduction = PolicyLag.getAdminHallReduction;
+
+// Resistance system
+window.initResistance = Resistance.initResistance;
+window.processResistance = Resistance.processResistance;
+window.getResistanceState = Resistance.getResistanceState;
+window.suppressResistance = Resistance.suppressResistance;
+window.negotiateResistance = Resistance.negotiateResistance;
+window.reverseContestedPolicy = Resistance.reverseContestedPolicy;
+window.addResistancePressure = Resistance.addResistancePressure;
+window.shiftDisposition = Resistance.shiftDisposition;
+window.getDispositionLabel = Resistance.getDispositionLabel;
+window.isOrganizedResistance = Resistance.isOrganizedResistance;
+window.addPromise = Resistance.addPromise;
+window.fulfillPromise = Resistance.fulfillPromise;
+
+// Crime system
+window.initCrime = Crime.initCrime;
+window.processCrime = Crime.processCrime;
+window.getCrimeState = Crime.getCrimeState;
+window.getCrimeClimateText = Crime.getCrimeClimateText;
+window.getJusticeHallDetection = Crime.getJusticeHallDetection;
+window.performCrackdown = Crime.performCrackdown;
+
+// Immigration system
+window.initImmigration = Immigration.initImmigration;
+window.processImmigration = Immigration.processImmigration;
+window.getImmigrationState = Immigration.getImmigrationState;
+window.getImmigrantWorkforce = Immigration.getImmigrantWorkforce;
+window.getImmigrantFoodConsumption = Immigration.getImmigrantFoodConsumption;
+window.getLoyalPopulation = Immigration.getLoyalPopulation;
+window.getImmigrationClimateText = Immigration.getImmigrationClimateText;
+window.startIntervention = Immigration.startIntervention;
+window.cancelIntervention = Immigration.cancelIntervention;
+
+// Class System
+window.initClassSystem = ClassSystem.initClassSystem;
+window.activateClassSystem = ClassSystem.activateClassSystem;
+window.dismantleClassSystem = ClassSystem.dismantleClassSystem;
+window.changeBasis = ClassSystem.changeBasis;
+window.requestDifferentialChange = ClassSystem.requestDifferentialChange;
+window.cancelDifferentialChange = ClassSystem.cancelDifferentialChange;
+window.processClassSystem = ClassSystem.processClassSystem;
+window.getClassMultiplier = ClassSystem.getClassMultiplier;
+window.getInterpersonalTrustReduction = ClassSystem.getInterpersonalTrustReduction;
+window.getIntegrationThresholdModifier = ClassSystem.getIntegrationThresholdModifier;
+window.getClassSystemState = ClassSystem.getClassSystemState;
+
+// Class system UI helpers (confirm dialogs for activation, differential changes, dismantlement)
+window.confirmActivateClassSystem = function(basis) {
+  const BASES = window.STRATIFICATION_BASES;
+  const baseDef = BASES[basis];
+  if (!baseDef) return;
+  window.showConfirmDialog(
+    `Establish ${baseDef.name} Class System?`,
+    `Formalizing inequality is a major governance decision.<br><br>` +
+    `${baseDef.icon} <strong>${baseDef.name}:</strong> ${baseDef.description}<br><br>` +
+    `<strong>Cost:</strong> Legitimacy −10, Satisfaction −8, Resistance +15<br>` +
+    `<em>This cannot be easily undone.</em>`,
+    'Establish', 'Cancel',
+    () => {
+      const result = window.activateClassSystem(basis);
+      if (result.success) {
+        window.renderGovernanceOverlay();
+        window.updateAllUI();
+      }
+    }
+  );
+};
+
+window.confirmDifferentialChange = function(dimension, targetTier) {
+  const DIFFS = window.DIFFERENTIALS;
+  const def = DIFFS[dimension];
+  const cs = window.gameState.classSystem;
+  const currentTier = cs.differentials[dimension];
+  const isIncrease = targetTier > currentTier;
+
+  const confirmFn = isIncrease ? window.showConfirmDialogNonDestructive : window.showConfirmDialog;
+  const verb = isIncrease ? 'Increase' : 'Reduce';
+  const warning = isIncrease ? '' : '<br><br>⚠️ Reducing privilege will trigger resistance from the privileged class.';
+
+  confirmFn(
+    `${verb} ${def.name} Differential?`,
+    `Change from "${def.tiers[currentTier].label}" to "${def.tiers[targetTier].label}".<br><br>` +
+    `${def.tiers[targetTier].description}${warning}`,
+    verb, 'Cancel',
+    () => {
+      const result = window.requestDifferentialChange(dimension, targetTier);
+      if (result.success) {
+        window.renderGovernanceOverlay();
+      }
+    }
+  );
+};
+
+window.showChangeBasisDialog = function() {
+  const BASES = window.STRATIFICATION_BASES;
+  const cs = window.gameState.classSystem;
+  let body = 'Changing the stratification basis reclassifies the entire population.<br><br>' +
+    '<strong>Cost:</strong> Legitimacy −15, Resistance +20, Satisfaction −5 for 3 turns<br><br>';
+  for (const [key, base] of Object.entries(BASES)) {
+    if (key === cs.basis) continue;
+    const alignment = base.governanceAlignment[window.gameState.governance.model] || 'moderate';
+    body += `<button class="detail-btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px"
+      onclick="window.closeDialog(); window.confirmChangeBasis('${key}')">
+      ${base.icon} <strong>${base.name}</strong> <span style="color:var(--text-dim)">(${alignment})</span><br>
+      <small style="color:var(--text-dim)">${base.description}</small>
+    </button>`;
+  }
+  window.showConfirmDialog('Change Stratification Basis', body, '', 'Cancel', () => {});
+  const okBtn = document.getElementById('confirm-ok');
+  if (okBtn) okBtn.style.display = 'none';
+};
+
+window.confirmChangeBasis = function(newBasis) {
+  const BASES = window.STRATIFICATION_BASES;
+  window.showConfirmDialog(
+    `Change to ${BASES[newBasis].name}?`,
+    `This is a major governance event. Adults will be reclassified — some gain privilege, others lose it.<br><br>` +
+    `<strong>Cost:</strong> Legitimacy −15, Resistance +20, Satisfaction −5 for 3 turns`,
+    'Change Basis', 'Cancel',
+    () => {
+      const result = window.changeBasis(newBasis);
+      if (result.success) {
+        window.renderGovernanceOverlay();
+        window.updateAllUI();
+      }
+    }
+  );
+};
+
+window.confirmDismantleClassSystem = function() {
+  window.showConfirmDialog(
+    'Dismantle the Class System?',
+    `This abolishes all formal stratification immediately.<br><br>` +
+    `<strong>Costs:</strong><br>` +
+    `• Legitimacy −20 (privileged class withdraws consent)<br>` +
+    `• Resistance +25 (immediate spike)<br>` +
+    `• Satisfaction −12 among former privileged for 4 turns<br>` +
+    `• Institutional trust drift for 5 turns<br><br>` +
+    `<em>This triggers the most severe resistance event in the game.</em>`,
+    'Dismantle', 'Cancel',
+    () => {
+      const result = window.dismantleClassSystem();
+      if (result.success) {
+        window.renderGovernanceOverlay();
+        window.updateAllUI();
+      }
+    }
+  );
+};
 
 // Building Actions system
 window.initBuildingActions = BuildingActions.initBuildingActions;

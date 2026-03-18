@@ -135,6 +135,87 @@ function updateCohesionDisplay() {
       }
     }
   }
+
+  updateTrustClimate();
+}
+
+function updateTrustClimate() {
+  const el = document.getElementById('trust-climate');
+  if (!el) return;
+  const t = window.getTrustState ? window.getTrustState() : null;
+  if (!t) { el.innerHTML = ''; return; }
+
+  const instLine = _instClimateText(t.institutional);
+  const interLine = _interClimateText(t.interpersonal);
+  const limitNote = (t.rateLimiter < 0.75)
+    ? { text: 'Social wounds are slowing cultural growth.', cls: 'warning' }
+    : null;
+
+  let html = '<div class="trust-climate-box">';
+  html += '<div class="trust-climate-label">Social Climate</div>';
+  html += `<div class="trust-climate-line ${instLine.cls}">🏛️ ${instLine.text}</div>`;
+  html += `<div class="trust-climate-line ${interLine.cls}">🫂 ${interLine.text}</div>`;
+  if (limitNote) {
+    html += `<div class="trust-climate-line ${limitNote.cls}" style="margin-top:3px;font-style:italic">${limitNote.text}</div>`;
+  }
+
+  // Resistance warning
+  const resistance = window.getResistanceState ? window.getResistanceState() : null;
+  if (resistance && resistance.pressure >= 25) {
+    const rLine = _resistanceClimateText(resistance);
+    html += `<div class="trust-climate-line ${rLine.cls}" style="margin-top:3px">✊ ${rLine.text}</div>`;
+  }
+
+  // Crime warning
+  const crimeClimate = window.getCrimeClimateText ? window.getCrimeClimateText() : null;
+  if (crimeClimate) {
+    html += `<div class="trust-climate-line ${crimeClimate.cls}" style="margin-top:3px">⚖️ ${crimeClimate.text}</div>`;
+  }
+
+  // Immigration warning
+  const immClimate = window.getImmigrationClimateText ? window.getImmigrationClimateText() : null;
+  if (immClimate) {
+    html += `<div class="trust-climate-line ${immClimate.cls}" style="margin-top:3px">🚶 ${immClimate.text}</div>`;
+  }
+
+  // Class system warning
+  const classState = window.getClassSystemState ? window.getClassSystemState() : null;
+  if (classState?.active) {
+    const totalDiff = classState.differentials.economic + classState.differentials.legal + classState.differentials.political + classState.differentials.social;
+    if (totalDiff >= 6) {
+      html += `<div class="trust-climate-line danger" style="margin-top:3px">⚖️ Extreme inequality strains all social bonds.</div>`;
+    } else if (totalDiff >= 3) {
+      html += `<div class="trust-climate-line warning" style="margin-top:3px">⚖️ Class divisions generate resentment among commons.</div>`;
+    } else if (totalDiff > 0) {
+      html += `<div class="trust-climate-line" style="margin-top:3px">⚖️ Formal stratification is in effect.</div>`;
+    }
+  }
+
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+function _instClimateText(v) {
+  if (v >= 0.75) return { text: 'Your authority is trusted and respected.', cls: 'good' };
+  if (v >= 0.55) return { text: 'Most accept the decisions made in their name.', cls: '' };
+  if (v >= 0.35) return { text: 'Doubts about leadership are quietly spreading.', cls: 'warning' };
+  return { text: 'Many openly question the right of anyone to rule.', cls: 'danger' };
+}
+
+function _interClimateText(v) {
+  if (v >= 0.75) return { text: 'Neighbors help one another without being asked.', cls: 'good' };
+  if (v >= 0.50) return { text: 'People cooperate, though not without wariness.', cls: '' };
+  if (v >= 0.30) return { text: 'Social tensions make cooperation difficult.', cls: 'warning' };
+  return { text: 'The community has turned inward — strangers are feared.', cls: 'danger' };
+}
+
+function _resistanceClimateText(r) {
+  if (r.pressure >= 95) return { text: 'Open revolt threatens to destroy everything.', cls: 'danger' };
+  if (r.pressure >= 80) return { text: `"${r.faction.name}" grows hostile — people speak of leaving.`, cls: 'danger' };
+  if (r.pressure >= 60) return { text: `Organized resistance is disrupting governance.`, cls: 'warning' };
+  if (r.pressure >= 40) return { text: `"${r.faction.name}" speaks for the discontented.`, cls: 'warning' };
+  return { text: 'Murmurs of discontent can be heard among the people.', cls: '' };
 }
 
 function updateValuesDisplay() {

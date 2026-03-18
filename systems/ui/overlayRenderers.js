@@ -271,6 +271,47 @@ function selectAndFocusUnit(unitId) {
 
 // ---- GOVERNANCE OVERLAY ----
 
+function getModelSpecificDetails(modelKey) {
+  const gs = gameState;
+  if (modelKey === 'monarchy' && gs.governance.monarchy?.currentRuler) {
+    const mon = gs.governance.monarchy;
+    const qualityBar = '█'.repeat(Math.round(mon.currentRuler.quality * 5)) + '░'.repeat(5 - Math.round(mon.currentRuler.quality * 5));
+    return `
+      <div style="margin-top: 12px; font-weight: bold; color: var(--text-gold);">Dynasty: ${mon.dynastyName}</div>
+      <div class="model-detail-row">• Ruler: ${mon.currentRuler.name} (quality: ${qualityBar})</div>
+      <div class="model-detail-row">• Heir: ${mon.heir ? mon.heir.name : '<span style="color:var(--accent-red)">None — succession risk!</span>'}</div>
+      <div class="model-detail-row">• Dynasty age: ${mon.dynastyAge} turns</div>
+      ${mon.successionCrisisActive ? '<div class="model-detail-row" style="color:var(--accent-red)">⚠️ Succession crisis active!</div>' : ''}
+    `;
+  }
+  if (modelKey === 'militaryRule') {
+    const mil = gs.governance.militaryRule;
+    const strengthBar = '█'.repeat(Math.round((mil.commanderStrength ?? 1) * 5)) + '░'.repeat(5 - Math.round((mil.commanderStrength ?? 1) * 5));
+    return `
+      <div style="margin-top: 12px; font-weight: bold; color: var(--text-gold);">Military Command</div>
+      <div class="model-detail-row">• Commander strength: ${strengthBar}</div>
+      <div class="model-detail-row">• Consecutive victories: ${mil.consecutiveVictories ?? 0}</div>
+      <div class="model-detail-row">• Turns in power: ${mil.turnsInPower ?? 0}</div>
+      <div class="model-detail-row">• Combat bonuses: +30% attack, +20% defense</div>
+      <div class="model-detail-row" style="color:orange">• Freedom locked to 20 max. Satisfaction erodes each turn.</div>
+    `;
+  }
+  if (modelKey === 'democracy') {
+    const dem = gs.governance.democracy;
+    const pendingStr = (dem.pendingPolicyChanges?.length > 0)
+      ? dem.pendingPolicyChanges.map(p => `${p.policy}: ${p.newValue} (${p.turnsRemaining} turns)`).join(', ')
+      : 'None';
+    return `
+      <div style="margin-top: 12px; font-weight: bold; color: var(--text-gold);">Democratic Governance</div>
+      <div class="model-detail-row">• Next election: ${dem.electionTimer ?? '?'} turns</div>
+      <div class="model-detail-row">• Voter satisfaction: ${Math.round(dem.voterSatisfaction ?? 50)}</div>
+      <div class="model-detail-row">• Pending votes: ${pendingStr}</div>
+      <div class="model-detail-row" style="color:orange">• Freedom locked to 40 min. Major policy changes take 2 turns.</div>
+    `;
+  }
+  return '';
+}
+
 function renderGovernanceOverlay() {
   document.querySelectorAll('.governance-tab').forEach(t => {
     t.onclick = () => window.switchGovernanceTab(t.dataset.tab);
@@ -286,11 +327,17 @@ function renderGovernanceOverlay() {
     const transitionText = isTransitioning ?
       `<div class="gov-model-transition">Transitioning... (${gameState.governance.modelChangeTimer} turns)</div>` : '';
 
+    // Check requirements for locked models
+    const req = window.checkModelRequirements ? window.checkModelRequirements(key) : { met: true, reasons: [] };
+    const isLocked = !isActive && !req.met;
+    const lockText = isLocked ? `<div class="gov-model-locked">🔒 ${req.reasons.join(', ')}</div>` : '';
+
     return `
-      <div class="gov-model ${isActive ? 'active' : ''}" onclick="selectGovernanceModel('${key}')">
+      <div class="gov-model ${isActive ? 'active' : ''} ${isLocked ? 'locked' : ''}" onclick="${isLocked ? '' : `selectGovernanceModel('${key}')`}" ${isLocked ? 'title="Requirements not met"' : ''}>
         <div class="gov-model-icon">${model.icon}</div>
         <div class="gov-model-name">${model.name}</div>
         <div class="gov-model-desc">${model.description}</div>
+        ${lockText}
         ${transitionText}
       </div>
     `;
@@ -317,36 +364,89 @@ function renderGovernanceOverlay() {
     <div class="model-detail-row">\u2022 Freedom policies: ${activeModel.policyEffects.freedom.multiplier}x effectiveness</div>
     <div class="model-detail-row">\u2022 Mercy policies: ${activeModel.policyEffects.mercy.multiplier}x effectiveness</div>
     <div class="model-detail-row">\u2022 Tradition policies: ${activeModel.policyEffects.tradition.multiplier}x effectiveness</div>
+    <div class="model-detail-row">\u2022 Isolation policies: ${activeModel.policyEffects.isolation?.multiplier ?? 1.0}x effectiveness</div>
+    ${getModelSpecificDetails(currentModel)}
   `;
 
   const policyHeaders = {
     freedom: 'Freedom vs Control',
     mercy: 'Justice & Punishment',
-    tradition: 'Culture & Change'
+    tradition: 'Culture & Change',
+    isolation: 'Borders & Contact'
   };
 
-  const policies = ['freedom', 'mercy', 'tradition'];
+  const policies = ['freedom', 'mercy', 'tradition', 'isolation'];
   policies.forEach(policy => {
     const slider = document.getElementById(`policy-${policy}`);
     const valueDisplay = document.getElementById(`policy-${policy}-value`);
     const header = document.getElementById(`policy-header-${policy}`);
 
-    slider.value = gameState.governance.policies[policy];
-    valueDisplay.textContent = gameState.governance.policies[policy];
+    // Apply governance-model policy constraints to slider
+    const constraints = window.getPolicyConstraints ? window.getPolicyConstraints(policy) : { min: 0, max: 100 };
+    slider.min = constraints.min;
+    slider.max = constraints.max;
 
-    const currentLevel = window.getPolicyLabel(policy, gameState.governance.policies[policy]);
-    header.textContent = `${policyHeaders[policy]} (${currentLevel})`;
+    // Show pending value (if set) or effective value on the slider
+    const lagState = window.getPolicyLagState ? window.getPolicyLagState(policy) : null;
+    const pendingVal = lagState?.pending;
+    const effectiveVal = gameState.governance.policies[policy] ?? 50;
+    const displayVal = pendingVal !== null && pendingVal !== undefined ? pendingVal : effectiveVal;
+    slider.value = displayVal;
+    valueDisplay.textContent = displayVal;
+
+    const currentLevel = window.getPolicyLabel(policy, effectiveVal);
+    const lagNote = lagState?.lag ? ` ⏳ → ${lagState.lag.target} (${lagState.lag.turnsRemaining}t)` : '';
+    header.textContent = `${policyHeaders[policy]} (${currentLevel})${lagNote}`;
 
     slider.oninput = (e) => {
       const newValue = parseInt(e.target.value);
       valueDisplay.textContent = newValue;
       window.adjustPolicy(policy, newValue);
-      const newLevel = window.getPolicyLabel(policy, newValue);
-      header.textContent = `${policyHeaders[policy]} (${newLevel})`;
+      renderPolicyLagStatus(policy);
+      renderPolicyBatchControls();
     };
+
+    // Render lag status for this policy
+    renderPolicyLagStatus(policy);
   });
 
-  // Ration priority radio buttons
+  // Immigration policy sliders (culturalOpenness, progressiveness) — static HTML, wired like main policies
+  const immigrationPolicies = ['culturalOpenness', 'progressiveness'];
+  const immigrationHeaders = {
+    culturalOpenness: 'Cultural Tolerance',
+    progressiveness: 'Integration Effort'
+  };
+  immigrationPolicies.forEach(policy => {
+    const slider = document.getElementById(`policy-${policy}`);
+    const valueDisplay = document.getElementById(`policy-${policy}-value`);
+    const header = document.getElementById(`policy-header-${policy}`);
+    if (!slider || !valueDisplay) return;
+
+    const lagState = window.getPolicyLagState ? window.getPolicyLagState(policy) : null;
+    const pendingVal = lagState?.pending;
+    const effectiveVal = gameState.governance.policies[policy] ?? 50;
+    const displayVal = pendingVal !== null && pendingVal !== undefined ? pendingVal : effectiveVal;
+    slider.value = displayVal;
+    valueDisplay.textContent = displayVal;
+
+    if (header) {
+      const currentLevel = window.getPolicyLabel ? window.getPolicyLabel(policy, effectiveVal) : '';
+      const lagNote = lagState?.lag ? ` ⏳ → ${lagState.lag.target} (${lagState.lag.turnsRemaining}t)` : '';
+      header.textContent = `${immigrationHeaders[policy]} (${currentLevel})${lagNote}`;
+    }
+
+    slider.oninput = (e) => {
+      const newValue = parseInt(e.target.value);
+      valueDisplay.textContent = newValue;
+      window.adjustPolicy(policy, newValue);
+      renderPolicyLagStatus(policy);
+      renderPolicyBatchControls();
+    };
+
+    renderPolicyLagStatus(policy);
+  });
+
+  // Ration priority radio buttons (instant — no lag)
   const rationPriority = gameState.governance.policies.rationPriority ?? 'people';
   document.querySelectorAll('input[name="ration-priority"]').forEach(radio => {
     radio.checked = radio.value === rationPriority;
@@ -360,27 +460,563 @@ function renderGovernanceOverlay() {
   const workingAgeHeader = document.getElementById('policy-header-working-age');
 
   if (workingAgeSlider) {
-    workingAgeSlider.value = window.WORKING_AGE;
+    // Show pending or effective
+    const waLag = window.getPolicyLagState ? window.getPolicyLagState('workingAge') : null;
+    const waPending = waLag?.pending;
+    const waEffective = window.WORKING_AGE;
+    const waDisplay = waPending !== null && waPending !== undefined ? waPending : waEffective;
+    workingAgeSlider.value = waDisplay;
     workingAgeSlider.oninput = (e) => {
-      window.adjustWorkingAge(parseInt(e.target.value) - window.WORKING_AGE);
+      const newAge = parseInt(e.target.value);
+      window.adjustWorkingAge(newAge - window.WORKING_AGE);
+      renderPolicyLagStatus('workingAge');
+      renderPolicyBatchControls();
     };
   }
 
   if (workingAgeDisplay) {
-    workingAgeDisplay.textContent = window.WORKING_AGE;
+    const waLag2 = window.getPolicyLagState ? window.getPolicyLagState('workingAge') : null;
+    const waDisp = waLag2?.pending !== null && waLag2?.pending !== undefined ? waLag2.pending : window.WORKING_AGE;
+    workingAgeDisplay.textContent = waDisp;
   }
   if (workingAgeHeader) {
     const ageLevel = window.getWorkingAgeLabel(window.WORKING_AGE);
-    workingAgeHeader.textContent = `Childhood & Labor (${ageLevel})`;
+    const waLag3 = window.getPolicyLagState ? window.getPolicyLagState('workingAge') : null;
+    const waLagNote = waLag3?.lag ? ` ⏳ → ${waLag3.lag.target} (${waLag3.lag.turnsRemaining}t)` : '';
+    workingAgeHeader.textContent = `Childhood & Labor (${ageLevel})${waLagNote}`;
   }
+
+  renderPolicyLagStatus('workingAge');
+  renderPolicyBatchControls();
+
+  // Render resistance panel content (always, so it's ready when tab is clicked)
+  renderResistancePanel();
+
+  // Render crime panel content
+  renderCrimePanel();
+
+  // Render immigration panel content
+  renderImmigrationPanel();
+
+  // Render class system panel content
+  renderClassPanel();
+}
+
+function renderPolicyLagStatus(policy) {
+  const el = document.getElementById(`policy-lag-${policy}`);
+  if (!el) return;
+
+  const lagState = window.getPolicyLagState ? window.getPolicyLagState(policy) : null;
+  if (!lagState) { el.innerHTML = ''; return; }
+
+  let html = '';
+  const { lag, pending, effective } = lagState;
+
+  // Show pending (uncommitted) state
+  if (pending !== null && pending !== undefined && pending !== effective && (!lag || pending !== lag.target)) {
+    const { category } = window.classifyPolicyChange
+      ? window.classifyPolicyChange(policy, Math.abs(pending - effective), pending - effective)
+      : { category: 'directive' };
+    const lagCalc = window.calculateEffectiveLag
+      ? window.calculateEffectiveLag(policy, pending, lag ? lag.startValue : effective)
+      : { turns: '?', category };
+
+    html += `<div class="policy-lag-row pending">
+      <span class="policy-lag-text">📝 Uncommitted: ${effective} → ${pending} (${lagCalc.turns}t ${lagCalc.category})</span>
+      <button class="policy-lag-btn commit" onclick="window.commitPolicyChange('${policy}'); renderGovernanceOverlay();">Commit</button>
+      <button class="policy-lag-btn discard" onclick="window.discardPendingPolicy('${policy}'); renderGovernanceOverlay();">Discard</button>
+    </div>`;
+  }
+
+  // Show active lag (committed, in progress)
+  if (lag) {
+    const progress = Math.round((1 - lag.turnsRemaining / lag.lagTurns) * 100);
+    const transType = lag.category === 'directive' ? 'snap' : 'interpolating';
+    html += `<div class="policy-lag-row active">
+      <span class="policy-lag-text">⏳ ${lag.startValue} → ${lag.target} (${lag.turnsRemaining}t left, ${transType})</span>
+      <button class="policy-lag-btn abandon" onclick="window.abandonPolicyChange('${policy}'); renderGovernanceOverlay();">Abandon</button>
+      <button class="policy-lag-btn force" onclick="window.forcePolicyChange('${policy}'); renderGovernanceOverlay();">Force</button>
+    </div>
+    <div class="policy-lag-progress"><div class="policy-lag-progress-fill" style="width:${progress}%"></div></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function renderPolicyBatchControls() {
+  const el = document.getElementById('policy-batch-controls');
+  if (!el) return;
+
+  const pCount = window.pendingCount ? window.pendingCount() : 0;
+  if (pCount === 0) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `
+    <button class="policy-batch-btn commit-all" onclick="window.commitAllPending(); renderGovernanceOverlay();">Commit All (${pCount})</button>
+    <button class="policy-batch-btn discard-all" onclick="window.discardAllPending(); renderGovernanceOverlay();">Discard All</button>
+  `;
+}
+
+function renderResistancePanel() {
+  const el = document.getElementById('resistance-panel-content');
+  if (!el) return;
+
+  const r = window.getResistanceState ? window.getResistanceState() : null;
+  if (!r) { el.innerHTML = '<p style="color:var(--text-dim)">Resistance system not active.</p>'; return; }
+
+  const thresholds = r.thresholds;
+  const pct = Math.min(100, r.pressure);
+
+  // Determine bar color
+  let barColor = 'var(--text-dim)';
+  if (pct >= 95) barColor = '#cc3333';
+  else if (pct >= 60) barColor = '#cc6633';
+  else if (pct >= 40) barColor = '#ccaa33';
+  else if (pct >= 25) barColor = '#999933';
+
+  // Pressure meter with threshold markers
+  let html = '<h3>Resistance Pressure</h3>';
+  html += `<div class="resistance-meter">
+    <div class="resistance-meter-bar" style="width:${pct}%;background:${barColor}"></div>
+    <div class="resistance-meter-mark" style="left:${thresholds.warning}%" title="Warning (${thresholds.warning})"></div>
+    <div class="resistance-meter-mark" style="left:${thresholds.faction}%" title="Faction (${thresholds.faction})"></div>
+    <div class="resistance-meter-mark" style="left:${thresholds.organized}%" title="Organized (${thresholds.organized})"></div>
+    <div class="resistance-meter-mark" style="left:${thresholds.hostile}%" title="Hostile (${thresholds.hostile})"></div>
+    <div class="resistance-meter-mark" style="left:${thresholds.radical}%" title="Radical (${thresholds.radical})"></div>
+  </div>`;
+  html += `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:2px">
+    <span>Calm (0)</span>
+    <span>Pressure: ${Math.round(pct)}</span>
+    <span>Crisis (100)</span>
+  </div>`;
+
+  // Status description
+  let statusText = 'The people are content.';
+  let statusCls = '';
+  if (pct >= 95) { statusText = 'Radical uprising threatens the entire society.'; statusCls = 'danger'; }
+  else if (pct >= 80) { statusText = 'Hostility is boiling over. Emigration is a real risk.'; statusCls = 'danger'; }
+  else if (pct >= 60) { statusText = 'Organized resistance is disrupting governance. Policy implementation is slowed.'; statusCls = 'warning'; }
+  else if (pct >= 40) { statusText = 'An opposition faction has formed and speaks for the discontented.'; statusCls = 'warning'; }
+  else if (pct >= 25) { statusText = 'Murmurs of discontent are growing. Advisors urge attention.'; statusCls = ''; }
+  html += `<div class="resistance-status ${statusCls}" style="margin:10px 0;padding:6px 8px;border-radius:4px;font-size:12px;">${statusText}</div>`;
+
+  // Faction card
+  if (r.faction.active) {
+    const dispLabel = window.getDispositionLabel ? window.getDispositionLabel(r.faction.disposition) : r.faction.disposition;
+    const dispCls = 'disposition-' + r.faction.disposition;
+    html += `<div class="faction-card">
+      <h3>The Faction</h3>
+      <div class="faction-name">"${r.faction.name}"</div>
+      <div class="faction-leader">Led by ${r.faction.leader}</div>
+      <div class="faction-disposition ${dispCls}">Stance: ${dispLabel}</div>
+      ${r.faction.formalInfluence ? '<div class="faction-influence">🏛️ Has formal influence in governance</div>' : ''}
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+        Suppressions: ${r.suppressionCount} · Recurrence multiplier: ${r.recurrenceMultiplier.toFixed(2)}x
+      </div>
+    </div>`;
+
+    // Promise registry
+    if (r.faction.promises.length > 0) {
+      html += '<h3 style="margin-top:12px">Promises</h3>';
+      html += '<div class="promise-list">';
+      for (const p of r.faction.promises) {
+        const turnsLeft = p.deadline - gameState.turn;
+        const urgency = turnsLeft <= 4 ? 'urgent' : turnsLeft <= 8 ? 'soon' : '';
+        html += `<div class="promise-item ${urgency}">
+          <span>${p.description}</span>
+          <span class="promise-deadline">${turnsLeft > 0 ? turnsLeft + 't left' : 'OVERDUE'} · ${p.binding ? 'Binding' : 'Non-binding'}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+  } else {
+    if (pct < 25) {
+      html += '<p style="color:var(--text-dim);font-size:12px;">No organized opposition exists. Maintain trust to keep it that way.</p>';
+    } else {
+      html += '<p style="color:var(--text-dim);font-size:12px;">Discontent is rising but has not yet organized into a faction.</p>';
+    }
+  }
+
+  el.innerHTML = html;
+}
+
+function renderCrimePanel() {
+  const el = document.getElementById('crime-panel-content');
+  if (!el) return;
+
+  const crime = window.getCrimeState ? window.getCrimeState() : null;
+  if (!crime) { el.innerHTML = '<p style="color:var(--text-dim)">Crime system not active.</p>'; return; }
+
+  const detection = crime.detectionLevel;
+  let html = '';
+
+  // Detection level info
+  if (detection === 0) {
+    html += `<div class="crime-no-detection">
+      <h3>⚖️ Crime</h3>
+      <p style="color:var(--text-dim);font-size:12px;">You have no way to monitor crime. Build a <strong>Justice Hall</strong> and assign workers to detect criminal activity.</p>
+    </div>`;
+
+    // Still show qualitative climate text
+    const climate = window.getCrimeClimateText ? window.getCrimeClimateText() : null;
+    if (climate) {
+      html += `<div class="crime-climate-hint ${climate.cls}" style="margin-top:8px;padding:6px 8px;border-radius:4px;font-size:12px;">${climate.text}</div>`;
+    }
+  } else {
+    html += '<h3>⚖️ Crime Report</h3>';
+    html += `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">Detection level: ${detection}/3 (${detection === 1 ? 'theft only' : detection === 2 ? 'theft + violence' : 'full visibility'})</div>`;
+
+    // Crime tracks (gated by detection)
+    const tracks = [];
+    if (crime.visibleTheft !== null) tracks.push({ name: 'Theft', value: crime.visibleTheft, icon: '🔓', color: '#ccaa33' });
+    if (crime.visibleViolence !== null) tracks.push({ name: 'Violence', value: crime.visibleViolence, icon: '⚔️', color: '#cc6633' });
+    if (crime.visibleTransgression !== null) tracks.push({ name: 'Transgression', value: crime.visibleTransgression, icon: '🚫', color: '#9966cc' });
+
+    for (const track of tracks) {
+      const pct = Math.min(100, (track.value / 20) * 100);
+      html += `<div class="crime-track" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px">
+          <span>${track.icon} ${track.name}</span>
+          <span style="color:${track.color};font-weight:bold">${track.value.toFixed(1)}</span>
+        </div>
+        <div style="height:6px;background:rgba(0,0,0,0.3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${track.color};transition:width 0.3s"></div>
+        </div>
+      </div>`;
+    }
+
+    // Overall severity
+    const severity = crime.overallSeverity;
+    const sevPct = Math.min(100, (severity / 30) * 100);
+    let sevColor = '#666';
+    if (severity >= 15) sevColor = '#cc3333';
+    else if (severity >= 10) sevColor = '#cc6633';
+    else if (severity >= 5) sevColor = '#ccaa33';
+
+    html += `<div style="margin-top:12px;padding:8px;background:rgba(0,0,0,0.15);border-radius:4px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>Overall Severity</span>
+        <span style="color:${sevColor};font-weight:bold">${severity.toFixed(1)}</span>
+      </div>
+      <div style="height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${sevPct}%;background:${sevColor};transition:width 0.3s"></div>
+      </div>
+    </div>`;
+
+    // Organized predation warning
+    if (crime.visibleOrganized) {
+      html += `<div class="crime-organized-warning" style="margin-top:8px;padding:6px 8px;background:rgba(200,50,50,0.15);border:1px solid rgba(200,50,50,0.3);border-radius:4px;font-size:12px;color:#cc6666">
+        ⚠️ <strong>Organized Crime Active</strong> — Theft rings and protection rackets are operating. Crime effects are doubled.
+      </div>`;
+    }
+
+    // Crackdown button
+    if (detection >= 1) {
+      const cooldown = crime.crackdownCooldown;
+      const matCost = Math.ceil(gameState.population.total * 0.1);
+      const canCrackdown = cooldown === 0 && gameState.resources.materials >= matCost;
+
+      html += `<div style="margin-top:12px">
+        <button class="detail-btn" ${canCrackdown ? `onclick="window.performCrackdown(); renderGovernanceOverlay();"` : 'disabled style="opacity:0.5"'}>
+          🔨 Order Crackdown (🪵${matCost})
+        </button>
+        ${cooldown > 0 ? `<div style="font-size:11px;color:var(--text-dim);margin-top:4px">Cooldown: ${cooldown} turns remaining</div>` : ''}
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Reduces crime severity but costs materials, satisfaction, and trust.</div>
+      </div>`;
+    }
+  }
+
+  el.innerHTML = html;
+}
+
+function renderImmigrationPanel() {
+  const el = document.getElementById('immigration-info-content');
+  if (!el) return;
+
+  const imm = window.getImmigrationState ? window.getImmigrationState() : null;
+  if (!imm) { el.innerHTML = '<p style="color:var(--text-dim)">Immigration system not active.</p>'; return; }
+
+  let html = '<h3>🚶 Immigration</h3>';
+
+  // Pressure & arrivals
+  html += `<div style="margin-top:12px;padding:8px;background:rgba(0,0,0,0.15);border-radius:4px;font-size:12px">
+    <div style="display:flex;justify-content:space-between"><span>Immigrant pressure:</span><span style="font-weight:bold">${imm.pressure}</span></div>
+    <div style="display:flex;justify-content:space-between"><span>Last arrivals:</span><span style="font-weight:bold">${imm.lastArrivals}</span></div>
+    <div style="display:flex;justify-content:space-between"><span>Lifetime arrivals / integrated:</span><span>${imm.lifetimeArrivals} / ${imm.lifetimeIntegrated}</span></div>
+  </div>`;
+
+  // Pipeline cohort breakdown
+  const labels = ['Arrivals', 'Residents', 'Participants', 'In Integration'];
+  const colors = ['#cc6644', '#ccaa33', '#6699cc', '#6cb66c'];
+  const totalPipeline = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2];
+
+  if (totalPipeline > 0 || imm.parallelSociety.population > 0) {
+    html += '<h4 style="margin-top:12px;color:var(--text-light)">Integration Pipeline</h4>';
+    html += '<div class="immigration-pipeline">';
+    for (let i = 0; i < 3; i++) {
+      if (imm.cohorts[i] <= 0) continue;
+      html += `<div class="immigration-cohort-row">
+        <span style="color:${colors[i]}">${labels[i]}</span>
+        <span style="font-weight:bold">${imm.cohorts[i]}</span>
+        <span style="font-size:10px;color:var(--text-dim)">(${Math.round(imm.cohortWorkforceRates[i] * 100)}% workforce)</span>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Parallel Society meter
+  const ps = imm.parallelSociety;
+  if (ps.strength > 0.05 || ps.population > 0) {
+    const psPct = Math.round(ps.strength * 100);
+    let psColor = '#999';
+    let psLabel = '';
+    if (ps.strength >= 0.70) { psColor = '#cc3333'; psLabel = 'CRISIS'; }
+    else if (ps.strength >= 0.50) { psColor = '#cc6633'; psLabel = 'SEVERE'; }
+    else if (ps.strength >= 0.30) { psColor = '#ccaa33'; psLabel = 'GROWING'; }
+    else if (ps.strength >= 0.15) { psColor = '#999933'; psLabel = 'FORMING'; }
+
+    html += `<div class="immigration-ps-section" style="margin-top:12px;padding:8px;background:rgba(0,0,0,0.15);border:1px solid ${psColor}44;border-radius:4px">
+      <h4 style="color:${psColor};margin:0 0 6px">🏘️ Parallel Society ${psLabel ? `— ${psLabel}` : ''}</h4>
+      <div style="height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;width:${psPct}%;background:${psColor};transition:width 0.3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim)">
+        <span>Strength: ${psPct}%</span>
+        <span>Population: ${ps.population} adults, ${ps.children} children</span>
+      </div>
+    </div>`;
+
+    // Intervention panel (appears at PSS > 0.15)
+    if (ps.strength >= 0.15) {
+      html += '<h4 style="margin-top:12px;color:var(--text-light)">Interventions</h4>';
+
+      const activeIntervention = imm.interventionActive;
+      const matCost = Math.ceil(gameState.population.total * 0.05);
+      const canAffordMat = gameState.resources.materials >= matCost;
+
+      const interventions = [
+        { id: 'integration', name: 'Integration Programs', icon: '🤝', cost: `🪵${matCost}/turn`,
+          desc: 'Invest in shared institutions. Effective up to 50% PSS.', disabled: !canAffordMat },
+        { id: 'coercive', name: 'Coercive Assimilation', icon: '⚡', cost: `🪵${matCost}/turn`,
+          desc: 'Enforce cultural conformity. Fast but causes resentment.', disabled: !canAffordMat },
+        { id: 'containment', name: 'Containment', icon: '🚧', cost: 'None',
+          desc: 'Restrict PS access to resources. Buys time only.', disabled: false },
+        { id: 'expulsion', name: 'Expulsion', icon: '🚫', cost: 'Catastrophic social cost',
+          desc: 'Remove PS population. Last resort.', disabled: ps.population <= 0 },
+      ];
+
+      html += '<div class="immigration-interventions">';
+      for (const iv of interventions) {
+        const isActive = activeIntervention === iv.id;
+        html += `<div class="immigration-intervention ${isActive ? 'active' : ''}" style="margin-bottom:6px;padding:6px 8px;background:rgba(0,0,0,0.1);border-radius:4px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span>${iv.icon} <strong>${iv.name}</strong> <span style="color:var(--text-dim)">(${iv.cost})</span></span>
+            ${isActive
+              ? `<button class="detail-btn" onclick="window.cancelIntervention(); renderGovernanceOverlay();" style="font-size:11px">Cancel</button>`
+              : `<button class="detail-btn" ${iv.disabled || activeIntervention ? 'disabled style="opacity:0.5;font-size:11px"' : `onclick="window.startIntervention('${iv.id}'); renderGovernanceOverlay();" style="font-size:11px"`}>Start</button>`
+            }
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${iv.desc}</div>
+          ${isActive ? `<div style="font-size:10px;color:var(--text-gold);margin-top:2px">Active for ${imm.interventionTurns} turns</div>` : ''}
+        </div>`;
+      }
+      html += '</div>';
+    }
+  }
+
+  // Unintegrated ratio warning
+  if (imm.unintegratedRatio >= 0.12) {
+    const pct = Math.round(imm.unintegratedRatio * 100);
+    const cls = pct >= 18 ? 'danger' : 'warning';
+    html += `<div class="immigration-warning ${cls}" style="margin-top:8px;padding:6px 8px;border-radius:4px;font-size:12px">
+      ⚠️ ${pct}% of population is unintegrated (Arrivals + Residents). Crystallization threshold: 18%.
+    </div>`;
+  }
+
+  el.innerHTML = html;
+
+  // Render policy lag status for immigration sliders (static sliders wired in renderGovernanceOverlay)
+  renderPolicyLagStatus('culturalOpenness');
+  renderPolicyLagStatus('progressiveness');
+}
+
+// ---- CLASS SYSTEM PANEL ----
+
+function renderClassPanel() {
+  const el = document.getElementById('class-panel-content');
+  if (!el) return;
+
+  const state = window.getClassSystemState ? window.getClassSystemState() : null;
+  if (!state) { el.innerHTML = '<p style="color:var(--text-dim)">Class system not available.</p>'; return; }
+
+  const BASES = window.STRATIFICATION_BASES;
+  const DIFFS = window.DIFFERENTIALS;
+  let html = '';
+
+  if (!state.active) {
+    // Inactive state — show activation UI
+    html += '<h3>⚖️ Class System</h3>';
+    html += '<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Formal stratification divides society into a privileged class and a common class. This is an active choice with lasting consequences.</p>';
+
+    if (!state.canActivate) {
+      const turnsLeft = (window.MIN_TURNS_FOR_ACTIVATION || 8) - state.currentTurn;
+      html += `<div class="crime-no-detection" style="padding:12px;text-align:center">
+        <p style="color:var(--text-dim)">Society needs more time to develop the institutional complexity for formal stratification.</p>
+        <p style="color:var(--text-gold)">${turnsLeft > 0 ? `Available in ${turnsLeft} turns` : 'Available now'}</p>
+      </div>`;
+    } else {
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-weight:bold;color:var(--text-light);margin-bottom:8px">Choose a stratification basis:</div>';
+      for (const [key, base] of Object.entries(BASES)) {
+        const alignment = base.governanceAlignment[gameState.governance.model] || 'moderate';
+        const alignColor = alignment === 'strong' ? '#6cb66c' : alignment === 'weak' ? '#cc6644' : '#ccaa33';
+        html += `<div class="class-basis-option" style="margin-bottom:8px;padding:8px;background:rgba(0,0,0,0.15);border-radius:4px;cursor:pointer;border:1px solid transparent" onclick="window.confirmActivateClassSystem('${key}')">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:14px">${base.icon} <strong>${base.name}</strong></span>
+            <span style="font-size:10px;color:${alignColor}">Alignment: ${alignment}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${base.description}</div>
+        </div>`;
+      }
+      html += '</div>';
+      html += `<div style="font-size:11px;color:var(--text-dim);padding:6px;background:rgba(0,0,0,0.1);border-radius:4px">
+        <strong>Activation cost:</strong> Legitimacy −10, Satisfaction −8, Resistance +15
+      </div>`;
+    }
+
+    // Show dismantlement aftermath if applicable
+    if (state.dismantlementEffects) {
+      const de = state.dismantlementEffects;
+      html += `<div style="margin-top:12px;padding:8px;background:rgba(200,50,50,0.1);border:1px solid #cc333344;border-radius:4px;font-size:12px">
+        <strong style="color:#cc6644">Dismantlement Aftermath</strong>
+        ${de.turnsRemaining > 0 ? `<div>Satisfaction penalty: ${de.turnsRemaining} turns remaining</div>` : ''}
+        ${de.trustDriftTurnsRemaining > 0 ? `<div>Trust drift: ${de.trustDriftTurnsRemaining} turns remaining</div>` : ''}
+      </div>`;
+    }
+
+  } else {
+    // Active state — show full class system UI
+    const baseDef = BASES[state.basis];
+    const alignment = baseDef.governanceAlignment[gameState.governance.model] || 'moderate';
+    const alignColor = alignment === 'strong' ? '#6cb66c' : alignment === 'weak' ? '#cc6644' : '#ccaa33';
+
+    html += `<h3>${baseDef.icon} Class System — ${baseDef.name}</h3>`;
+
+    // Status bar
+    html += `<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px">
+      <span>Privileged: <strong>${state.privilegedCount}</strong> (${Math.round(state.privilegedRatio * 100)}%)</span>
+      <span>Commons: <strong>${state.population - state.privilegedCount}</strong> (${Math.round((1 - state.privilegedRatio) * 100)}%)</span>
+      <span style="color:${alignColor}">Alignment: ${alignment}</span>
+    </div>`;
+
+    // Crime multiplier display
+    if (state.classMultiplier > 1.0) {
+      html += `<div style="font-size:11px;color:#cc6644;margin-bottom:8px">⚠️ Crime multiplier: ×${state.classMultiplier.toFixed(2)} among commons</div>`;
+    }
+
+    // Differential controls
+    html += '<h4 style="color:var(--text-light);margin-top:12px;margin-bottom:8px">Differential Tiers</h4>';
+
+    for (const [dim, def] of Object.entries(DIFFS)) {
+      const tier = state.differentials[dim];
+      const pending = state.pendingDifferentials[dim];
+      const isStrong = baseDef.strongDifferentials.includes(dim);
+      const isWeak = baseDef.weakDifferentials.includes(dim);
+      const affinityLabel = isStrong ? '★ Strong' : isWeak ? '▽ Weak' : '— Neutral';
+      const affinityColor = isStrong ? '#6cb66c' : isWeak ? '#cc6644' : 'var(--text-dim)';
+
+      html += `<div class="class-differential" style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.1);border-radius:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span>${def.icon} <strong>${def.name}</strong></span>
+          <span style="font-size:10px;color:${affinityColor}">${affinityLabel}</span>
+        </div>
+        <div class="class-tier-buttons" style="display:flex;gap:4px;margin-bottom:4px">`;
+
+      for (let t = 0; t <= 2; t++) {
+        const isActive = tier === t;
+        const isPending = pending && pending.target === t;
+        const canChange = !pending && Math.abs(t - tier) === 1;
+        const tierDef = def.tiers[t];
+
+        let btnClass = isActive ? 'active' : '';
+        let btnStyle = `flex:1;padding:4px 6px;border-radius:3px;font-size:11px;border:1px solid;cursor:${canChange ? 'pointer' : 'default'};`;
+
+        if (isActive) {
+          btnStyle += 'background:var(--panel-header);color:var(--text-gold);border-color:var(--text-gold);';
+        } else if (isPending) {
+          btnStyle += 'background:rgba(200,170,50,0.2);color:#ccaa33;border-color:#ccaa33;opacity:0.8;';
+        } else if (canChange) {
+          btnStyle += 'background:rgba(0,0,0,0.15);color:var(--text-light);border-color:var(--text-dim);';
+        } else {
+          btnStyle += 'background:rgba(0,0,0,0.05);color:var(--text-dim);border-color:transparent;opacity:0.5;';
+        }
+
+        const onclick = canChange ? `onclick="window.confirmDifferentialChange('${dim}', ${t})"` : '';
+        html += `<button class="class-tier-btn ${btnClass}" style="${btnStyle}" ${onclick} title="${tierDef.description}">
+          ${tierDef.label}${isPending ? ' ⏳' : ''}
+        </button>`;
+      }
+
+      html += '</div>';
+
+      // Show current tier description
+      html += `<div style="font-size:10px;color:var(--text-dim)">${def.tiers[tier].description}</div>`;
+
+      // Pending change info
+      if (pending) {
+        html += `<div style="font-size:10px;color:#ccaa33;margin-top:4px">
+          ⏳ Changing to "${def.tiers[pending.target].label}" in ${pending.turnsRemaining} turn${pending.turnsRemaining !== 1 ? 's' : ''}
+          <button class="detail-btn" style="font-size:10px;margin-left:6px;padding:1px 6px" onclick="window.cancelDifferentialChange('${dim}'); renderGovernanceOverlay();">Cancel</button>
+        </div>`;
+      }
+
+      html += '</div>';
+    }
+
+    // Basis change and dismantlement buttons
+    html += '<div style="margin-top:16px;display:flex;gap:8px">';
+    html += `<button class="detail-btn" style="flex:1;font-size:11px" onclick="window.showChangeBasisDialog()">Change Basis</button>`;
+    html += `<button class="detail-btn" style="flex:1;font-size:11px;color:#cc4444;border-color:#cc444444" onclick="window.confirmDismantleClassSystem()">Dismantle</button>`;
+    html += '</div>';
+
+    // Basis change aftermath
+    if (state.basisChangeEffects) {
+      html += `<div style="margin-top:8px;font-size:11px;color:#ccaa33;padding:4px 8px;background:rgba(200,170,50,0.1);border-radius:4px">
+        ⏳ Basis change disruption: ${state.basisChangeEffects.turnsRemaining} turns remaining
+      </div>`;
+    }
+  }
+
+  el.innerHTML = html;
 }
 
 function selectGovernanceModel(modelKey) {
   if (modelKey !== gameState.governance.model) {
+    // Check requirements
+    const req = window.checkModelRequirements ? window.checkModelRequirements(modelKey) : { met: true, reasons: [] };
+    if (!req.met) return;
+
     const model = window.GOVERNANCE_MODELS[modelKey];
+    const extraWarnings = [];
+    if (gameState.governance.model === 'militaryRule') {
+      extraWarnings.push('• Leaving military rule incurs additional legitimacy penalty');
+    }
+    if (modelKey === 'militaryRule') {
+      extraWarnings.push('• Freedom will be locked to 20 max');
+      extraWarnings.push('• Satisfaction will erode each turn');
+    }
+    if (modelKey === 'democracy') {
+      extraWarnings.push('• Freedom will be locked to 40 min');
+      extraWarnings.push('• Major policy changes take 2 turns to vote');
+    }
+    if (modelKey === 'monarchy') {
+      extraWarnings.push('• Succession crises may occur if no heir exists');
+    }
+
+    const warningHtml = extraWarnings.length > 0 ? '<br>' + extraWarnings.join('<br>') : '';
+
     window.showConfirmDialogNonDestructive(
       `Change to ${model.name}?`,
-      `Changing governance models causes major disruption:<br>\u2022 Legitimacy will drop significantly<br>\u2022 Takes several turns to stabilize<br>\u2022 Current model: ${window.GOVERNANCE_MODELS[gameState.governance.model].name}`,
+      `Changing governance models causes major disruption:<br>\u2022 Legitimacy will drop significantly<br>\u2022 Takes several turns to stabilize<br>\u2022 Current model: ${window.GOVERNANCE_MODELS[gameState.governance.model].name}${warningHtml}`,
       'Confirm Change',
       'Cancel',
       () => {

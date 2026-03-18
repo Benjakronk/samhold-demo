@@ -1045,14 +1045,19 @@ function renderPopulationDetails() {
     .filter(c => c.age >= window.WORKING_AGE && c.age <= 16)
     .reduce((sum, c) => sum + c.count, 0);
   const totalAdults = gameState.population.total;
+  const elderCount = gameState.population.elders || 0;
+  const workingAdults = totalAdults - elderCount;
   const totalPop = totalAdults + totalChildren + workingAgeYouth;
+  const elderAge = window.ELDER_AGE || 50;
+  const maxAge = window.MAX_AGE || 80;
 
   let html = `
     <div style="margin-bottom: 20px;">
       <div class="detail-section">
         <h3>Population Summary</h3>
         <div class="detail-row"><span>Total Population:</span><span>${totalPop}</span></div>
-        <div class="detail-row"><span>\u{1F465} Adults:</span><span>${totalAdults}</span></div>
+        <div class="detail-row"><span>\u{1F465} Working Adults:</span><span>${workingAdults}</span></div>
+        <div class="detail-row"><span>\u{1F9D3} Elders (${elderAge}+):</span><span>${elderCount}</span></div>
         <div class="detail-row"><span>\u{1F476} Children:</span><span>${totalChildren}</span></div>
         ${workingAgeYouth > 0 ? `<div class="detail-row"><span>\u{1F9D1} Working Age Youth:</span><span>${workingAgeYouth}</span></div>` : ''}
         <div class="detail-row">
@@ -1063,8 +1068,51 @@ function renderPopulationDetails() {
             <button class="dev-btn" onclick="adjustWorkingAge(1)" style="font-size: 12px; padding: 2px 6px;">+</button>
           </span>
         </div>
+        ${elderCount > 0 ? `<div class="detail-row" style="color: #b8a870;"><span>Elder Bonuses/turn:</span><span>+${(elderCount * (window.ELDER_LEGITIMACY_BONUS || 0.08)).toFixed(1)} Leg, +${(elderCount * (window.ELDER_IDENTITY_BONUS || 0.05)).toFixed(1)} Id</span></div>` : ''}
       </div>
     </div>`;
+
+  // Adult cohorts breakdown
+  if (gameState.adultCohorts && gameState.adultCohorts.length > 0) {
+    const sortedAdults = [...gameState.adultCohorts].sort((a, b) => b.age - a.age);
+    const elderCohorts = sortedAdults.filter(c => c.age >= elderAge);
+    const workingCohorts = sortedAdults.filter(c => c.age < elderAge);
+
+    if (elderCohorts.length > 0) {
+      html += `
+        <div class="detail-section">
+          <h3>Elder Cohorts</h3>
+          <div class="cohort-grid">`;
+      for (const cohort of elderCohorts) {
+        const yearsLeft = maxAge - cohort.age;
+        const deathRisk = Math.min(0.99, (window.NATURAL_DEATH_BASE_RATE || 0.02) * (cohort.age - elderAge + 1));
+        html += `
+          <div class="cohort-row">
+            <div class="cohort-age">Age ${cohort.age}</div>
+            <div class="cohort-count">${cohort.count} elder${cohort.count !== 1 ? 's' : ''}</div>
+            <div class="cohort-status" style="color: ${deathRisk > 0.3 ? '#c77' : '#b8a870'};">${(deathRisk * 100).toFixed(0)}% mortality</div>
+          </div>`;
+      }
+      html += `</div></div>`;
+    }
+
+    if (workingCohorts.length > 0) {
+      html += `
+        <div class="detail-section">
+          <h3>Adult Cohorts</h3>
+          <div class="cohort-grid">`;
+      for (const cohort of workingCohorts) {
+        const yearsToElder = elderAge - cohort.age;
+        html += `
+          <div class="cohort-row">
+            <div class="cohort-age">Age ${cohort.age}</div>
+            <div class="cohort-count">${cohort.count} adult${cohort.count !== 1 ? 's' : ''}</div>
+            <div class="cohort-status">${yearsToElder <= 2 ? '\u23F3 ' + yearsToElder + 'y to elder' : ''}</div>
+          </div>`;
+      }
+      html += `</div></div>`;
+    }
+  }
 
   if (gameState.childCohorts.length > 0) {
     html += `
@@ -1103,14 +1151,16 @@ function renderPopulationDetails() {
     html += `</div></div>`;
   }
 
-  const adultFood = totalAdults * window.FOOD_PER_POP;
+  const elderFood = elderCount * (window.FOOD_PER_ELDER || 1);
+  const adultFood = workingAdults * window.FOOD_PER_POP;
   const childFood = totalChildren * window.FOOD_PER_CHILD;
-  const totalFood = adultFood + childFood;
+  const totalFood = adultFood + elderFood + childFood;
 
   html += `
     <div class="detail-section">
       <h3>Food Consumption</h3>
-      <div class="detail-row"><span>\u{1F465} Adults (${totalAdults} \u00D7 ${window.FOOD_PER_POP}):</span><span>${adultFood} \u{1F33E}</span></div>
+      <div class="detail-row"><span>\u{1F465} Working Adults (${workingAdults} \u00D7 ${window.FOOD_PER_POP}):</span><span>${adultFood} \u{1F33E}</span></div>
+      ${elderCount > 0 ? `<div class="detail-row"><span>\u{1F9D3} Elders (${elderCount} \u00D7 ${window.FOOD_PER_ELDER || 1}):</span><span>${elderFood} \u{1F33E}</span></div>` : ''}
       <div class="detail-row"><span>\u{1F476} Children (${totalChildren} \u00D7 ${window.FOOD_PER_CHILD}):</span><span>${childFood} \u{1F33E}</span></div>
       <div class="detail-row total-row"><span><strong>Total per turn:</strong></span><span><strong>${totalFood} \u{1F33E}</strong></span></div>
     </div>`;

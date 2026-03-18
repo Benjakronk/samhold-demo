@@ -8,7 +8,7 @@ export const HEX_SIZE = 64; // pixel size of hexes (used for rendering and calcu
 export const MAP_PAD = 64; // pixel padding around map (same as HEX_SIZE)
 
 // Territory and population
-export const TERRITORY_RADIUS = 1; // hex radius for settlement territory
+export const TERRITORY_RADIUS = 5; // hex radius for settlement territory
 export const FOOD_PER_POP = 2; // food consumed per adult per turn
 export const FOOD_PER_CHILD = 1; // food consumed per child per turn
 export const BASE_BIRTH_RATE = 0.12; // slightly increased for better population growth dynamics
@@ -17,6 +17,15 @@ export const BASE_BIRTH_RATE = 0.12; // slightly increased for better population
 export const WORKING_AGE_MIN = 6; // minimum working age allowed
 export const WORKING_AGE_MAX = 16; // maximum working age allowed
 export let WORKING_AGE = 12; // current working age policy (can be modified by governance)
+
+// Elder aging
+export const ELDER_AGE = 50; // age at which adults become elders
+export const MAX_AGE = 80; // absolute maximum age (100% death)
+export const FOOD_PER_ELDER = 1; // food consumed per elder per turn (half adult ration)
+export const NATURAL_DEATH_BASE_RATE = 0.02; // per year of age past ELDER_AGE
+export const ELDER_LEGITIMACY_BONUS = 0.08; // per elder per turn
+export const ELDER_IDENTITY_BONUS = 0.05; // per elder per turn
+export const ELDER_KNOWLEDGE_PER_TURN = 0.3; // knowledge gained per elder per turn
 
 // Season and time
 export const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];

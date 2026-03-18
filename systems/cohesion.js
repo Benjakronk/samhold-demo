@@ -577,6 +577,7 @@ export function applyCohesionEffects() {
     if (Math.random() < 0.02) { // 2% chance per turn
       const emigrantLoss = Math.max(1, Math.floor(window.gameState.population.total * 0.05));
       window.gameState.population.total = Math.max(1, window.gameState.population.total - emigrantLoss);
+      if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(emigrantLoss);
       // Don't report yet - will be part of turn summary later
     }
   }
@@ -587,6 +588,7 @@ export function applyCohesionEffects() {
     if (Math.random() < 0.05) { // 5% chance
       const emigrantLoss = Math.max(1, Math.floor(window.gameState.population.total * 0.1));
       window.gameState.population.total = Math.max(1, window.gameState.population.total - emigrantLoss);
+      if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(emigrantLoss);
     }
   }
 

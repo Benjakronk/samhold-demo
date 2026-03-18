@@ -1436,13 +1436,16 @@ export const EVENT_LIBRARY = {
   classConflict: {
     id: 'classConflict',
     title: 'Class Tensions',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.4,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'classHighDifferential' }
+      ]
+    },
     description: 'The divide between privileged and common is no longer invisible. People mutter in the streets about those who have more than they need while others go hungry.',
-    probability: 0.4,
-    cooldown: 8,
-    conditions: [
-      { type: 'custom', check: 'classSystemActive' },
-      { type: 'custom', check: 'classHighDifferential' }
-    ],
     choices: [
       {
         text: 'The privileged earned their position — maintain the order',
@@ -1471,13 +1474,16 @@ export const EVENT_LIBRARY = {
   privilegedProtest: {
     id: 'privilegedProtest',
     title: 'Elite Resistance',
+    category: 'governance',
+    triggers: {
+      minTurn: 10,
+      probability: 0.5,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'recentDifferentialReduction' }
+      ]
+    },
     description: 'The privileged class organizes against recent changes that threaten their standing. They demand their position be respected.',
-    probability: 0.5,
-    cooldown: 6,
-    conditions: [
-      { type: 'custom', check: 'classSystemActive' },
-      { type: 'custom', check: 'recentDifferentialReduction' }
-    ],
     choices: [
       {
         text: 'Restore their privileges — we cannot afford this fight',
@@ -1506,13 +1512,16 @@ export const EVENT_LIBRARY = {
   socialMobilityDemand: {
     id: 'socialMobilityDemand',
     title: 'Demand for Mobility',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.35,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'classLineageBasis' }
+      ]
+    },
     description: 'Common-class adults point to neighbors who work just as hard but were born into privilege. "Why should birth determine worth?"',
-    probability: 0.35,
-    cooldown: 10,
-    conditions: [
-      { type: 'custom', check: 'classSystemActive' },
-      { type: 'custom', check: 'classLineageBasis' }
-    ],
     choices: [
       {
         text: 'Birth is destiny — the lineage system is sacred',
@@ -1541,14 +1550,17 @@ export const EVENT_LIBRARY = {
   religiousClassCrisis: {
     id: 'religiousClassCrisis',
     title: 'Crisis of Knowledge',
+    category: 'governance',
+    triggers: {
+      minTurn: 15,
+      probability: 0.4,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'classReligiousBasis' },
+        { type: 'resource', resource: 'knowledge', operator: '<', value: 15 }
+      ]
+    },
     description: 'Our religious leaders once commanded respect through deep wisdom. But knowledge has stagnated, and some priests can barely justify their privileged position.',
-    probability: 0.4,
-    cooldown: 12,
-    conditions: [
-      { type: 'custom', check: 'classSystemActive' },
-      { type: 'custom', check: 'classReligiousBasis' },
-      { type: 'resource', resource: 'knowledge', operator: '<', value: 15 }
-    ],
     choices: [
       {
         text: 'Faith needs no proof — the priesthood stands',
@@ -1577,14 +1589,17 @@ export const EVENT_LIBRARY = {
   militaryClassPeace: {
     id: 'militaryClassPeace',
     title: 'Warriors Without War',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.35,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'classMilitaryBasis' },
+        { type: 'custom', check: 'fewActiveThreats' }
+      ]
+    },
     description: 'In times of peace, the military class has little to justify its privileges. Idle warriors cost food and produce resentment among those who work the fields.',
-    probability: 0.35,
-    cooldown: 10,
-    conditions: [
-      { type: 'custom', check: 'classSystemActive' },
-      { type: 'custom', check: 'classMilitaryBasis' },
-      { type: 'custom', check: 'fewActiveThreats' }
-    ],
     choices: [
       {
         text: 'Maintain the standing force — threats could return at any time',

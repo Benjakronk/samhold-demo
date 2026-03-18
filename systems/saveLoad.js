@@ -189,6 +189,24 @@ function loadGameFromSlot(slotName) {
       };
     }
 
+    // Migrate adult cohorts for older saves
+    if (!loadedGameState.adultCohorts || !loadedGameState.adultCohorts.length) {
+      const total = loadedGameState.population?.total || 25;
+      // Distribute existing adults across a reasonable age spread
+      loadedGameState.adultCohorts = [
+        { age: 18, count: Math.ceil(total * 0.25) },
+        { age: 25, count: Math.ceil(total * 0.30) },
+        { age: 32, count: Math.ceil(total * 0.25) },
+        { age: 40, count: total - Math.ceil(total * 0.25) - Math.ceil(total * 0.30) - Math.ceil(total * 0.25) }
+      ].filter(c => c.count > 0);
+    }
+    if (loadedGameState.population && loadedGameState.population.elders === undefined) {
+      const ELDER_AGE = window.ELDER_AGE || 50;
+      loadedGameState.population.elders = (loadedGameState.adultCohorts || [])
+        .filter(c => c.age >= ELDER_AGE)
+        .reduce((sum, c) => sum + c.count, 0);
+    }
+
     // Migrate fortifications and visibilityMap for older saves
     if (!loadedGameState.fortifications) loadedGameState.fortifications = {};
     if (!loadedGameState.visibilityMap || !loadedGameState.visibilityMap.length) {

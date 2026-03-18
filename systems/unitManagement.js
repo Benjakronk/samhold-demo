@@ -214,6 +214,7 @@ function moveUnit(unitId, targetCol, targetRow) {
             gameState.units.splice(index, 1);
             gameState.population.employed -= uType.cost.population;
             gameState.population.total -= uType.cost.population;
+            if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(uType.cost.population);
           }
         }
       }
@@ -334,6 +335,7 @@ function executeUnitAction(unit, col, row) {
         gameState.units.splice(idx, 1);
         gameState.population.employed -= uType.cost.population;
         gameState.population.total -= uType.cost.population;
+        if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(uType.cost.population);
       }
     }
 

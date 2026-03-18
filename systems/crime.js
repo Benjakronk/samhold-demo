@@ -195,6 +195,7 @@ function applyCrimeEffects(report) {
       if (deaths > 0) {
         gameState.population.total -= deaths;
         gameState.population.idle = Math.max(0, gameState.population.idle - deaths);
+        if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(deaths);
         if (report) report.events.push(`💀 ${deaths} ${deaths === 1 ? 'person' : 'people'} killed in violent crime.`);
         if (gameState.culture) gameState.culture.deathsOccurred = true;
         if (window.addChronicleEntry) {

@@ -31,7 +31,9 @@ function updateAllUI() {
   gameState.population.employed = inc.laborUsed + storytellers;
   gameState.population.idle = Math.max(0, gameState.population.total - inc.laborUsed - storytellers);
   const idleWarn = gameState.population.idle > 5 ? ' \u26A0\uFE0F' : '';
-  document.getElementById('pop-display').textContent = `\u{1F465} ${gameState.population.total} adults \u00B7 \u{1F476} ${window.getTotalChildren()} children`;
+  const elderCount = gameState.population.elders || 0;
+  const elderSuffix = elderCount > 0 ? ` \u00B7 \u{1F9D3} ${elderCount} elders` : '';
+  document.getElementById('pop-display').textContent = `\u{1F465} ${gameState.population.total} adults${elderSuffix} \u00B7 \u{1F476} ${window.getTotalChildren()} children`;
 
   const idleColor = gameState.population.idle > 5 ? '#ccaa44' : 'var(--text-light)';
   const winterRow = isWinter
@@ -62,7 +64,7 @@ function updateAllUI() {
   const buildingWorkers = inc.laborUsed - unitPopulation;
 
   document.getElementById('labor-content').innerHTML = `
-    <div class="hex-info-row"><span class="label">\u{1F465} Adults</span><span class="value">${gameState.population.total}</span></div>
+    <div class="hex-info-row"><span class="label">\u{1F465} Adults</span><span class="value">${gameState.population.total}${elderCount > 0 ? ` (${elderCount} elders)` : ''}</span></div>
     <div class="hex-info-row"><span class="label">\u{1F476} Children</span><span class="value">${totalChildren}</span></div>
     ${graduationInfo}
     <div class="hex-info-row"><span class="label">Workers assigned</span><span class="value">${gameState.population.employed}</span></div>
@@ -272,7 +274,8 @@ function showTurnSummary(report, seasonName, year) {
     <hr class="summary-divider">
     <div class="summary-row"><span class="s-label">\u{1F4E6} Food stockpile</span><span class="s-val">${gameState.resources.food}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F4E6} Materials stockpile</span><span class="s-val">${gameState.resources.materials}</span></div>
-    <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${(() => { const d = (report.graduated||0) - (report.adultDeaths||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
+    <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${(() => { const d = (report.graduated||0) - (report.adultDeaths||0) - (report.elderDeaths||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
+    ${(gameState.population.elders || 0) > 0 ? `<div class="summary-row"><span class="s-label">\u{1F9D3} Elders</span><span class="s-val">${gameState.population.elders}${report.elderDeaths ? ' <span class="delta-neg">(-' + report.elderDeaths + ' passed)</span>' : ''}</span></div>` : ''}
     <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}${(() => { const d = (report.childBirths||0) - (report.childDeaths||0) - (report.graduated||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
   `;
 

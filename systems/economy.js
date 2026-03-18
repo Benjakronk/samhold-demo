@@ -125,15 +125,18 @@ export function calculateIncome() {
   const totalChildren = getTotalChildren();
   const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
   const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
+  const foodPerElder = (window.FOOD_PER_ELDER != null) ? window.FOOD_PER_ELDER : 1;
 
   // Civilian population excludes people currently serving as units
   // (their food is handled entirely in processUnitUpkeep so priority ordering works correctly)
   const unitPopulation = window.gameState.units.reduce((sum, u) => sum + window.UNIT_TYPES[u.type].cost.population, 0);
   const civilianPop = Math.max(0, window.gameState.population.total - unitPopulation);
+  const elderCount = window.gameState.population.elders || 0;
+  const workingAdults = Math.max(0, civilianPop - elderCount);
   // Immigrant food consumption (pipeline cohorts + PS adults + PS children)
   const immigrantFood = window.getImmigrantFoodConsumption ? window.getImmigrantFoodConsumption() : 0;
 
-  const popFoodConsumed = civilianPop * foodPerPop + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood; // builders and trainees eat double; immigrants eat separately
+  const popFoodConsumed = workingAdults * foodPerPop + elderCount * foodPerElder + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood;
 
   // Unit food = their population share (foodPerPop) + unit-specific upkeep
   const unitFoodUpkeep = window.gameState.units.reduce((total, unit) => {

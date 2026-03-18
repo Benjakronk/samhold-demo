@@ -211,6 +211,9 @@ function processTurn() {
     processAging(report);
   }
 
+  // Elder bonuses (every turn, not just New Year)
+  processElderBonuses(report);
+
   // Process pending events (delayed consequences)
   window.processPendingEvents();
 
@@ -406,8 +409,8 @@ function processUnitStarvation(deficit, report) {
 }
 
 function processBirths(report) {
-  // Calculate births based on population and factors
-  const totalPop = gameState.population.total;
+  // Calculate births based on fertile-age adults (exclude elders)
+  const totalPop = gameState.population.total - (gameState.population.elders || 0);
   const baseRate = 0.15; // Base birth rate per turn
 
   // Apply cohesion modifier to birth rate
@@ -449,29 +452,112 @@ function processBirths(report) {
 }
 
 function processAging(report) {
-  // Age all child cohorts by 1 year
+  const ELDER_AGE = window.ELDER_AGE || 50;
+  const MAX_AGE = window.MAX_AGE || 80;
+  const DEATH_RATE = window.NATURAL_DEATH_BASE_RATE || 0.02;
+
+  // 1. Age all child cohorts by 1 year
   for (const cohort of gameState.childCohorts) {
     cohort.age++;
   }
 
-  // Check for graduation to adult workforce
+  // 2. Graduate children to adult cohorts
   const workingAge = window.WORKING_AGE;
   for (let i = gameState.childCohorts.length - 1; i >= 0; i--) {
     const cohort = gameState.childCohorts[i];
     if (cohort.age >= workingAge) {
-      // Graduate to adult population
+      // Add to adult cohorts
+      addToAdultCohort(workingAge, cohort.count);
       gameState.population.total += cohort.count;
       gameState.population.idle += cohort.count;
       report.events.push(`🎓 ${cohort.count} children joined the workforce.`);
       report.graduated += cohort.count;
 
-      // Fire Coming-of-Age tradition if active
       if (window.processTraditionTrigger) window.processTraditionTrigger('graduation', report);
-
-      // Remove from child cohorts
       gameState.childCohorts.splice(i, 1);
     }
   }
+
+  // 3. Age all adult cohorts by 1 year
+  for (const cohort of gameState.adultCohorts) {
+    cohort.age++;
+  }
+
+  // 4. Natural deaths for elders
+  let elderDeaths = 0;
+  for (const cohort of gameState.adultCohorts) {
+    if (cohort.age < ELDER_AGE) continue;
+    if (cohort.count <= 0) continue;
+
+    if (cohort.age >= MAX_AGE) {
+      // All die at max age
+      elderDeaths += cohort.count;
+      cohort.count = 0;
+      continue;
+    }
+
+    // Increasing probability: 2% per year past elder age
+    const deathChance = DEATH_RATE * (cohort.age - ELDER_AGE + 1);
+    const expected = cohort.count * deathChance;
+    const deaths = Math.floor(expected) + (Math.random() < (expected - Math.floor(expected)) ? 1 : 0);
+    const actualDeaths = Math.min(deaths, cohort.count);
+    if (actualDeaths > 0) {
+      cohort.count -= actualDeaths;
+      elderDeaths += actualDeaths;
+    }
+  }
+
+  // Remove empty adult cohorts
+  gameState.adultCohorts = gameState.adultCohorts.filter(c => c.count > 0);
+
+  // Apply elder deaths to population
+  if (elderDeaths > 0) {
+    gameState.population.total -= elderDeaths;
+    gameState.population.idle = Math.max(0, gameState.population.idle - elderDeaths);
+    report.elderDeaths = (report.elderDeaths || 0) + elderDeaths;
+    report.events.push(`👴 ${elderDeaths} elder${elderDeaths !== 1 ? 's' : ''} passed away of old age.`);
+
+    if (gameState.culture) gameState.culture.deathsOccurred = true;
+    if (window.addChronicleEntry) {
+      window.addChronicleEntry(
+        `${elderDeaths} elder${elderDeaths !== 1 ? 's' : ''} passed away, taking their wisdom with them.`,
+        'death'
+      );
+    }
+  }
+
+  // 5. Recompute elder count
+  recomputeElderCount();
+}
+
+function addToAdultCohort(age, count) {
+  if (!gameState.adultCohorts) gameState.adultCohorts = [];
+  const existing = gameState.adultCohorts.find(c => c.age === age);
+  if (existing) {
+    existing.count += count;
+  } else {
+    gameState.adultCohorts.push({ age, count });
+  }
+}
+
+function recomputeElderCount() {
+  const ELDER_AGE = window.ELDER_AGE || 50;
+  gameState.population.elders = (gameState.adultCohorts || [])
+    .filter(c => c.age >= ELDER_AGE)
+    .reduce((sum, c) => sum + c.count, 0);
+}
+
+function processElderBonuses(report) {
+  const elders = gameState.population.elders || 0;
+  if (elders <= 0) return;
+
+  const legBonus = elders * (window.ELDER_LEGITIMACY_BONUS || 0.08);
+  const idBonus = elders * (window.ELDER_IDENTITY_BONUS || 0.05);
+  const knowBonus = elders * (window.ELDER_KNOWLEDGE_PER_TURN || 0.3);
+
+  gameState.cohesion.legitimacy = Math.min(100, gameState.cohesion.legitimacy + legBonus);
+  gameState.cohesion.identity = Math.min(100, gameState.cohesion.identity + idBonus);
+  gameState.resources.knowledge = (gameState.resources.knowledge || 0) + knowBonus;
 }
 
 function processStarvation(deficit, report) {
@@ -499,14 +585,39 @@ function processStarvation(deficit, report) {
       report.events.push(`☠️ ${childDeaths} children (age ${cohort.age}) died from starvation.`);
     }
   }
-
-  // Remove empty cohorts
   gameState.childCohorts = gameState.childCohorts.filter(c => c.count > 0);
 
-  // Then adults die — idle workers first, then employed
+  // Elders die next (oldest first)
+  if (remainingDeaths > 0) {
+    const ELDER_AGE = window.ELDER_AGE || 50;
+    const elderCohorts = (gameState.adultCohorts || [])
+      .filter(c => c.age >= ELDER_AGE && c.count > 0)
+      .sort((a, b) => b.age - a.age); // oldest first
+
+    let elderStarvationDeaths = 0;
+    for (const cohort of elderCohorts) {
+      if (remainingDeaths <= 0) break;
+      const deaths = Math.min(remainingDeaths, cohort.count);
+      cohort.count -= deaths;
+      elderStarvationDeaths += deaths;
+      remainingDeaths -= deaths;
+    }
+    if (elderStarvationDeaths > 0) {
+      gameState.population.total -= elderStarvationDeaths;
+      gameState.population.idle = Math.max(0, gameState.population.idle - elderStarvationDeaths);
+      report.elderDeaths = (report.elderDeaths || 0) + elderStarvationDeaths;
+      report.events.push(`☠️ ${elderStarvationDeaths} elder${elderStarvationDeaths !== 1 ? 's' : ''} died from starvation.`);
+    }
+    gameState.adultCohorts = gameState.adultCohorts.filter(c => c.count > 0);
+  }
+
+  // Then working adults die — idle workers first, then employed
   if (remainingDeaths > 0) {
     const idleDeaths = Math.min(remainingDeaths, gameState.population.idle);
     const employedDeaths = remainingDeaths - idleDeaths;
+
+    // Remove from adult cohorts (youngest working adults first)
+    removeFromAdultCohorts(remainingDeaths);
 
     gameState.population.total -= remainingDeaths;
     gameState.population.idle = Math.max(0, gameState.population.idle - remainingDeaths);
@@ -522,7 +633,6 @@ function processStarvation(deficit, report) {
           const idx = gameState.units.indexOf(unit);
           if (idx >= 0) {
             gameState.units.splice(idx, 1);
-            // population.total already decremented above; just fix employed tracking
             gameState.population.employed -= unitType.cost.population;
           }
           report.events.push(`💀 ${unitType.icon} ${unitType.name} died from starvation.`);
@@ -532,8 +642,36 @@ function processStarvation(deficit, report) {
     }
   }
 
+  recomputeElderCount();
+
   // Ensure storytellers don't exceed remaining population
   if (window.clampStorytellers) window.clampStorytellers();
+}
+
+function removeFromAdultCohorts(count) {
+  // Remove from youngest working-age adults first (elders already handled)
+  const ELDER_AGE = window.ELDER_AGE || 50;
+  const sorted = (gameState.adultCohorts || [])
+    .filter(c => c.age < ELDER_AGE && c.count > 0)
+    .sort((a, b) => a.age - b.age);
+
+  let remaining = count;
+  for (const cohort of sorted) {
+    if (remaining <= 0) break;
+    const deaths = Math.min(remaining, cohort.count);
+    cohort.count -= deaths;
+    remaining -= deaths;
+  }
+  // If still remaining (shouldn't happen), take from any cohort
+  if (remaining > 0) {
+    for (const cohort of gameState.adultCohorts) {
+      if (remaining <= 0) break;
+      const deaths = Math.min(remaining, cohort.count);
+      cohort.count -= deaths;
+      remaining -= deaths;
+    }
+  }
+  gameState.adultCohorts = gameState.adultCohorts.filter(c => c.count > 0);
 }
 
 // Victory system now handled by modular victoryDefeat.js
@@ -560,6 +698,10 @@ export {
   processBirths,
   processAging,
   processStarvation,
+  processElderBonuses,
+  addToAdultCohort,
+  removeFromAdultCohorts,
+  recomputeElderCount,
   checkVictoryConditions,
   trackGovernanceChange
 };

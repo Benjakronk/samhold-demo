@@ -265,6 +265,7 @@ export function applyRaidDamage(damage, report) {
     const popLoss = Math.min(damage - 2, Math.floor(window.gameState.population.total * 0.1));
     window.gameState.population.total -= popLoss;
     window.gameState.population.idle = Math.max(0, window.gameState.population.idle - popLoss);
+    if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(popLoss);
 
     report.events.push(`💀 ${popLoss} people were killed or captured in the raid.`);
   }

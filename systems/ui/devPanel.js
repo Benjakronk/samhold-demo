@@ -986,6 +986,7 @@ export function devGiveResources() {
   gameState.resources.materials += 50;
   gameState.population.idle += 25;
   gameState.population.total += 25;
+  if (window.addToAdultCohort) window.addToAdultCohort(20, 25);
 
   console.log('Gave +50 materials and +25 population');
   renderDevTabContent();
@@ -1011,6 +1012,7 @@ export function devAddPopulation() {
   if (gameState?.population) {
     gameState.population.total += 10;
     gameState.population.idle += 10;
+    if (window.addToAdultCohort) window.addToAdultCohort(20, 10);
     window.updateAllUI();
     console.log('Added +10 population');
   }

@@ -158,6 +158,7 @@ export function processCombatPhase(report) {
       // Death in combat — person is gone permanently
       window.gameState.population.employed -= unitType.cost.population;
       window.gameState.population.total -= unitType.cost.population;
+      if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(unitType.cost.population);
 
       // Notify governance system of combat defeat (military rule fragility)
       if (window.onCombatDefeat) window.onCombatDefeat();

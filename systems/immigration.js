@@ -91,6 +91,7 @@ export function processImmigration(report) {
   if (graduated > 0) {
     gameState.population.total += graduated;
     gameState.population.idle += graduated;
+    if (window.addToAdultCohort) window.addToAdultCohort(20, graduated); // immigrants enter at adult age
     imm.lifetimeIntegrated += graduated;
     imm.cohorts[3] = 0;
     if (graduated >= 2 && report) {

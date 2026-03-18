@@ -472,6 +472,7 @@ function graduateCohorts(newAge) {
     if (cohort.age >= newAge) {
       gameState.population.total += cohort.count;
       gameState.population.idle += cohort.count;
+      if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, cohort.count);
       gameState.childCohorts.splice(i, 1);
     }
   }

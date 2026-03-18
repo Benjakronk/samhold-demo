@@ -14,9 +14,11 @@ export function createGameState() {
     population: {
       total: 25, // adult population only (children are tracked separately)
       idle: 25,
-      employed: 0 // computed from buildings
+      employed: 0, // computed from buildings
+      elders: 0  // computed: count of adults >= ELDER_AGE
     },
     childCohorts: [], // array of {age: number, count: number} - children tracked by birth year
+    adultCohorts: [], // array of {age: number, count: number} - adults tracked by age
     birthAccumulator: 0.0, // fractional births accumulate until >= 1.0
     cohesion: {
       identity: 60,

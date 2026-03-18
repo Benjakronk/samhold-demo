@@ -45,6 +45,18 @@ export function initGameCore(seed) {
   ];
   gameState.birthAccumulator = 0.0;
 
+  // Initialize adult cohorts — distribute starting population across age range
+  gameState.adultCohorts = [
+    { age: 15, count: 4 },  // young adults
+    { age: 20, count: 5 },  // prime workers
+    { age: 25, count: 5 },  // experienced
+    { age: 30, count: 4 },  // mature
+    { age: 35, count: 3 },  // older
+    { age: 42, count: 2 },  // senior — first elders in ~8 years
+    { age: 48, count: 2 },  // near elder
+  ];
+  gameState.population.elders = 0;
+
   gameState.map = []; gameState.settlements = []; gameState.rivers = []; gameState.riverSegmentCounts = new Map();
   gameState.selectedHex = null; gameState.startHex = null;
   gameState.territory = new Set(); gameState.lastTurnReport = null;

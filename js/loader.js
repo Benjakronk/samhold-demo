@@ -95,6 +95,13 @@ window.WORKING_AGE = CONSTANTS.WORKING_AGE;
 window.SEASONS = CONSTANTS.SEASONS;
 window.DEV_MODE = CONSTANTS.DEV_MODE;
 window.BASE_BIRTH_RATE = CONSTANTS.BASE_BIRTH_RATE;
+window.ELDER_AGE = CONSTANTS.ELDER_AGE;
+window.MAX_AGE = CONSTANTS.MAX_AGE;
+window.FOOD_PER_ELDER = CONSTANTS.FOOD_PER_ELDER;
+window.NATURAL_DEATH_BASE_RATE = CONSTANTS.NATURAL_DEATH_BASE_RATE;
+window.ELDER_LEGITIMACY_BONUS = CONSTANTS.ELDER_LEGITIMACY_BONUS;
+window.ELDER_IDENTITY_BONUS = CONSTANTS.ELDER_IDENTITY_BONUS;
+window.ELDER_KNOWLEDGE_PER_TURN = CONSTANTS.ELDER_KNOWLEDGE_PER_TURN;
 window.MM_W = CONSTANTS.MM_W;
 window.MM_H = CONSTANTS.MM_H;
 
@@ -245,6 +252,9 @@ window.processStarvation = TurnProcessing.processStarvation;
 window.checkVictoryConditions = TurnProcessing.checkVictoryConditions;
 window.calculateVictoryScores = TurnProcessing.calculateVictoryScores;
 window.trackGovernanceChange = TurnProcessing.trackGovernanceChange;
+window.addToAdultCohort = TurnProcessing.addToAdultCohort;
+window.removeFromAdultCohorts = TurnProcessing.removeFromAdultCohorts;
+window.recomputeElderCount = TurnProcessing.recomputeElderCount;
 
 // Rendering system
 window.initRendering = Rendering.initRendering;

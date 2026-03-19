@@ -104,6 +104,24 @@ export function calculateIncome() {
     }
   }
 
+  // Nursing labor penalty: nursing mothers produce at reduced capacity
+  const totalNursing = window.getTotalNursing ? window.getTotalNursing() : 0;
+  const nursingPenalty = window.NURSING_LABOR_PENALTY || 0.5;
+  let nursingProductionPenalty = 0;
+  if (totalNursing > 0 && laborUsed > 0) {
+    const nursingInWorkforce = Math.min(totalNursing, laborUsed);
+    nursingProductionPenalty = nursingInWorkforce * (1 - nursingPenalty) / laborUsed;
+    foodIncome = Math.round(foodIncome * (1 - nursingProductionPenalty));
+    matIncome = Math.round(matIncome * (1 - nursingProductionPenalty));
+  }
+
+  // Gender formalization labor bonus
+  const genderProdMult = window.getGenderProductionMultiplier ? window.getGenderProductionMultiplier() : 1.0;
+  if (genderProdMult !== 1.0) {
+    foodIncome = Math.round(foodIncome * genderProdMult);
+    matIncome = Math.round(matIncome * genderProdMult);
+  }
+
   // Count fortification construction workers
   for (const fort of Object.values(window.gameState.fortifications || {})) {
     if (fort.buildProgress > 0 && fort.workers > 0) {
@@ -168,6 +186,8 @@ export function calculateIncome() {
     popFoodConsumed,
     unitFoodUpkeep,
     foodConsumed,
+    nursingCount: totalNursing,
+    nursingProductionPenalty: Math.round(nursingProductionPenalty * 100),
     netFood: foodIncome - foodConsumed, // total net for UI display only
     netMat: matIncome - matUpkeep
   };

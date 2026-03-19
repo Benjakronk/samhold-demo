@@ -18,6 +18,14 @@ export const WORKING_AGE_MIN = 6; // minimum working age allowed
 export const WORKING_AGE_MAX = 16; // maximum working age allowed
 export let WORKING_AGE = 12; // current working age policy (can be modified by governance)
 
+// Gender and reproduction
+export const REPRODUCTIVE_AGE = 14; // biological maturity floor — independent of Working Age policy
+export const STRESS_BIAS_MAX = 0.03; // max sex ratio bias from stress (+/- female probability)
+export const NURSING_DURATION = 3; // turns a mother nurses after birth (50% labor capacity)
+export const NURSING_LABOR_PENALTY = 0.5; // effective labor multiplier while nursing
+export const LABOR_INTENSITY_PENALTY_WEIGHT = 0.4; // reproductive penalty weight for high-intensity female labor
+export const MILITARY_SERVICE_PENALTY_WEIGHT = 0.6; // reproductive penalty weight for female military service
+
 // Elder aging
 export const ELDER_AGE = 50; // age at which adults become elders
 export const MAX_AGE = 80; // absolute maximum age (100% death)

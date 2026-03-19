@@ -500,6 +500,9 @@ function renderGovernanceOverlay() {
 
   // Render class system panel content
   renderClassPanel();
+
+  // Render gender formalization panel content
+  renderGenderPanel();
 }
 
 function renderPolicyLagStatus(policy) {
@@ -989,6 +992,175 @@ function renderClassPanel() {
   el.innerHTML = html;
 }
 
+function renderGenderPanel() {
+  const el = document.getElementById('gender-panel-content');
+  if (!el) return;
+
+  const state = window.getGenderFormalizationState ? window.getGenderFormalizationState() : null;
+  if (!state) { el.innerHTML = '<p style="color:var(--text-dim)">Gender formalization not available.</p>'; return; }
+
+  const DIMS = window.GENDER_DIMENSIONS;
+  let html = '';
+
+  if (!state.active) {
+    // Inactive state
+    html += '<h3>Gender Roles</h3>';
+    html += '<p style="color:var(--text-dim);font-size:12px;margin-bottom:12px">Formalizing gender roles codifies informal patterns into governance policy. Both restriction and mandated equality are active choices with real costs. Only the center position (unformalized) is free.</p>';
+
+    if (!state.canActivate) {
+      const turnsLeft = (window.GENDER_MIN_TURNS || 8) - state.currentTurn;
+      html += `<div style="padding:12px;text-align:center">
+        <p style="color:var(--text-dim)">Society needs time to develop observable patterns before formalization.</p>
+        <p style="color:var(--text-gold)">${turnsLeft > 0 ? `Available in ${turnsLeft} turns` : 'Available now'}</p>
+      </div>`;
+    } else {
+      html += '<p style="color:var(--text-gold);font-size:12px;margin-bottom:8px">Move any dimension away from center to activate formalization.</p>';
+      // Show dimension previews
+      for (const [key, dimDef] of Object.entries(DIMS)) {
+        const dimState = state.dimensions[key];
+        html += renderGenderDimensionControl(key, dimDef, dimState, state);
+      }
+    }
+
+    if (state.dismantlementEffects) {
+      html += `<div style="margin-top:12px;padding:8px;background:rgba(200,50,50,0.1);border:1px solid #cc333344;border-radius:4px;font-size:12px">
+        <strong style="color:#cc6644">Dismantlement Aftermath</strong>
+        <div>${state.dismantlementEffects.turnsRemaining} turns remaining</div>
+      </div>`;
+    }
+
+  } else {
+    // Active state
+    html += '<h3>Gender Roles — Formalized</h3>';
+
+    // Drift warning
+    if (state.driftWarning) {
+      html += `<div style="padding:6px 8px;background:rgba(200,50,50,0.15);border:1px solid #cc333344;border-radius:4px;font-size:11px;color:#cc6644;margin-bottom:8px">
+        ⚠️ Low legitimacy — egalitarian positions are drifting toward unformalized
+      </div>`;
+    }
+
+    // Summary bar
+    const effects = state.cohesionEffects;
+    let summaryParts = [];
+    if (effects.identity !== 0) summaryParts.push(`Identity ${effects.identity > 0 ? '+' : ''}${effects.identity.toFixed(2)}/t`);
+    if (effects.legitimacy !== 0) summaryParts.push(`Legitimacy ${effects.legitimacy > 0 ? '+' : ''}${effects.legitimacy.toFixed(2)}/t`);
+    if (effects.bonds !== 0) summaryParts.push(`Bonds ${effects.bonds > 0 ? '+' : ''}${effects.bonds.toFixed(2)}/t`);
+    if (state.productionMultiplier !== 1.0) summaryParts.push(`Production ${state.productionMultiplier > 1 ? '+' : ''}${Math.round((state.productionMultiplier - 1) * 100)}%`);
+    if (state.trustModifier !== 0) summaryParts.push(`Trust ${state.trustModifier > 0 ? '+' : ''}${state.trustModifier.toFixed(2)}`);
+
+    if (summaryParts.length > 0) {
+      html += `<div style="font-size:11px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:10px;color:var(--text-dim)">
+        ${summaryParts.join(' · ')}
+      </div>`;
+    }
+
+    // Dimension controls
+    for (const [key, dimDef] of Object.entries(DIMS)) {
+      const dimState = state.dimensions[key];
+      html += renderGenderDimensionControl(key, dimDef, dimState, state);
+    }
+
+    // Dismantle button
+    html += `<div style="margin-top:16px">
+      <button class="detail-btn" style="width:100%;font-size:11px;color:#cc4444;border-color:#cc444444" onclick="window.confirmDismantleGenderFormalization()">Dismantle All Formalization</button>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function renderGenderDimensionControl(key, dimDef, dimState, panelState) {
+  let html = `<div style="margin-bottom:10px;padding:8px;background:rgba(0,0,0,0.1);border-radius:4px">`;
+
+  // Header
+  html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <span>${dimDef.icon} <strong>${dimDef.name}</strong></span>
+    <span style="font-size:10px;color:var(--text-gold)">${dimState.label}</span>
+  </div>`;
+
+  // Gated check for inheritance
+  if (dimState.requiresClassSystem && !dimState.classSystemActive) {
+    html += `<div style="font-size:11px;color:var(--text-dim);padding:6px;text-align:center">Requires active class system</div>`;
+    html += '</div>';
+    return html;
+  }
+
+  // 5-position indicator
+  const positions = [-2, -1, 0, 1, 2];
+  html += `<div style="display:flex;gap:2px;margin-bottom:4px">`;
+  for (const p of positions) {
+    const posKey = String(p);
+    const posDef = dimDef.positions[posKey];
+    const isActive = dimState.position === p;
+    const isLag = dimState.lagTurnsLeft > 0;
+
+    let bgColor, textColor, borderColor;
+    if (isActive) {
+      if (p < 0) { bgColor = 'rgba(200,100,50,0.3)'; textColor = '#cc8844'; borderColor = '#cc8844'; }
+      else if (p > 0) { bgColor = 'rgba(80,160,80,0.3)'; textColor = '#6cb66c'; borderColor = '#6cb66c'; }
+      else { bgColor = 'var(--panel-header)'; textColor = 'var(--text-gold)'; borderColor = 'var(--text-gold)'; }
+    } else {
+      bgColor = 'rgba(0,0,0,0.1)'; textColor = 'var(--text-dim)'; borderColor = 'transparent';
+    }
+
+    html += `<div style="flex:1;text-align:center;padding:3px 2px;border-radius:3px;font-size:9px;background:${bgColor};color:${textColor};border:1px solid ${borderColor}" title="${posDef?.description || ''}">
+      ${posDef?.label || posKey}
+    </div>`;
+  }
+  html += '</div>';
+
+  // Movement buttons
+  const canLeft = dimState.canMoveNegative && dimState.position > -2;
+  const canRight = dimState.canMovePositive && dimState.position < 2;
+
+  html += '<div style="display:flex;gap:4px;margin-bottom:4px">';
+
+  // Left (restrictive) button
+  if (canLeft) {
+    const leftLabel = key === 'inheritance' ? '← More Patrilineal' : '← More Restrictive';
+    html += `<button class="detail-btn" style="flex:1;font-size:10px;padding:3px 6px;color:#cc8844;border-color:#cc884444" onclick="window.confirmMoveGenderDimension('${key}', -1)">${leftLabel}</button>`;
+  } else {
+    html += `<button class="detail-btn" style="flex:1;font-size:10px;padding:3px 6px;opacity:0.3" disabled>← ${key === 'inheritance' ? 'Patrilineal' : 'Restrictive'}</button>`;
+  }
+
+  // Right (egalitarian) button
+  if (canRight) {
+    const rightLabel = key === 'inheritance' ? 'More Matrilineal →' : 'More Egalitarian →';
+    html += `<button class="detail-btn" style="flex:1;font-size:10px;padding:3px 6px;color:#6cb66c;border-color:#6cb66c44" onclick="window.confirmMoveGenderDimension('${key}', 1)">${rightLabel}</button>`;
+  } else {
+    html += `<button class="detail-btn" style="flex:1;font-size:10px;padding:3px 6px;opacity:0.3" disabled>${key === 'inheritance' ? 'Matrilineal' : 'Egalitarian'} →</button>`;
+  }
+  html += '</div>';
+
+  // Status info
+  if (dimState.lagTurnsLeft > 0) {
+    html += `<div style="font-size:10px;color:#ccaa33">⏳ Transition in progress: ${dimState.lagTurnsLeft} turn${dimState.lagTurnsLeft !== 1 ? 's' : ''} remaining</div>`;
+  }
+
+  // Deepening hint
+  if (Math.abs(dimState.position) === 1 && !dimState.canDeepen) {
+    const turnsNeeded = (window.GENDER_DEEPEN_TURNS_REQUIRED || 4) - dimState.turnsAtPosition;
+    if (turnsNeeded > 0) {
+      html += `<div style="font-size:10px;color:var(--text-dim)">Deepening available in ${turnsNeeded} turn${turnsNeeded !== 1 ? 's' : ''}</div>`;
+    }
+  }
+
+  // Drift timer
+  if (dimState.position > 0 && dimState.driftTimer > 0) {
+    html += `<div style="font-size:10px;color:#cc6644">⚠️ Drift: ${dimState.driftTimer}/${window.GENDER_DRIFT_INTERVAL || 4} turns</div>`;
+  }
+
+  // Description
+  const currentPosDef = dimDef.positions[String(dimState.position)];
+  if (currentPosDef) {
+    html += `<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${currentPosDef.description}</div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
 function selectGovernanceModel(modelKey) {
   if (modelKey !== gameState.governance.model) {
     // Check requirements
@@ -1091,6 +1263,11 @@ function renderPopSummaryTab() {
   const depRatio = s.workingAdults > 0 ? (dependents / s.workingAdults) : 0;
   const depColor = depRatio > 1.0 ? '#c77' : depRatio > 0.6 ? '#ccaa44' : '#6cb66c';
 
+  // Sex ratio for summary
+  const sexCounts = window.getAdultSexCounts ? window.getAdultSexCounts() : { male: 0, female: 0 };
+  const sexTotal = sexCounts.male + sexCounts.female;
+  const sexRatioText = sexTotal > 0 ? `${sexCounts.male}\u2642 / ${sexCounts.female}\u2640` : '—';
+
   let html = `
     <div class="detail-section">
       <h3>Population Summary</h3>
@@ -1098,6 +1275,7 @@ function renderPopSummaryTab() {
       <div class="detail-row"><span>\u{1F465} Working Adults:</span><span>${s.workingAdults}</span></div>
       <div class="detail-row"><span>\u{1F9D3} Elders (${s.elderAge}+):</span><span>${s.elderCount}</span></div>
       <div class="detail-row"><span>\u{1F476} Children:</span><span>${s.totalChildren}</span></div>
+      <div class="detail-row"><span>Sex Ratio (adults):</span><span><span style="color:#6ca0d4">${sexRatioText}</span></span></div>
       <div class="detail-row">
         <span>Working Age:</span>
         <span style="display: flex; align-items: center; gap: 8px;">
@@ -1136,6 +1314,24 @@ function renderPopSummaryTab() {
 
   html += `</div>`;
 
+  // Fertility section
+  const fertileFemales = window.getFertileFemaleCount ? window.getFertileFemaleCount() : 0;
+  const nursingCount = window.getTotalNursing ? window.getTotalNursing() : 0;
+  const availableFemales = Math.max(0, fertileFemales - nursingCount);
+  const reproAvail = window.getReproductiveAvailability ? window.getReproductiveAvailability() : 1;
+  const reproAvailPct = Math.round(reproAvail * 100);
+  const reproColor = reproAvailPct >= 80 ? '#6cb66c' : reproAvailPct >= 50 ? '#ccaa44' : '#c77';
+
+  html += `
+    <div class="detail-section">
+      <h3>\u{1F476} Fertility</h3>
+      <div class="detail-row"><span>\u2640 Fertile females (${window.REPRODUCTIVE_AGE || 14}-${s.elderAge}):</span><span>${fertileFemales}</span></div>
+      ${nursingCount > 0 ? `<div class="detail-row"><span>\u{1F931} Currently nursing:</span><span>${nursingCount} (3-turn cycle, 50% labor)</span></div>` : ''}
+      <div class="detail-row"><span>Available for reproduction:</span><span>${availableFemales}</span></div>
+      <div class="detail-row"><span>Reproductive availability:</span><span style="color: ${reproColor}">${reproAvailPct}%</span></div>
+      ${reproAvailPct < 100 ? `<div class="detail-row" style="color: var(--text-dim); font-size: 12px;"><span>Reduced by:</span><span>${reproAvailPct < 100 ? 'high-intensity labor / military' : ''}</span></div>` : ''}
+    </div>`;
+
   document.getElementById('population-details-content').innerHTML = html;
 }
 
@@ -1147,25 +1343,32 @@ function renderPopPyramidTab() {
   const bracketSize = 5;
   const maxBracket = Math.ceil((s.maxAge + 1) / bracketSize);
   for (let i = 0; i < maxBracket; i++) {
-    brackets.push({ minAge: i * bracketSize, maxAge: (i + 1) * bracketSize - 1, label: `${i * bracketSize}-${(i + 1) * bracketSize - 1}`, children: 0, adults: 0, elders: 0, immigrants: 0 });
+    brackets.push({
+      minAge: i * bracketSize, maxAge: (i + 1) * bracketSize - 1,
+      label: `${i * bracketSize}-${(i + 1) * bracketSize - 1}`,
+      male: 0, female: 0, maleImm: 0, femaleImm: 0
+    });
   }
 
   // Fill children
   for (const cohort of gameState.childCohorts || []) {
     const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
-    if (brackets[idx]) brackets[idx].children += cohort.count;
+    if (brackets[idx]) {
+      brackets[idx].male += cohort.male || 0;
+      brackets[idx].female += cohort.female || 0;
+    }
   }
 
   // Fill adults
   for (const cohort of gameState.adultCohorts || []) {
     const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
     if (brackets[idx]) {
-      if (cohort.age >= s.elderAge) brackets[idx].elders += cohort.count;
-      else brackets[idx].adults += cohort.count;
+      brackets[idx].male += cohort.male || 0;
+      brackets[idx].female += cohort.female || 0;
     }
   }
 
-  // Fill pipeline immigrants (age-tracked)
+  // Fill pipeline immigrants (stages 0-2, not yet integrated)
   let totalImmigrants = 0;
   const imm = gameState.immigration;
   if (imm?.cohorts) {
@@ -1174,68 +1377,85 @@ function renderPopPyramidTab() {
       if (Array.isArray(stageCohorts)) {
         for (const cohort of stageCohorts) {
           const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
-          if (brackets[idx]) brackets[idx].immigrants += cohort.count;
-          totalImmigrants += cohort.count;
+          if (brackets[idx]) {
+            brackets[idx].maleImm += cohort.male || 0;
+            brackets[idx].femaleImm += cohort.female || 0;
+          }
+          totalImmigrants += cohort.count || 0;
         }
       }
     }
   }
 
-  // Find max bracket total for scaling
-  const maxCount = Math.max(1, ...brackets.map(b => b.children + b.adults + b.elders + b.immigrants));
+  // Compute totals for sex ratio display
+  const sexCounts = window.getAdultSexCounts ? window.getAdultSexCounts() : { male: 0, female: 0 };
+  const totalMale = brackets.reduce((s, b) => s + b.male, 0);
+  const totalFemale = brackets.reduce((s, b) => s + b.female, 0);
+  const sexRatio = totalFemale > 0 ? (totalMale / totalFemale * 100).toFixed(0) : '—';
+
+  // Find max bracket count for scaling (largest side)
+  const maxCount = Math.max(1, ...brackets.map(b =>
+    Math.max(b.male + b.maleImm, b.female + b.femaleImm)
+  ));
 
   // Summary stats at top
   let html = `
     <div class="pyramid-summary">
       <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalPop + totalImmigrants}</div><div class="pyramid-stat-label">Total</div></div>
-      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.workingAdults}</div><div class="pyramid-stat-label">Working Adults</div></div>
-      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.elderCount}</div><div class="pyramid-stat-label">Elders</div></div>
-      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalChildren}</div><div class="pyramid-stat-label">Children</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value" style="color: #6ca0d4;">${totalMale}</div><div class="pyramid-stat-label">\u2642 Male</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value" style="color: #d47ca0;">${totalFemale}</div><div class="pyramid-stat-label">\u2640 Female</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${sexRatio}</div><div class="pyramid-stat-label">Sex Ratio</div></div>
       ${totalImmigrants > 0 ? `<div class="pyramid-stat"><div class="pyramid-stat-value">${totalImmigrants}</div><div class="pyramid-stat-label">Pipeline</div></div>` : ''}
     </div>
     <div class="pyramid-legend">
-      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #7ca0c4;"></div> Children</div>
-      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #8cb87c;"></div> Working Adults</div>
-      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #c4a04e;"></div> Elders</div>
+      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #6ca0d4;"></div> Male</div>
+      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #d47ca0;"></div> Female</div>
       ${totalImmigrants > 0 ? `<div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #cc6644;"></div> Immigrants</div>` : ''}
     </div>
     <div class="pyramid-container">`;
 
-  // Render from oldest to youngest (top to bottom)
+  // Render from oldest to youngest (top to bottom) — standard demographic pyramid: male left, female right
   for (let i = brackets.length - 1; i >= 0; i--) {
     const b = brackets[i];
-    const total = b.children + b.adults + b.elders + b.immigrants;
-    if (total === 0 && i > Math.floor(s.elderAge / bracketSize)) continue; // skip empty high brackets
+    const total = b.male + b.female + b.maleImm + b.femaleImm;
+    if (total === 0 && i > Math.floor(s.elderAge / bracketSize)) continue;
 
-    // Split citizens (left) and immigrants (right) for the pyramid
-    const citizenTotal = b.children + b.adults + b.elders;
-    const leftCount = citizenTotal;
-    const rightCount = b.immigrants > 0 ? b.immigrants : citizenTotal; // if no immigrants, mirror citizens
+    const leftCount = b.male + b.maleImm;
+    const rightCount = b.female + b.femaleImm;
     const leftPct = (leftCount / maxCount) * 100;
-    const rightPct = b.immigrants > 0 ? (rightCount / maxCount) * 100 : leftPct;
+    const rightPct = (rightCount / maxCount) * 100;
 
-    // Left bar: citizen color by dominant type
+    // Left bar: male citizens + male immigrants
     let leftStyle;
-    if (citizenTotal === 0) {
+    if (leftCount === 0) {
       leftStyle = 'background: transparent;';
+    } else if (b.maleImm > 0) {
+      const citizenPct = (b.male / leftCount) * 100;
+      leftStyle = `background: linear-gradient(to right, #6ca0d4 ${citizenPct}%, #cc6644 ${citizenPct}%);`;
     } else {
-      // Build gradient from constituent parts
-      const segments = [];
-      let runningPct = 0;
-      if (b.children > 0) { const p = (b.children / citizenTotal) * 100; segments.push(`#7ca0c4 ${runningPct}% ${runningPct + p}%`); runningPct += p; }
-      if (b.adults > 0) { const p = (b.adults / citizenTotal) * 100; segments.push(`#8cb87c ${runningPct}% ${runningPct + p}%`); runningPct += p; }
-      if (b.elders > 0) { const p = (b.elders / citizenTotal) * 100; segments.push(`#c4a04e ${runningPct}% ${runningPct + p}%`); runningPct += p; }
-      leftStyle = segments.length > 1 ? `background: linear-gradient(to right, ${segments.join(', ')});` : `background: ${segments.length ? segments[0].split(' ')[0] : '#8cb87c'};`;
+      leftStyle = 'background: #6ca0d4;';
     }
 
-    // Right bar: immigrants or mirrored citizens
-    const rightStyle = b.immigrants > 0
-      ? 'background: #cc6644;'
-      : leftStyle;
+    // Right bar: female citizens + female immigrants
+    let rightStyle;
+    if (rightCount === 0) {
+      rightStyle = 'background: transparent;';
+    } else if (b.femaleImm > 0) {
+      const citizenPct = (b.female / rightCount) * 100;
+      rightStyle = `background: linear-gradient(to left, #cc6644 ${100 - citizenPct}%, #d47ca0 ${100 - citizenPct}%);`;
+    } else {
+      rightStyle = 'background: #d47ca0;';
+    }
+
+    // Age-category indicator
+    const minAge = b.minAge;
+    const isElder = minAge >= s.elderAge;
+    const isChild = minAge < (window.WORKING_AGE || 12);
+    const labelStyle = isElder ? 'color: #c4a04e;' : isChild ? 'color: #7ca0c4;' : '';
 
     html += `
       <div class="pyramid-row">
-        <div class="pyramid-label">${b.label}</div>
+        <div class="pyramid-label" style="${labelStyle}">${b.label}</div>
         <div class="pyramid-bar-left">
           <div class="pyramid-bar" style="width: ${leftPct}%; ${leftStyle}">
             ${leftCount > 0 ? `<span class="bar-count">${leftCount}</span>` : ''}
@@ -1244,7 +1464,7 @@ function renderPopPyramidTab() {
         <div></div>
         <div class="pyramid-bar-right">
           <div class="pyramid-bar" style="width: ${rightPct}%; ${rightStyle}">
-            ${(b.immigrants > 0 ? rightCount : leftCount) > 0 ? `<span class="bar-count">${b.immigrants > 0 ? rightCount : leftCount}</span>` : ''}
+            ${rightCount > 0 ? `<span class="bar-count">${rightCount}</span>` : ''}
           </div>
         </div>
       </div>`;
@@ -1252,7 +1472,7 @@ function renderPopPyramidTab() {
 
   html += `</div>
     <div style="text-align: center; color: var(--text-dim); font-size: 11px; margin-top: 8px;">
-      ${totalImmigrants > 0 ? 'Left: citizens \u00B7 Right: pipeline immigrants' : 'Age brackets shown symmetrically (no gender tracking)'}
+      \u2642 Male (left) \u00B7 \u2640 Female (right)${totalImmigrants > 0 ? ' \u00B7 Orange = pipeline immigrants' : ''}
     </div>`;
 
   document.getElementById('population-details-content').innerHTML = html;
@@ -1275,10 +1495,11 @@ function renderPopCohortsTab() {
           <div class="cohort-grid">`;
       for (const cohort of elderCohorts) {
         const deathRisk = Math.min(0.99, (window.NATURAL_DEATH_BASE_RATE || 0.02) * (cohort.age - s.elderAge + 1));
+        const sexLabel = (cohort.male !== undefined) ? ` <span style="color:#6ca0d4">${cohort.male}\u2642</span> <span style="color:#d47ca0">${cohort.female || 0}\u2640</span>` : '';
         html += `
           <div class="cohort-row">
             <div class="cohort-age">Age ${cohort.age}</div>
-            <div class="cohort-count">${cohort.count} elder${cohort.count !== 1 ? 's' : ''}</div>
+            <div class="cohort-count">${cohort.count} elder${cohort.count !== 1 ? 's' : ''}${sexLabel}</div>
             <div class="cohort-status" style="color: ${deathRisk > 0.3 ? '#c77' : '#b8a870'};">${(deathRisk * 100).toFixed(0)}% mortality/yr</div>
           </div>`;
       }
@@ -1292,10 +1513,11 @@ function renderPopCohortsTab() {
           <div class="cohort-grid">`;
       for (const cohort of workingCohorts) {
         const yearsToElder = s.elderAge - cohort.age;
+        const sexLabel = (cohort.male !== undefined) ? ` <span style="color:#6ca0d4">${cohort.male}\u2642</span> <span style="color:#d47ca0">${cohort.female || 0}\u2640</span>` : '';
         html += `
           <div class="cohort-row">
             <div class="cohort-age">Age ${cohort.age}</div>
-            <div class="cohort-count">${cohort.count} adult${cohort.count !== 1 ? 's' : ''}</div>
+            <div class="cohort-count">${cohort.count} adult${cohort.count !== 1 ? 's' : ''}${sexLabel}</div>
             <div class="cohort-status">${yearsToElder <= 5 ? '\u23F3 ' + yearsToElder + 'y to elder' : ''}</div>
           </div>`;
       }
@@ -1327,10 +1549,11 @@ function renderPopCohortsTab() {
         countLabel = `${cohort.count} children`;
       }
 
+      const sexLabel = (cohort.male !== undefined) ? ` <span style="color:#6ca0d4">${cohort.male}\u2642</span> <span style="color:#d47ca0">${cohort.female || 0}\u2640</span>` : '';
       html += `
         <div class="cohort-row">
           <div class="cohort-age">Age ${cohort.age}</div>
-          <div class="cohort-count">${countLabel}</div>
+          <div class="cohort-count">${countLabel}${sexLabel}</div>
           <div class="cohort-status">${statusText}</div>
         </div>`;
     }

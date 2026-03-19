@@ -225,6 +225,25 @@ export function renderDevTabContent() {
             <input type="number" id="dev-adults" value="${gameState.population.total}" min="1" max="999" style="width:60px;">
             <button class="dev-btn" onclick="adjustAdults(1)">+</button>
           </div>
+          ${(() => { const sc = window.getAdultSexCounts ? window.getAdultSexCounts() : null; return sc ? `<div style="color:var(--text-dim);font-size:12px;margin-top:4px"><span style="color:#6ca0d4">${sc.male}\u2642</span> / <span style="color:#d47ca0">${sc.female}\u2640</span></div>` : ''; })()}
+        </div>
+
+        <div class="dev-pop-section">
+          <h5>Fertility & Nursing</h5>
+          ${(() => {
+            const fertile = window.getFertileFemaleCount ? window.getFertileFemaleCount() : 0;
+            const nursing = window.getTotalNursing ? window.getTotalNursing() : 0;
+            const reproAvail = window.getReproductiveAvailability ? window.getReproductiveAvailability() : 1;
+            const entries = gameState.nursing || [];
+            return `
+              <div style="color:var(--text-dim);font-size:12px;">
+                Fertile \u2640: ${fertile} | Nursing: ${nursing} | Available: ${Math.max(0, fertile - nursing)}<br>
+                Repro. availability: ${Math.round(reproAvail * 100)}%<br>
+                ${entries.length > 0 ? `Entries: ${entries.map(e => e.count + '\u00D7' + e.turnsLeft + 't').join(', ')}` : 'No nursing entries'}
+              </div>
+              <button class="dev-btn" style="margin-top:4px;font-size:11px" onclick="window.gameState.nursing=[]; window.renderDevOverlay();">Clear Nursing</button>
+            `;
+          })()}
         </div>
 
         <div class="dev-pop-section">
@@ -713,6 +732,46 @@ export function renderDevTabContent() {
       </div>`;
     } else {
       html = `<div style="color:var(--text-dim);font-style:italic">Class system not initialized</div>`;
+    }
+  } else if (devActiveTab === 'gender') {
+    const gf = gameState.genderFormalization;
+    if (gf) {
+      const DIMS = window.GENDER_DIMENSIONS || {};
+      let dimRows = '';
+      for (const [key, dim] of Object.entries(gf.dimensions)) {
+        const dimDef = DIMS[key] || {};
+        const posLabel = dimDef.positions?.[String(dim.position)]?.label || dim.position;
+        const posColor = dim.position < 0 ? '#cc8844' : dim.position > 0 ? '#6cb66c' : 'var(--text-dim)';
+        dimRows += `<div>${dimDef.icon || ''} ${dimDef.name || key}: <strong style="color:${posColor}">${posLabel} (${dim.position})</strong> · t@pos=${dim.turnsAtPosition} · drift=${dim.driftTimer} · lag=${dim.lagTurnsLeft}</div>`;
+      }
+      const cohFx = window.getGenderCohesionEffects ? window.getGenderCohesionEffects() : {};
+      html = `<div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">Gender Formalization State</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div>Active: <strong style="color:${gf.active ? '#6cb66c' : '#cc6644'}">${gf.active}</strong></div>
+          <div>Activated turn: ${gf.activatedTurn || '—'}</div>
+          ${dimRows}
+          <div style="margin-top:4px">Production mult: <strong>${window.getGenderProductionMultiplier ? window.getGenderProductionMultiplier().toFixed(2) : '1.00'}</strong></div>
+          <div>Trust modifier: <strong>${window.getGenderTrustModifier ? window.getGenderTrustModifier().toFixed(3) : '0'}</strong></div>
+          <div>Resistance/turn: <strong>${window.getGenderResistancePressure ? window.getGenderResistancePressure().toFixed(1) : '0'}</strong></div>
+          <div>Cohesion/turn: Id=${(cohFx.identity||0).toFixed(2)} Leg=${(cohFx.legitimacy||0).toFixed(2)} Bon=${(cohFx.bonds||0).toFixed(2)}</div>
+          <div>Drift warning: ${gf.active && gameState.cohesion.legitimacy < (window.GENDER_DRIFT_THRESHOLD || 30) ? '<span style="color:#cc6644">YES</span>' : 'No'}</div>
+          ${gf.dismantlementEffects ? `<div style="color:#cc6644">Dismantlement aftermath: ${gf.dismantlementEffects.turnsRemaining}t</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="dev-btn" onclick="const d=gameState.genderFormalization.dimensions; for(const k of Object.keys(d)){d[k].position=-2;d[k].turnsAtPosition=99;} gameState.genderFormalization.active=true; gameState.genderFormalization.activatedTurn=gameState.genderFormalization.activatedTurn||gameState.turn; renderDevTabContent();" style="font-size:11px">All Sharp Restrictive</button>
+          <button class="dev-btn" onclick="const d=gameState.genderFormalization.dimensions; for(const k of Object.keys(d)){d[k].position=2;d[k].turnsAtPosition=99;} gameState.genderFormalization.active=true; gameState.genderFormalization.activatedTurn=gameState.genderFormalization.activatedTurn||gameState.turn; renderDevTabContent();" style="font-size:11px">All Sharp Egalitarian</button>
+          <button class="dev-btn" onclick="const d=gameState.genderFormalization.dimensions; for(const k of Object.keys(d)){d[k].position=0;d[k].turnsAtPosition=0;d[k].driftTimer=0;d[k].lagTurnsLeft=0;} gameState.genderFormalization.active=false; renderDevTabContent();" style="font-size:11px">Reset All</button>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          ${Object.keys(gf.dimensions).map(k => `
+            <button class="dev-btn" onclick="gameState.genderFormalization.dimensions.${k}.position=Math.max(-2,gameState.genderFormalization.dimensions.${k}.position-1); gameState.genderFormalization.active=true; gameState.genderFormalization.activatedTurn=gameState.genderFormalization.activatedTurn||gameState.turn; renderDevTabContent();" style="font-size:10px">${k} −1</button>
+            <button class="dev-btn" onclick="gameState.genderFormalization.dimensions.${k}.position=Math.min(2,gameState.genderFormalization.dimensions.${k}.position+1); gameState.genderFormalization.active=true; gameState.genderFormalization.activatedTurn=gameState.genderFormalization.activatedTurn||gameState.turn; renderDevTabContent();" style="font-size:10px">${k} +1</button>
+          `).join('')}
+        </div>
+      </div>`;
+    } else {
+      html = `<div style="color:var(--text-dim);font-style:italic">Gender formalization not initialized</div>`;
     }
   }
 

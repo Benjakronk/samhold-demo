@@ -63,9 +63,15 @@ function updateAllUI() {
   }, 0);
   const buildingWorkers = inc.laborUsed - unitPopulation;
 
+  const sexCounts = window.getAdultSexCounts ? window.getAdultSexCounts() : null;
+  const sexSuffix = sexCounts ? ` <span style="color:#6ca0d4;font-size:11px">${sexCounts.male}\u2642</span><span style="color:#d47ca0;font-size:11px">${sexCounts.female}\u2640</span>` : '';
+  const nursingCount = window.getTotalNursing ? window.getTotalNursing() : 0;
+  const nursingRow = nursingCount > 0 ? `<div class="hex-info-row"><span class="label">\u{1F931} Nursing</span><span class="value">${nursingCount} (50% labor)</span></div>` : '';
+
   document.getElementById('labor-content').innerHTML = `
-    <div class="hex-info-row"><span class="label">\u{1F465} Adults</span><span class="value">${gameState.population.total}${elderCount > 0 ? ` (${elderCount} elders)` : ''}</span></div>
+    <div class="hex-info-row"><span class="label">\u{1F465} Adults</span><span class="value">${gameState.population.total}${elderCount > 0 ? ` (${elderCount} elders)` : ''} ${sexSuffix}</span></div>
     <div class="hex-info-row"><span class="label">\u{1F476} Children</span><span class="value">${totalChildren}</span></div>
+    ${nursingRow}
     ${graduationInfo}
     <div class="hex-info-row"><span class="label">Workers assigned</span><span class="value">${gameState.population.employed}</span></div>
     <div class="hex-info-row" style="margin-left:16px;"><span class="label">\u2022 Stationary</span><span class="value">${buildingWorkers}</span></div>
@@ -74,6 +80,7 @@ function updateAllUI() {
     <div class="hex-info-row"><span class="label">Food per turn</span><span class="value" style="color:${inc.netFood >= 0 ? '#6cb66c' : '#cc6666'}">${inc.netFood >= 0 ? '+' : ''}${inc.netFood}</span></div>
     ${constructionRow}
     ${trainingRow}
+    ${inc.nursingProductionPenalty > 0 ? `<div class="hex-info-row"><span class="label">\u{1F931} Nursing penalty</span><span class="value" style="color:#cc8844">\u2212${inc.nursingProductionPenalty}% output</span></div>` : ''}
     <div class="hex-info-row" style="padding-top:8px;">
       <button class="detail-btn" onclick="openPopulationDetails()">\u{1F4CA} Population Details</button>
     </div>
@@ -277,6 +284,7 @@ function showTurnSummary(report, seasonName, year) {
     <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${(() => { const d = (report.graduated||0) - (report.adultDeaths||0) - (report.elderDeaths||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
     ${(gameState.population.elders || 0) > 0 ? `<div class="summary-row"><span class="s-label">\u{1F9D3} Elders</span><span class="s-val">${gameState.population.elders}${report.elderDeaths ? ' <span class="delta-neg">(-' + report.elderDeaths + ' passed)</span>' : ''}</span></div>` : ''}
     <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}${(() => { const d = (report.childBirths||0) - (report.childDeaths||0) - (report.graduated||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
+    ${report.nursingCount > 0 ? `<div class="summary-row"><span class="s-label">\u{1F931} Nursing mothers</span><span class="s-val">${report.nursingCount} <span style="color:var(--text-dim)">(50% labor)</span></span></div>` : ''}
   `;
 
   // Immigration summary row

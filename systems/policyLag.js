@@ -172,7 +172,10 @@ export function calculateEffectiveLag(policy, targetValue, startValue) {
   // Administrative Hall reduction
   const hallReduction = getAdminHallReduction();
 
-  const raw = baseLag * govMult * legMult * magMult * (1 - hallReduction);
+  // Gender formalization civic lag modifier (+1 when civic at E2)
+  const genderLagMod = window.getGenderPolicyLagModifier ? window.getGenderPolicyLagModifier() : 0;
+
+  const raw = baseLag * govMult * legMult * magMult * (1 - hallReduction) + genderLagMod;
   return { turns: Math.max(1, Math.floor(raw)), category };
 }
 
@@ -472,7 +475,9 @@ function graduateCohorts(newAge) {
     if (cohort.age >= newAge) {
       gameState.population.total += cohort.count;
       gameState.population.idle += cohort.count;
-      if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, cohort.count);
+      const male = cohort.male || Math.ceil(cohort.count / 2);
+      const female = cohort.female || (cohort.count - male);
+      if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, male, female);
       gameState.childCohorts.splice(i, 1);
     }
   }

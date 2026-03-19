@@ -202,6 +202,12 @@ function processTurn() {
     processUnitUpkeep(report);
   }
 
+  // Tick nursing timers (before births so mothers finishing nursing this turn rejoin fertility pool)
+  if (gameState.nursing) {
+    for (const entry of gameState.nursing) entry.turnsLeft--;
+    gameState.nursing = gameState.nursing.filter(e => e.turnsLeft > 0 && e.count > 0);
+  }
+
   // Birth system - fractional accumulator produces whole children
   processBirths(report);
 
@@ -253,6 +259,9 @@ function processTurn() {
 
   // Process class system (differential effects, privileged class recalc, temporary effects)
   if (window.processClassSystem) window.processClassSystem(report);
+
+  // Process gender formalization (dimension drift, cohesion effects)
+  if (window.processGenderFormalization) window.processGenderFormalization(report);
 
   // Calculate cohesion system (includes Working Age effects)
   window.calculateCohesion();
@@ -409,11 +418,19 @@ function processUnitStarvation(deficit, report) {
 }
 
 function processBirths(report) {
-  // Calculate births based on fertile-age adults (exclude elders)
-  const totalPop = gameState.population.total - (gameState.population.elders || 0);
-  const baseRate = 0.15; // Base birth rate per turn
+  // Female-based fertility formula (Phase 14B: Demographic Transition)
+  const fertileFemales = getFertileFemaleCount();
+  const nursingCount = getTotalNursing();
+  const availableFemales = Math.max(0, fertileFemales - nursingCount);
 
-  // Apply cohesion modifier to birth rate
+  if (availableFemales <= 0) return;
+
+  const baseRate = window.BASE_BIRTH_RATE || 0.12;
+
+  // Reproductive availability — penalized by high-intensity labor and military service
+  const reproAvail = getReproductiveAvailability();
+
+  // Cohesion modifier
   const cohesionStatus = window.getCohesionStatus(gameState.cohesion.total);
   let cohesionModifier = 1.0;
   switch (cohesionStatus.level) {
@@ -424,11 +441,11 @@ function processBirths(report) {
     case 'Collapse': cohesionModifier = 0.3; break;
   }
 
-  // Reduced birth rate during starvation
+  // Starvation modifier
   const starvationModifier = gameState.resources.food < 0 ? 0.5 : 1.0;
 
-  const effectiveRate = baseRate * cohesionModifier * starvationModifier;
-  const expectedBirths = totalPop * effectiveRate;
+  const effectiveRate = baseRate * reproAvail * cohesionModifier * starvationModifier;
+  const expectedBirths = availableFemales * effectiveRate;
 
   // Add to fractional accumulator
   gameState.birthAccumulator = (gameState.birthAccumulator || 0) + expectedBirths;
@@ -438,16 +455,43 @@ function processBirths(report) {
   gameState.birthAccumulator -= wholeBirths;
 
   if (wholeBirths > 0) {
+    // Sex assignment: stress bias modifies 50/50 probability
+    const stressBiasMax = window.STRESS_BIAS_MAX || 0.03;
+    const foodSecurity = gameState.resources.food > 0 ? 1.0 : 0.0;
+    const stressBias = foodSecurity > 0.5
+      ? 0
+      : (foodSecurity > 0.2 ? stressBiasMax : -stressBiasMax);
+    const femaleProbability = 0.5 + stressBias;
+
+    let maleBirths = 0, femaleBirths = 0;
+    for (let i = 0; i < wholeBirths; i++) {
+      if (Math.random() < femaleProbability) femaleBirths++;
+      else maleBirths++;
+    }
+
     // Add new children to age 0 cohort
     const age0Cohort = gameState.childCohorts.find(c => c.age === 0);
     if (age0Cohort) {
-      age0Cohort.count += wholeBirths;
+      age0Cohort.male = (age0Cohort.male || 0) + maleBirths;
+      age0Cohort.female = (age0Cohort.female || 0) + femaleBirths;
+      age0Cohort.count = (age0Cohort.male || 0) + (age0Cohort.female || 0);
     } else {
-      gameState.childCohorts.push({ age: 0, count: wholeBirths });
+      gameState.childCohorts.push({ age: 0, male: maleBirths, female: femaleBirths, count: wholeBirths });
     }
 
-    report.events.push(`👶 ${wholeBirths} children were born this season.`);
+    // Assign nursing state — one mother per birth
+    if (!gameState.nursing) gameState.nursing = [];
+    gameState.nursing.push({ turnsLeft: window.NURSING_DURATION || 3, count: wholeBirths });
+
+    // Build birth report message
+    const nursingTotal = getTotalNursing();
+    const reproAvailPct = Math.round(reproAvail * 100);
+    const fertilityNote = reproAvailPct < 95 ? ` [Fertility: ${reproAvailPct}%]` : '';
+    const nursingNote = nursingTotal > 0 ? ` 🤱${nursingTotal} nursing` : '';
+
+    report.events.push(`👶 ${wholeBirths} born (${maleBirths}♂ ${femaleBirths}♀).${nursingNote}${fertilityNote}`);
     report.childBirths += wholeBirths;
+    report.nursingCount = nursingTotal;
   }
 }
 
@@ -466,8 +510,10 @@ function processAging(report) {
   for (let i = gameState.childCohorts.length - 1; i >= 0; i--) {
     const cohort = gameState.childCohorts[i];
     if (cohort.age >= workingAge) {
-      // Add to adult cohorts
-      addToAdultCohort(workingAge, cohort.count);
+      // Add to adult cohorts with sex split preserved
+      const male = cohort.male || Math.ceil(cohort.count / 2);
+      const female = cohort.female || (cohort.count - Math.ceil(cohort.count / 2));
+      addToAdultCohort(workingAge, male, female);
       gameState.population.total += cohort.count;
       gameState.population.idle += cohort.count;
       report.events.push(`🎓 ${cohort.count} children joined the workforce.`);
@@ -492,6 +538,8 @@ function processAging(report) {
     if (cohort.age >= MAX_AGE) {
       // All die at max age
       elderDeaths += cohort.count;
+      cohort.male = 0;
+      cohort.female = 0;
       cohort.count = 0;
       continue;
     }
@@ -502,7 +550,7 @@ function processAging(report) {
     const deaths = Math.floor(expected) + (Math.random() < (expected - Math.floor(expected)) ? 1 : 0);
     const actualDeaths = Math.min(deaths, cohort.count);
     if (actualDeaths > 0) {
-      cohort.count -= actualDeaths;
+      removeSexProportional(cohort, actualDeaths);
       elderDeaths += actualDeaths;
     }
   }
@@ -530,13 +578,29 @@ function processAging(report) {
   recomputeElderCount();
 }
 
-function addToAdultCohort(age, count) {
+// addToAdultCohort(age, male, female) — primary signature
+// addToAdultCohort(age, count) — backward compat: splits 50/50
+function addToAdultCohort(age, maleOrCount, female) {
   if (!gameState.adultCohorts) gameState.adultCohorts = [];
+  let male, fem;
+  if (female === undefined) {
+    // Legacy 2-arg call: split count 50/50
+    const count = maleOrCount;
+    male = Math.ceil(count / 2);
+    fem = count - male;
+  } else {
+    male = maleOrCount;
+    fem = female;
+  }
+  const total = male + fem;
+  if (total <= 0) return;
   const existing = gameState.adultCohorts.find(c => c.age === age);
   if (existing) {
-    existing.count += count;
+    existing.male = (existing.male || 0) + male;
+    existing.female = (existing.female || 0) + fem;
+    existing.count = (existing.male || 0) + (existing.female || 0);
   } else {
-    gameState.adultCohorts.push({ age, count });
+    gameState.adultCohorts.push({ age, male, female: fem, count: total });
   }
 }
 
@@ -578,7 +642,7 @@ function processStarvation(deficit, report) {
   for (const cohort of sortedByAge) {
     if (remainingDeaths <= 0) break;
     const childDeaths = Math.min(remainingDeaths, cohort.count);
-    cohort.count -= childDeaths;
+    removeSexProportional(cohort, childDeaths);
     report.childDeaths += childDeaths;
     remainingDeaths -= childDeaths;
     if (childDeaths > 0) {
@@ -598,7 +662,7 @@ function processStarvation(deficit, report) {
     for (const cohort of elderCohorts) {
       if (remainingDeaths <= 0) break;
       const deaths = Math.min(remainingDeaths, cohort.count);
-      cohort.count -= deaths;
+      removeSexProportional(cohort, deaths);
       elderStarvationDeaths += deaths;
       remainingDeaths -= deaths;
     }
@@ -668,7 +732,7 @@ function removeFromAdultCohorts(count) {
   for (const cohort of sorted) {
     if (remaining <= 0) break;
     const deaths = Math.min(remaining, cohort.count);
-    cohort.count -= deaths;
+    removeSexProportional(cohort, deaths);
     remaining -= deaths;
   }
   // If still remaining (shouldn't happen), take from any cohort
@@ -676,11 +740,123 @@ function removeFromAdultCohorts(count) {
     for (const cohort of gameState.adultCohorts) {
       if (remaining <= 0) break;
       const deaths = Math.min(remaining, cohort.count);
-      cohort.count -= deaths;
+      removeSexProportional(cohort, deaths);
       remaining -= deaths;
     }
   }
   gameState.adultCohorts = gameState.adultCohorts.filter(c => c.count > 0);
+}
+
+// Helper: remove deaths proportionally from male/female within a cohort
+function removeSexProportional(cohort, deaths) {
+  const m = cohort.male || 0;
+  const f = cohort.female || 0;
+  const total = m + f;
+  if (total <= 0) { cohort.count = Math.max(0, cohort.count - deaths); return; }
+  const maleDeaths = total > 0 ? Math.round(deaths * m / total) : 0;
+  const femaleDeaths = deaths - maleDeaths;
+  cohort.male = Math.max(0, m - maleDeaths);
+  cohort.female = Math.max(0, f - femaleDeaths);
+  cohort.count = cohort.male + cohort.female;
+}
+
+// Get total female adults of reproductive age (>= REPRODUCTIVE_AGE, not nursing, not elder)
+function getFertileFemaleCount() {
+  if (!gameState) return 0;
+  const REPRO_AGE = window.REPRODUCTIVE_AGE || 14;
+  const ELDER_AGE = window.ELDER_AGE || 50;
+  let total = 0;
+  for (const cohort of gameState.adultCohorts || []) {
+    if (cohort.age >= REPRO_AGE && cohort.age < ELDER_AGE) {
+      total += cohort.female || 0;
+    }
+  }
+  return total;
+}
+
+// Get total male/female adult counts
+function getAdultSexCounts() {
+  if (!gameState) return { male: 0, female: 0 };
+  let male = 0, female = 0;
+  for (const cohort of gameState.adultCohorts || []) {
+    male += cohort.male || 0;
+    female += cohort.female || 0;
+  }
+  return { male, female };
+}
+
+// Get total currently nursing count
+function getTotalNursing() {
+  if (!gameState) return 0;
+  const nursing = gameState.nursing || [];
+  const total = nursing.reduce((sum, e) => sum + e.count, 0);
+  // Cap at fertile female count to handle edge cases (mass death reducing females below nursing count)
+  return Math.min(total, getFertileFemaleCount());
+}
+
+// Count high-intensity female workers (estimated proportionally since workers aren't individually sex-tracked)
+function getHighIntensityFemaleWorkers() {
+  if (!gameState) return 0;
+  const sexCounts = getAdultSexCounts();
+  const totalAdults = sexCounts.male + sexCounts.female;
+  if (totalAdults === 0) return 0;
+  const femaleRatio = sexCounts.female / totalAdults;
+
+  let highIntensityWorkers = 0;
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.workers <= 0) continue;
+      if (hex.building && hex.buildProgress > 0) {
+        // All construction is high intensity
+        highIntensityWorkers += hex.workers;
+      } else if (hex.building) {
+        const bDef = window.BUILDINGS[hex.building];
+        if (bDef?.laborIntensity === 'high') {
+          highIntensityWorkers += hex.workers;
+        }
+      }
+      // Unimproved hex gatherers: low intensity
+    }
+  }
+  // Fortification construction workers also high intensity
+  for (const fort of Object.values(gameState.fortifications || {})) {
+    if (fort.buildProgress > 0 && fort.workers > 0) {
+      highIntensityWorkers += fort.workers;
+    }
+  }
+  return highIntensityWorkers * femaleRatio;
+}
+
+// Count female military personnel (estimated proportionally)
+function getMilitaryFemaleCount() {
+  if (!gameState) return 0;
+  const sexCounts = getAdultSexCounts();
+  const totalAdults = sexCounts.male + sexCounts.female;
+  if (totalAdults === 0) return 0;
+  const femaleRatio = sexCounts.female / totalAdults;
+  const unitPop = gameState.units.reduce((sum, u) =>
+    sum + (window.UNIT_TYPES[u.type]?.cost?.population || 0), 0);
+  return unitPop * femaleRatio;
+}
+
+// Compute reproductive availability (0-1) accounting for labor intensity and military service
+function getReproductiveAvailability() {
+  if (!gameState) return 1.0;
+  const sexCounts = getAdultSexCounts();
+  const totalFemale = sexCounts.female;
+  if (totalFemale === 0) return 0;
+
+  const laborWeight = window.LABOR_INTENSITY_PENALTY_WEIGHT || 0.4;
+  const militaryWeight = window.MILITARY_SERVICE_PENALTY_WEIGHT || 0.6;
+
+  const laborPenalty = (getHighIntensityFemaleWorkers() / totalFemale) * laborWeight;
+
+  // Military formalization can reduce or eliminate the reproductive penalty
+  const reproPenaltyMod = window.getGenderReproPenaltyModifier ? window.getGenderReproPenaltyModifier() : 1.0;
+  const militaryPenalty = (getMilitaryFemaleCount() / totalFemale) * militaryWeight * reproPenaltyMod;
+
+  return Math.max(0, Math.min(1, 1 - laborPenalty - militaryPenalty));
 }
 
 // Victory system now handled by modular victoryDefeat.js
@@ -710,7 +886,14 @@ export {
   processElderBonuses,
   addToAdultCohort,
   removeFromAdultCohorts,
+  removeSexProportional,
   recomputeElderCount,
+  getFertileFemaleCount,
+  getAdultSexCounts,
+  getTotalNursing,
+  getHighIntensityFemaleWorkers,
+  getMilitaryFemaleCount,
+  getReproductiveAvailability,
   checkVictoryConditions,
   trackGovernanceChange
 };

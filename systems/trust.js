@@ -70,6 +70,12 @@ export function processTrust() {
     t.interpersonalBaseline = Math.max(0, t.interpersonalBaseline - classReduction);
   }
 
+  // 1c. Gender formalization trust modifier (positive increases baseline, negative decreases)
+  const genderTrustMod = window.getGenderTrustModifier ? window.getGenderTrustModifier() : 0;
+  if (genderTrustMod !== 0) {
+    t.interpersonalBaseline = Math.max(0, Math.min(1, t.interpersonalBaseline + genderTrustMod));
+  }
+
   // 2. Decay deviations toward zero
   if (t.deviations.institutional > 0) {
     t.deviations.institutional = Math.max(0, t.deviations.institutional - DRIFT_RATE);

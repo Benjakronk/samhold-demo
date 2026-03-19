@@ -257,6 +257,44 @@ function evaluateCondition(condition) {
         case 'fewActiveThreats':
           result = (gameState.externalThreats?.length ?? 0) <= 1;
           break;
+        // Gender formalization event checks
+        case 'genderLaborUnformalized':
+          result = (gameState.genderFormalization?.dimensions?.labor?.position ?? 0) === 0;
+          break;
+        case 'genderMilitaryUnformalized':
+          result = (gameState.genderFormalization?.dimensions?.military?.position ?? 0) === 0;
+          break;
+        case 'genderInheritanceUnformalized':
+          result = (gameState.genderFormalization?.dimensions?.inheritance?.position ?? 0) === 0;
+          break;
+        case 'genderCivicUnformalized':
+          result = (gameState.genderFormalization?.dimensions?.civic?.position ?? 0) === 0;
+          break;
+        case 'highNursingBurden': {
+          const totalNursing = window.getTotalNursing ? window.getTotalNursing() : 0;
+          const sexCounts = window.getAdultSexCounts ? window.getAdultSexCounts() : { female: 0 };
+          result = sexCounts.female > 0 && (totalNursing / sexCounts.female) >= 0.15;
+          break;
+        }
+        case 'theocracyOrTribalCouncil':
+          result = gameState.governance.model === 'theocracy' || gameState.governance.model === 'tribalCouncil';
+          break;
+        case 'classSystemActive':
+          result = gameState.classSystem?.active === true;
+          break;
+        case 'genderSharpRestriction': {
+          const gf = gameState.genderFormalization;
+          result = gf?.active && Object.values(gf.dimensions || {}).some(d => d.position <= -2);
+          break;
+        }
+        case 'genderEgalitarianDrifting': {
+          const gf2 = gameState.genderFormalization;
+          const driftThreshold = window.GENDER_DRIFT_THRESHOLD || 30;
+          result = gf2?.active &&
+            gameState.cohesion.legitimacy < driftThreshold &&
+            Object.values(gf2.dimensions || {}).some(d => d.position > 0 && d.driftTimer > 0);
+          break;
+        }
         default:
           result = false;
       }

@@ -20,6 +20,7 @@ export function createGameState() {
     childCohorts: [], // array of {age: number, count: number} - children tracked by birth year
     adultCohorts: [], // array of {age: number, count: number} - adults tracked by age
     birthAccumulator: 0.0, // fractional births accumulate until >= 1.0
+    nursing: [], // [{turnsLeft: N, count: M}] — mothers nursing after birth, 50% labor capacity
     cohesion: {
       identity: 60,
       legitimacy: 70,
@@ -172,6 +173,17 @@ export function createGameState() {
       interventionActive: null,
       interventionTurns: 0,
       crystallizationEvents: {},
+    },
+    genderFormalization: {
+      active: false,
+      activatedTurn: null,
+      dimensions: {
+        labor:       { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+        military:    { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+        inheritance: { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+        civic:       { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 }
+      },
+      dismantlementEffects: null
     },
     classSystem: {
       active: false,

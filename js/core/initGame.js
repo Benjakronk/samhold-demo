@@ -39,24 +39,24 @@ export function initGameCore(seed) {
 
   // Initialize with strategically interesting child cohorts
   gameState.childCohorts = [
-    { age: 8, count: 3 },  // 2 years until working age (at default 10)
-    { age: 6, count: 2 },  // 4 years until working age
-    { age: 2, count: 2 }   // 8 years until working age
+    { age: 8, male: 2, female: 1, count: 3 },  // 2 years until working age (at default 10)
+    { age: 6, male: 1, female: 1, count: 2 },  // 4 years until working age
+    { age: 2, male: 1, female: 1, count: 2 }   // 8 years until working age
   ];
   gameState.birthAccumulator = 0.0;
 
   // Initialize adult cohorts — distribute starting population across age range
   // Includes 3 elders to match Tribal Council (elder council) starting government
-  // Sum must equal population.total (21)
+  // Sum must equal population.total (21). Each cohort tracks male/female.
   gameState.adultCohorts = [
-    { age: 16, count: 3 },  // young adults
-    { age: 20, count: 4 },  // prime workers
-    { age: 25, count: 3 },  // experienced
-    { age: 30, count: 3 },  // mature
-    { age: 38, count: 2 },  // older
-    { age: 45, count: 3 },  // senior
-    { age: 52, count: 2 },  // elder
-    { age: 58, count: 1 },  // elder — the eldest
+    { age: 16, male: 2, female: 1, count: 3 },  // young adults
+    { age: 20, male: 2, female: 2, count: 4 },  // prime workers
+    { age: 25, male: 1, female: 2, count: 3 },  // experienced
+    { age: 30, male: 2, female: 1, count: 3 },  // mature
+    { age: 38, male: 1, female: 1, count: 2 },  // older
+    { age: 45, male: 1, female: 2, count: 3 },  // senior
+    { age: 52, male: 1, female: 1, count: 2 },  // elder
+    { age: 58, male: 1, female: 0, count: 1 },  // elder — the eldest
   ];
   gameState.population.elders = 3;
 
@@ -304,6 +304,11 @@ export function initGameCore(seed) {
   if (window.initClassSystem) {
     window.initClassSystem(gameState);
     console.log('⚖️ Class system initialized');
+  }
+
+  if (window.initGenderFormalization) {
+    window.initGenderFormalization(gameState);
+    console.log('⚧ Gender formalization system initialized');
   }
 
   if (window.initFortifications) {

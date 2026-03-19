@@ -1623,5 +1623,236 @@ export const EVENT_LIBRARY = {
         }
       }
     ]
+  },
+
+  // ---- GENDER FORMALIZATION EVENTS ----
+
+  genderLaborQuestion: {
+    id: 'genderLaborQuestion',
+    title: 'The Question of Women\'s Work',
+    category: 'social',
+    triggers: {
+      minTurn: 8,
+      probability: 0.15,
+      conditions: [
+        { type: 'population', operator: '>=', value: 20 },
+        { type: 'custom', check: 'genderLaborUnformalized' },
+        { type: 'custom', check: 'highNursingBurden' }
+      ]
+    },
+    description: 'A pattern has emerged: nursing mothers tend the gardens and mend tools while others haul stone and fell timber. No one decided this — it simply happened. But now elders are debating whether to make this arrangement official. There is a difference between what happens and what is.',
+    choices: [
+      {
+        text: 'Let customs remain customs — people can work where they choose',
+        description: 'Informal patterns continue without governance sanction.',
+        consequences: {
+          immediate: { satisfaction: 2, bonds: 1, trustEffects: { interpersonal: 0.02 } }
+        }
+      },
+      {
+        text: 'Recognize these roles formally — our people have found what works',
+        description: 'Codifying the pattern gives it governance weight and a modest efficiency bonus.',
+        consequences: {
+          immediate: { legitimacy: -3, satisfaction: -2, identity: 3, resistance: 5, trustEffects: { institutional: -0.03 } }
+        }
+      },
+      {
+        text: 'Declare that all work is open to all — no role belongs to one sex',
+        description: 'A formal commitment to equality. This requires governance effort to maintain.',
+        consequences: {
+          immediate: { legitimacy: -3, satisfaction: 1, bonds: 2, identity: -1, trustEffects: { interpersonal: 0.03 } }
+        }
+      }
+    ]
+  },
+
+  genderMilitaryTension: {
+    id: 'genderMilitaryTension',
+    title: 'Mothers and Warriors',
+    category: 'social',
+    triggers: {
+      minTurn: 12,
+      probability: 0.12,
+      conditions: [
+        { type: 'warriors', operator: '>=', value: 2 },
+        { type: 'custom', check: 'highNursingBurden' },
+        { type: 'custom', check: 'genderMilitaryUnformalized' }
+      ]
+    },
+    description: 'Three nursing mothers sit by the fire while warriors drill outside. A child asks: "Why don\'t mothers fight too?" The question is simple. The answer is not. Every woman under arms is one fewer bearing children. But every warrior lost is one fewer to defend the children already born.',
+    choices: [
+      {
+        text: 'Keep things as they are — let people choose their own path',
+        description: 'No formal policy. The tension between military service and reproduction remains an individual choice.',
+        consequences: {
+          immediate: { satisfaction: 1, trustEffects: { interpersonal: 0.01 } }
+        }
+      },
+      {
+        text: 'Women should not risk themselves in battle — their work is here',
+        description: 'Formally discourage female military service. Reduces the demographic cost but limits recruitment.',
+        consequences: {
+          immediate: { legitimacy: -4, satisfaction: -3, identity: 2, resistance: 8, trustEffects: { institutional: -0.04, interpersonal: -0.03 } }
+        }
+      },
+      {
+        text: 'Every adult who can hold a weapon should train — we need all hands',
+        description: 'Open service formally. Builds bonds through shared sacrifice but carries a demographic cost.',
+        consequences: {
+          immediate: { bonds: 4, identity: 1, satisfaction: -1, trustEffects: { interpersonal: 0.04 } }
+        }
+      }
+    ]
+  },
+
+  genderInheritanceDispute: {
+    id: 'genderInheritanceDispute',
+    title: 'The Inheritance Dispute',
+    category: 'social',
+    triggers: {
+      minTurn: 16,
+      probability: 0.12,
+      conditions: [
+        { type: 'custom', check: 'classSystemActive' },
+        { type: 'custom', check: 'genderInheritanceUnformalized' }
+      ]
+    },
+    description: 'A prominent family head has died, leaving both a son and a daughter who claim the family\'s privileged standing. The settlement has no rule for this. Whichever way the community decides will set a precedent that shapes the privileged class for generations.',
+    choices: [
+      {
+        text: 'The son inherits — this is the natural way of our people',
+        description: 'Establishes male preference in inheritance. The privileged class will gradually shift male-heavy.',
+        consequences: {
+          immediate: { legitimacy: 2, satisfaction: -3, identity: 1, resistance: 6, trustEffects: { interpersonal: -0.03 } }
+        }
+      },
+      {
+        text: 'Both inherit equally — standing belongs to the family, not the sex',
+        description: 'Bilateral inheritance. The privileged class maintains its sex balance.',
+        consequences: {
+          immediate: { satisfaction: 1, bonds: 2, trustEffects: { interpersonal: 0.02 } }
+        }
+      },
+      {
+        text: 'The daughter inherits — she stayed and tended the household while he left to trade',
+        description: 'Establishes female preference. A distinctive but contentious choice.',
+        consequences: {
+          immediate: { identity: 3, satisfaction: -2, legitimacy: -1, resistance: 6, trustEffects: { interpersonal: -0.02 } }
+        }
+      }
+    ]
+  },
+
+  genderCivicAuthority: {
+    id: 'genderCivicAuthority',
+    title: 'Who Speaks for Us?',
+    category: 'governance',
+    triggers: {
+      minTurn: 14,
+      probability: 0.10,
+      conditions: [
+        { type: 'population', operator: '>=', value: 40 },
+        { type: 'custom', check: 'genderCivicUnformalized' },
+        { type: 'custom', check: 'theocracyOrTribalCouncil' }
+      ]
+    },
+    description: 'A dispute in council has raised an old question: who may speak with authority? Some argue that ritual knowledge and civic voice should be open to all. Others say that tradition reserves these roles — and that tradition is what holds us together.',
+    choices: [
+      {
+        text: 'The sacred roles belong to those tradition designates — this is how it has always been',
+        description: 'Formalize restricted civic authority. Strong identity and legitimacy, but half the population is excluded from leadership.',
+        consequences: {
+          immediate: { identity: 4, legitimacy: 2, satisfaction: -5, bonds: -2, resistance: 10, trustEffects: { institutional: -0.05, interpersonal: -0.04 } }
+        }
+      },
+      {
+        text: 'Let ability determine who speaks, not what body they were born into',
+        description: 'Open authority. Builds trust and bonds at the cost of some traditional identity.',
+        consequences: {
+          immediate: { bonds: 3, satisfaction: 2, identity: -2, trustEffects: { interpersonal: 0.04 } }
+        }
+      },
+      {
+        text: 'We need not decide this now — leave it to custom',
+        description: 'Defer the question. Informal patterns continue.',
+        consequences: {
+          immediate: { satisfaction: 1, trustEffects: { institutional: 0.01 } }
+        }
+      }
+    ]
+  },
+
+  genderExcludedVoices: {
+    id: 'genderExcludedVoices',
+    title: 'Voices of the Excluded',
+    category: 'crisis',
+    triggers: {
+      minTurn: 16,
+      probability: 0.15,
+      conditions: [
+        { type: 'custom', check: 'genderSharpRestriction' }
+      ]
+    },
+    description: 'Those excluded by formal gender restrictions have begun meeting in private. Their grievances are real: they are denied work, voice, or inheritance by law rather than by choice. The question is not whether their anger is justified — it is what you will do about it.',
+    choices: [
+      {
+        text: 'Suppress these gatherings — the law is the law',
+        description: 'Resistance drops temporarily but resentment deepens.',
+        consequences: {
+          immediate: { resistance: -8, satisfaction: -5, bonds: -3, trustEffects: { institutional: -0.06, interpersonal: -0.05 } }
+        }
+      },
+      {
+        text: 'Hear their grievances and ease the restrictions one step',
+        description: 'A measured response. Costs legitimacy from those who benefit from restriction, but reduces pressure.',
+        consequences: {
+          immediate: { resistance: -15, legitimacy: -4, satisfaction: 3, bonds: 2, trustEffects: { interpersonal: 0.04 } }
+        }
+      },
+      {
+        text: 'Hold firm — our traditions give us strength',
+        description: 'The restrictions stand. Identity holds among the included, but resistance grows.',
+        consequences: {
+          immediate: { resistance: 8, identity: 2, satisfaction: -3, trustEffects: { interpersonal: -0.04 } }
+        }
+      }
+    ]
+  },
+
+  genderEgalitarianDrift: {
+    id: 'genderEgalitarianDrift',
+    title: 'The Drift',
+    category: 'crisis',
+    triggers: {
+      minTurn: 12,
+      probability: 0.20,
+      conditions: [
+        { type: 'custom', check: 'genderEgalitarianDrifting' }
+      ]
+    },
+    description: 'Your egalitarian laws exist on parchment, but in practice the old patterns are reasserting themselves. Nursing mothers drift back to lighter work. Men fill the council seats. Without strong institutions to enforce equality, biology and custom write their own rules.',
+    choices: [
+      {
+        text: 'Invest governance resources to enforce our equality laws',
+        description: 'Costs legitimacy and materials, but stabilizes egalitarian policies against drift.',
+        consequences: {
+          immediate: { legitimacy: 5, satisfaction: -2, materials: -15, trustEffects: { institutional: 0.04 } }
+        }
+      },
+      {
+        text: 'Accept the drift — we cannot afford to fight nature and enemies at once',
+        description: 'Egalitarian formalization continues to erode. Informal patterns take over.',
+        consequences: {
+          immediate: { satisfaction: 2, identity: -2, trustEffects: { interpersonal: -0.02 } }
+        }
+      },
+      {
+        text: 'Perhaps the old ways had a wisdom we did not appreciate — formalize them',
+        description: 'Reverse course toward restrictive formalization. Efficient but divisive.',
+        consequences: {
+          immediate: { identity: 2, legitimacy: -3, satisfaction: -4, resistance: 10, bonds: -2, trustEffects: { institutional: -0.04, interpersonal: -0.05 } }
+        }
+      }
+    ]
   }
 };

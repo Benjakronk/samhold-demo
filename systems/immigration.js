@@ -43,13 +43,23 @@ function stageTotal(stage) {
   return cohorts.reduce((s, c) => s + c.count, 0);
 }
 
-/** Add people at a given age to a pipeline stage */
-function addToStage(stage, age, count) {
+/** Add people at a given age to a pipeline stage, with optional sex split */
+function addToStage(stage, age, count, male, female) {
   if (count <= 0) return;
+  // Default to 50/50 if sex not provided
+  if (male === undefined) {
+    male = Math.ceil(count / 2);
+    female = count - male;
+  }
   const cohorts = gameState.immigration.cohorts[stage];
   const existing = cohorts.find(c => c.age === age);
-  if (existing) existing.count += count;
-  else cohorts.push({ age, count });
+  if (existing) {
+    existing.male = (existing.male || 0) + male;
+    existing.female = (existing.female || 0) + female;
+    existing.count = (existing.male || 0) + (existing.female || 0);
+  } else {
+    cohorts.push({ age, male, female, count });
+  }
 }
 
 /** Remove `count` people from a pipeline stage, oldest first. Returns actual removed. */
@@ -58,14 +68,13 @@ function removeFromStage(stage, count) {
   const cohorts = gameState.immigration.cohorts[stage];
   cohorts.sort((a, b) => b.age - a.age); // oldest first
   let remaining = count;
-  for (let i = cohorts.length - 1; i >= 0 && remaining > 0; i--) {
-    // iterate from end after sort, but we sorted descending so index 0 = oldest
-  }
-  // Re-do: iterate oldest first (index 0 after sort)
-  remaining = count;
   for (let i = 0; i < cohorts.length && remaining > 0; i++) {
     const take = Math.min(remaining, cohorts[i].count);
-    cohorts[i].count -= take;
+    if (window.removeSexProportional) {
+      window.removeSexProportional(cohorts[i], take);
+    } else {
+      cohorts[i].count -= take;
+    }
     remaining -= take;
   }
   // Clean up empty entries
@@ -73,7 +82,7 @@ function removeFromStage(stage, count) {
   return count - remaining;
 }
 
-/** Move `count` people proportionally from one stage to another, preserving age distribution */
+/** Move `count` people proportionally from one stage to another, preserving age and sex distribution */
 function transferBetweenStages(fromStage, toStage, count) {
   const from = gameState.immigration.cohorts[fromStage];
   const total = from.reduce((s, c) => s + c.count, 0);
@@ -86,8 +95,16 @@ function transferBetweenStages(fromStage, toStage, count) {
     const transfer = Math.min(cohort.count, Math.max(1, Math.floor(cohort.count * fraction)));
     if (transfer > 0 && moved < count) {
       const actual = Math.min(transfer, count - moved);
-      cohort.count -= actual;
-      addToStage(toStage, cohort.age, actual);
+      // Proportional sex split for the transfer
+      const m = cohort.male || 0;
+      const f = cohort.female || 0;
+      const ct = m + f || cohort.count;
+      const maleTransfer = ct > 0 ? Math.round(actual * m / ct) : Math.ceil(actual / 2);
+      const femaleTransfer = actual - maleTransfer;
+      cohort.male = Math.max(0, (cohort.male || 0) - maleTransfer);
+      cohort.female = Math.max(0, (cohort.female || 0) - femaleTransfer);
+      cohort.count = (cohort.male || 0) + (cohort.female || 0);
+      addToStage(toStage, cohort.age, actual, maleTransfer, femaleTransfer);
       moved += actual;
     }
   }
@@ -97,7 +114,7 @@ function transferBetweenStages(fromStage, toStage, count) {
   return moved;
 }
 
-/** Generate a realistic age distribution for new arrivals */
+/** Generate a realistic age distribution for new arrivals, with sex split */
 function arrivalAgeDistribution(count) {
   if (count <= 0) return [];
   // Immigrants skew young-adult: 18-40, weighted toward 20-30
@@ -114,7 +131,11 @@ function arrivalAgeDistribution(count) {
       ? Math.round(count * weights[i].w / totalWeight)
       : remaining; // last bucket gets remainder
     const actual = Math.min(share, remaining);
-    if (actual > 0) ages.push({ age: weights[i].age, count: actual });
+    if (actual > 0) {
+      const male = Math.ceil(actual / 2);
+      const female = actual - male;
+      ages.push({ age: weights[i].age, male, female, count: actual });
+    }
     remaining -= actual;
   }
   return ages;
@@ -175,11 +196,11 @@ export function processImmigration(report) {
   const arrivals = getActualArrivals(imm.pressure, borderOpenness);
   imm.lastArrivals = arrivals;
 
-  // 3. Add arrivals to Cohort 0 with realistic age distribution
+  // 3. Add arrivals to Cohort 0 with realistic age distribution and sex split
   if (arrivals > 0) {
     const ageDist = arrivalAgeDistribution(arrivals);
     for (const entry of ageDist) {
-      addToStage(0, entry.age, entry.count);
+      addToStage(0, entry.age, entry.count, entry.male, entry.female);
     }
     imm.lifetimeArrivals += arrivals;
     if (arrivals >= 3) {
@@ -198,7 +219,9 @@ export function processImmigration(report) {
       if (cohort.count > 0) {
         gameState.population.total += cohort.count;
         gameState.population.idle += cohort.count;
-        if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, cohort.count);
+        const m = cohort.male || Math.ceil(cohort.count / 2);
+        const f = cohort.female || (cohort.count - m);
+        if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, m, f);
         totalGraduated += cohort.count;
       }
     }
@@ -266,11 +289,17 @@ function agePipelineCohorts() {
 
       // Natural death for elderly pipeline immigrants
       if (cohort.age >= maxAge) {
+        cohort.male = 0;
+        cohort.female = 0;
         cohort.count = 0;
       } else if (cohort.age >= elderAge) {
         const mortality = deathRate * (cohort.age - elderAge + 1);
         const deaths = Math.floor(cohort.count * mortality);
-        cohort.count = Math.max(0, cohort.count - deaths);
+        if (deaths > 0 && window.removeSexProportional) {
+          window.removeSexProportional(cohort, deaths);
+        } else {
+          cohort.count = Math.max(0, cohort.count - deaths);
+        }
       }
     }
     // Clean up empty entries
@@ -372,6 +401,10 @@ function processPipelineAdvancement(report) {
     // Class system raises integration threshold (social differential, religious basis)
     const classThreshold = window.getIntegrationThresholdModifier ? window.getIntegrationThresholdModifier() : 0;
     rate -= classThreshold;
+
+    // Gender formalization raises integration threshold
+    const genderImmMod = window.getGenderImmigrationModifier ? window.getGenderImmigrationModifier() : 0;
+    rate -= genderImmMod;
 
     rate = Math.max(0.01, Math.min(0.5, rate));
 
@@ -768,7 +801,7 @@ export function addImmigrantArrivals(count) {
   if (!gameState?.immigration || count <= 0) return;
   const ageDist = arrivalAgeDistribution(count);
   for (const entry of ageDist) {
-    addToStage(0, entry.age, entry.count);
+    addToStage(0, entry.age, entry.count, entry.male, entry.female);
   }
   gameState.immigration.lifetimeArrivals += count;
 }

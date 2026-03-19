@@ -54,12 +54,19 @@ import * as Crime from '../systems/crime.js';
 import * as Immigration from '../systems/immigration.js';
 import * as Fortifications from '../systems/fortifications.js';
 import * as ClassSystem from '../systems/classSystem.js';
+import * as GenderFormalization from '../systems/genderFormalization.js';
 import { FORTIFICATIONS, WALL_INSET } from '../data/fortifications.js';
 import {
   STRATIFICATION_BASES, DIFFERENTIALS, ACTIVATION_COSTS, DISMANTLEMENT_COSTS,
   BASIS_CHANGE_COSTS, MIN_TURNS_FOR_ACTIVATION, AFFINITY_BONUS, AFFINITY_PENALTY,
   CRIME_MULTIPLIER_WEIGHTS, ALIGNMENT_MULTIPLIERS
 } from '../data/classSystem.js';
+import {
+  GENDER_DIMENSIONS, GENDER_EFFECTS, GENDER_LEGITIMACY_GATES,
+  GENDER_MOVE_COSTS, GOVERNANCE_GENDER_MULTIPLIERS,
+  GENDER_MIN_TURNS, GENDER_DRIFT_THRESHOLD, GENDER_DRIFT_INTERVAL,
+  GENDER_DEEPEN_TURNS_REQUIRED, GENDER_DEEPEN_LAG_TURNS
+} from '../data/genderFormalization.js';
 
 // Make all data available globally to maintain compatibility with existing game code
 window.TERRAIN = TERRAIN;
@@ -80,6 +87,16 @@ window.AFFINITY_BONUS = AFFINITY_BONUS;
 window.AFFINITY_PENALTY = AFFINITY_PENALTY;
 window.CRIME_MULTIPLIER_WEIGHTS = CRIME_MULTIPLIER_WEIGHTS;
 window.ALIGNMENT_MULTIPLIERS = ALIGNMENT_MULTIPLIERS;
+window.GENDER_DIMENSIONS = GENDER_DIMENSIONS;
+window.GENDER_EFFECTS = GENDER_EFFECTS;
+window.GENDER_LEGITIMACY_GATES = GENDER_LEGITIMACY_GATES;
+window.GENDER_MOVE_COSTS = GENDER_MOVE_COSTS;
+window.GOVERNANCE_GENDER_MULTIPLIERS = GOVERNANCE_GENDER_MULTIPLIERS;
+window.GENDER_MIN_TURNS = GENDER_MIN_TURNS;
+window.GENDER_DRIFT_THRESHOLD = GENDER_DRIFT_THRESHOLD;
+window.GENDER_DRIFT_INTERVAL = GENDER_DRIFT_INTERVAL;
+window.GENDER_DEEPEN_TURNS_REQUIRED = GENDER_DEEPEN_TURNS_REQUIRED;
+window.GENDER_DEEPEN_LAG_TURNS = GENDER_DEEPEN_LAG_TURNS;
 
 // Export constants individually for compatibility
 window.MAP_COLS = CONSTANTS.MAP_COLS;
@@ -95,6 +112,12 @@ window.WORKING_AGE = CONSTANTS.WORKING_AGE;
 window.SEASONS = CONSTANTS.SEASONS;
 window.DEV_MODE = CONSTANTS.DEV_MODE;
 window.BASE_BIRTH_RATE = CONSTANTS.BASE_BIRTH_RATE;
+window.REPRODUCTIVE_AGE = CONSTANTS.REPRODUCTIVE_AGE;
+window.STRESS_BIAS_MAX = CONSTANTS.STRESS_BIAS_MAX;
+window.NURSING_DURATION = CONSTANTS.NURSING_DURATION;
+window.NURSING_LABOR_PENALTY = CONSTANTS.NURSING_LABOR_PENALTY;
+window.LABOR_INTENSITY_PENALTY_WEIGHT = CONSTANTS.LABOR_INTENSITY_PENALTY_WEIGHT;
+window.MILITARY_SERVICE_PENALTY_WEIGHT = CONSTANTS.MILITARY_SERVICE_PENALTY_WEIGHT;
 window.ELDER_AGE = CONSTANTS.ELDER_AGE;
 window.MAX_AGE = CONSTANTS.MAX_AGE;
 window.FOOD_PER_ELDER = CONSTANTS.FOOD_PER_ELDER;
@@ -254,7 +277,14 @@ window.calculateVictoryScores = TurnProcessing.calculateVictoryScores;
 window.trackGovernanceChange = TurnProcessing.trackGovernanceChange;
 window.addToAdultCohort = TurnProcessing.addToAdultCohort;
 window.removeFromAdultCohorts = TurnProcessing.removeFromAdultCohorts;
+window.removeSexProportional = TurnProcessing.removeSexProportional;
 window.recomputeElderCount = TurnProcessing.recomputeElderCount;
+window.getFertileFemaleCount = TurnProcessing.getFertileFemaleCount;
+window.getAdultSexCounts = TurnProcessing.getAdultSexCounts;
+window.getTotalNursing = TurnProcessing.getTotalNursing;
+window.getHighIntensityFemaleWorkers = TurnProcessing.getHighIntensityFemaleWorkers;
+window.getMilitaryFemaleCount = TurnProcessing.getMilitaryFemaleCount;
+window.getReproductiveAvailability = TurnProcessing.getReproductiveAvailability;
 
 // Rendering system
 window.initRendering = Rendering.initRendering;
@@ -730,6 +760,80 @@ window.getClassMultiplier = ClassSystem.getClassMultiplier;
 window.getInterpersonalTrustReduction = ClassSystem.getInterpersonalTrustReduction;
 window.getIntegrationThresholdModifier = ClassSystem.getIntegrationThresholdModifier;
 window.getClassSystemState = ClassSystem.getClassSystemState;
+
+// Gender Formalization system
+window.initGenderFormalization = GenderFormalization.initGenderFormalization;
+window.moveGenderDimension = GenderFormalization.moveGenderDimension;
+window.dismantleGenderFormalization = GenderFormalization.dismantleGenderFormalization;
+window.processGenderFormalization = GenderFormalization.processGenderFormalization;
+window.getGenderProductionMultiplier = GenderFormalization.getGenderProductionMultiplier;
+window.getGenderTrustModifier = GenderFormalization.getGenderTrustModifier;
+window.getGenderCohesionEffects = GenderFormalization.getGenderCohesionEffects;
+window.getGenderCrimeIdleModifier = GenderFormalization.getGenderCrimeIdleModifier;
+window.getGenderResistancePressure = GenderFormalization.getGenderResistancePressure;
+window.getGenderImmigrationModifier = GenderFormalization.getGenderImmigrationModifier;
+window.getGenderPolicyLagModifier = GenderFormalization.getGenderPolicyLagModifier;
+window.getGenderKnowledgeModifier = GenderFormalization.getGenderKnowledgeModifier;
+window.getGenderReproPenaltyModifier = GenderFormalization.getGenderReproPenaltyModifier;
+window.getGenderCrisisFlexibility = GenderFormalization.getGenderCrisisFlexibility;
+window.getGenderFormalizationState = GenderFormalization.getGenderFormalizationState;
+window.getMoveCostPreview = GenderFormalization.getMoveCostPreview;
+
+// Gender formalization UI helpers
+window.confirmMoveGenderDimension = function(dimension, direction) {
+  const DIMS = window.GENDER_DIMENSIONS;
+  const dimDef = DIMS[dimension];
+  const gf = window.gameState.genderFormalization;
+  const currentPos = gf.dimensions[dimension].position;
+  const targetPos = currentPos + direction;
+  const targetLabel = dimDef.positions[String(targetPos)]?.label || 'Unknown';
+  const targetDesc = dimDef.positions[String(targetPos)]?.description || '';
+
+  const costs = window.getMoveCostPreview(dimension, direction);
+  if (!costs) return;
+
+  let costText = '';
+  if (costs.legitimacy) costText += `Legitimacy ${costs.legitimacy}, `;
+  if (costs.satisfaction) costText += `Satisfaction ${costs.satisfaction}, `;
+  if (costs.resistance) costText += `Resistance +${costs.resistance}, `;
+  costText = costText.replace(/, $/, '');
+
+  const isRestricting = direction < 0 && currentPos <= 0;
+  const confirmFn = isRestricting ? window.showConfirmDialog : window.showConfirmDialogNonDestructive;
+
+  confirmFn(
+    `${dimDef.icon} ${dimDef.name}: ${targetLabel}?`,
+    `${targetDesc}<br><br><strong>Cost:</strong> ${costText}`,
+    'Confirm', 'Cancel',
+    () => {
+      const result = window.moveGenderDimension(dimension, direction);
+      if (result.success) {
+        window.renderGovernanceOverlay();
+        window.updateAllUI();
+      }
+    }
+  );
+};
+
+window.confirmDismantleGenderFormalization = function() {
+  window.showConfirmDialog(
+    'Dismantle Gender Formalization?',
+    `This abolishes all formal gender role policies immediately.<br><br>` +
+    `<strong>Costs:</strong><br>` +
+    `Legitimacy −12<br>` +
+    `Resistance +25<br>` +
+    `6-turn transition period<br><br>` +
+    `<em>Those who benefited from formal roles will generate resistance.</em>`,
+    'Dismantle', 'Cancel',
+    () => {
+      const result = window.dismantleGenderFormalization();
+      if (result.success) {
+        window.renderGovernanceOverlay();
+        window.updateAllUI();
+      }
+    }
+  );
+};
 
 // Class system UI helpers (confirm dialogs for activation, differential changes, dismantlement)
 window.confirmActivateClassSystem = function(basis) {

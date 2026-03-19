@@ -71,9 +71,11 @@ export function processCrime(report) {
   const foodPerPop = (window.FOOD_PER_POP || 2);
   const foodNeeded = gameState.population.total * foodPerPop;
   const foodInsecurity = foodNeeded > 0 ? Math.max(0, 1 - gameState.resources.food / (foodNeeded * 3)) : 0;
-  const idleRatio = gameState.population.total > 0
+  const baseIdleRatio = gameState.population.total > 0
     ? gameState.population.idle / gameState.population.total
     : 0;
+  const genderCrimeIdleMod = window.getGenderCrimeIdleModifier ? window.getGenderCrimeIdleModifier() : 0;
+  const idleRatio = Math.max(0, Math.min(1, baseIdleRatio + genderCrimeIdleMod));
   const materialScore = foodInsecurity * 0.6 + idleRatio * 0.4;
 
   // Mercy/Severity modifier: severity (low mercy) increases crime deterrence

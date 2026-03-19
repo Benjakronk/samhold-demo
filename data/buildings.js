@@ -26,6 +26,7 @@ export const BUILDINGS = {
     materialBonus: 0,
     maxWorkers: 2,
     riverFoodBonus: 2, // extra food when on river
+    laborIntensity: 'low',
     description: 'Cultivates the land for a steady food supply.'
   },
   lumber_camp: {
@@ -37,6 +38,7 @@ export const BUILDINGS = {
     foodBonus: 0,
     materialBonus: 3,
     maxWorkers: 2,
+    laborIntensity: 'high',
     description: 'Harvests timber from the forest.'
   },
   quarry: {
@@ -48,6 +50,7 @@ export const BUILDINGS = {
     foodBonus: 0,
     materialBonus: 4,
     maxWorkers: 2,
+    laborIntensity: 'high',
     description: 'Extracts stone and ore from the earth.'
   },
   fishing_dock: {
@@ -61,6 +64,7 @@ export const BUILDINGS = {
     foodBonus: 4,
     materialBonus: 0,
     maxWorkers: 1,
+    laborIntensity: 'low',
     description: 'Built on the shore to harvest fish from nearby waters.'
   },
   hunting_camp: {
@@ -72,6 +76,7 @@ export const BUILDINGS = {
     foodBonus: 2,
     materialBonus: 1,
     maxWorkers: 1,
+    laborIntensity: 'low',
     description: 'Hunts game and gathers hides. Quick to set up.'
   },
   sacred_site: {
@@ -86,6 +91,7 @@ export const BUILDINGS = {
     isSocietyBuilding: true,
     bondsYield: 0.1,      // Bonds accumulated per turn per worker (fractional accumulator)
     upkeepMaterials: 1,   // materials consumed per turn per worker
+    laborIntensity: 'low',
     description: 'A tended sacred site. Generates Bonds while staffed, but requires materials for upkeep.'
   },
   shrine: {
@@ -101,6 +107,7 @@ export const BUILDINGS = {
     identityYield: 0.15,
     satisfactionYield: 0.05,
     upkeepMaterials: 1,
+    laborIntensity: 'low',
     description: 'A place of spiritual practice. Generates Identity and Satisfaction while staffed.'
   },
   monument: {
@@ -116,6 +123,7 @@ export const BUILDINGS = {
     isSocietyBuilding: true,
     permanentIdentityBonus: 3,
     upkeepMaterials: 1,    // flat 1 material/turn regardless of state (paid from processSocietyBuildings)
+    laborIntensity: 'high', // high-intensity during construction; 0 workers after
     description: 'A permanent monument commemorating your history. Grants Identity +3 on completion. Requires 1 material/turn upkeep.'
   },
   admin_hall: {
@@ -130,6 +138,7 @@ export const BUILDINGS = {
     isSocietyBuilding: true,
     legitimacyYield: 0.08,
     upkeepMaterials: 1,
+    laborIntensity: 'low',
     description: 'The seat of governance. Staffed workers reduce policy lag by up to 30%. Generates Legitimacy.'
   },
   meeting_hall: {
@@ -144,6 +153,7 @@ export const BUILDINGS = {
     isSocietyBuilding: true,
     legitimacyYield: 0.12,
     upkeepMaterials: 1,
+    laborIntensity: 'low',
     description: 'A place for governance and deliberation. Generates Legitimacy and eases governance transitions.'
   },
   market: {
@@ -156,6 +166,7 @@ export const BUILDINGS = {
     materialBonus: 2,
     maxWorkers: 2,
     satisfactionPerWorker: 0.10, // hybrid: economic yield + satisfaction side-effect
+    laborIntensity: 'low',
     description: 'A gathering place for trade. Generates materials from commerce and boosts Satisfaction.'
   },
   festival_grounds: {
@@ -171,6 +182,7 @@ export const BUILDINGS = {
     satisfactionYield: 0.08,
     upkeepMaterials: 0,
     traditionAmplifier: 0.15, // per staffed worker, adds to tradition bonus multiplier when traditions fire
+    laborIntensity: 'low',
     description: 'Open grounds for celebrations. Amplifies the effects of traditions and generates Satisfaction.'
   },
   justice_hall: {
@@ -185,6 +197,7 @@ export const BUILDINGS = {
     isSocietyBuilding: true,
     legitimacyYield: 0.06,
     upkeepMaterials: 1,
+    laborIntensity: 'low',
     description: 'Detects and suppresses crime. Staffed workers reveal crime rates and reduce criminal activity. Generates Legitimacy.'
   },
   watchtower: {
@@ -193,6 +206,7 @@ export const BUILDINGS = {
     validTerrain: ['grassland', 'hills', 'forest', 'mountain'],
     foodBonus: 0, materialBonus: 0, maxWorkers: 1,
     visionRadius: 3,
+    laborIntensity: 'low',
     description: 'Provides extended vision. Must be staffed.'
   }
 };

@@ -186,6 +186,20 @@ function loadGameFromSlot(slotName) {
       }
     }
 
+    // Migrate gender formalization for older saves
+    if (!loadedGameState.genderFormalization) {
+      loadedGameState.genderFormalization = {
+        active: false, activatedTurn: null,
+        dimensions: {
+          labor:       { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+          military:    { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+          inheritance: { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 },
+          civic:       { position: 0, turnsAtPosition: 0, driftTimer: 0, lagTurnsLeft: 0 }
+        },
+        dismantlementEffects: null
+      };
+    }
+
     // Migrate class system for older saves
     if (!loadedGameState.classSystem) {
       loadedGameState.classSystem = {
@@ -214,6 +228,39 @@ function loadGameFromSlot(slotName) {
       loadedGameState.population.elders = (loadedGameState.adultCohorts || [])
         .filter(c => c.age >= ELDER_AGE)
         .reduce((sum, c) => sum + c.count, 0);
+    }
+
+    // Migrate cohorts to sex-split format (Phase 14A)
+    for (const cohort of loadedGameState.adultCohorts || []) {
+      if (cohort.male === undefined) {
+        cohort.male = Math.ceil(cohort.count / 2);
+        cohort.female = cohort.count - cohort.male;
+      }
+    }
+    for (const cohort of loadedGameState.childCohorts || []) {
+      if (cohort.male === undefined) {
+        cohort.male = Math.ceil(cohort.count / 2);
+        cohort.female = cohort.count - cohort.male;
+      }
+    }
+    // Migrate immigration pipeline cohorts to sex-split format
+    if (loadedGameState.immigration?.cohorts) {
+      for (let i = 0; i < 4; i++) {
+        const stage = loadedGameState.immigration.cohorts[i];
+        if (Array.isArray(stage)) {
+          for (const cohort of stage) {
+            if (cohort.male === undefined) {
+              cohort.male = Math.ceil(cohort.count / 2);
+              cohort.female = cohort.count - cohort.male;
+            }
+          }
+        }
+      }
+    }
+
+    // Migrate nursing state for Phase 14B
+    if (!loadedGameState.nursing) {
+      loadedGameState.nursing = [];
     }
 
     // Migrate fortifications and visibilityMap for older saves

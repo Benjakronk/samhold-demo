@@ -21,7 +21,7 @@ export function initGameCore(seed) {
   // Reset game state
   gameState.turn = 1; gameState.year = 1; gameState.season = 0;
   gameState.resources = { food: 200, materials: 50, knowledge: 5 };
-  gameState.population = { total: 18, idle: 18, employed: 0 };
+  gameState.population = { total: 21, idle: 21, employed: 0, elders: 0 };
   gameState.cohesion = {
     identity: 60,
     legitimacy: 70,
@@ -46,16 +46,19 @@ export function initGameCore(seed) {
   gameState.birthAccumulator = 0.0;
 
   // Initialize adult cohorts — distribute starting population across age range
+  // Includes 3 elders to match Tribal Council (elder council) starting government
+  // Sum must equal population.total (21)
   gameState.adultCohorts = [
-    { age: 15, count: 4 },  // young adults
-    { age: 20, count: 5 },  // prime workers
-    { age: 25, count: 5 },  // experienced
-    { age: 30, count: 4 },  // mature
-    { age: 35, count: 3 },  // older
-    { age: 42, count: 2 },  // senior — first elders in ~8 years
-    { age: 48, count: 2 },  // near elder
+    { age: 16, count: 3 },  // young adults
+    { age: 20, count: 4 },  // prime workers
+    { age: 25, count: 3 },  // experienced
+    { age: 30, count: 3 },  // mature
+    { age: 38, count: 2 },  // older
+    { age: 45, count: 3 },  // senior
+    { age: 52, count: 2 },  // elder
+    { age: 58, count: 1 },  // elder — the eldest
   ];
-  gameState.population.elders = 0;
+  gameState.population.elders = 3;
 
   gameState.map = []; gameState.settlements = []; gameState.rivers = []; gameState.riverSegmentCounts = new Map();
   gameState.selectedHex = null; gameState.startHex = null;

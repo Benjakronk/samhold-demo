@@ -3,6 +3,7 @@
 // driven by border/cultural/progressiveness policy sliders.
 // Parallel society crystallizes when unintegrated cohorts exceed 18% of population.
 // Trust gates pipeline advancement; hostile faction raises thresholds.
+// Pipeline cohorts are age-tracked: [{age, count}] per stage.
 
 let gameState = null;
 
@@ -33,6 +34,92 @@ const PS_DECAY_RATE = 0.03;
 // Minimum turn before immigration begins
 const IMMIGRATION_START_TURN = 12;
 
+// ---- HELPERS: age-based pipeline cohorts ----
+
+/** Sum total people in a pipeline stage */
+function stageTotal(stage) {
+  const cohorts = gameState.immigration.cohorts[stage];
+  if (!Array.isArray(cohorts)) return cohorts || 0; // fallback for old format
+  return cohorts.reduce((s, c) => s + c.count, 0);
+}
+
+/** Add people at a given age to a pipeline stage */
+function addToStage(stage, age, count) {
+  if (count <= 0) return;
+  const cohorts = gameState.immigration.cohorts[stage];
+  const existing = cohorts.find(c => c.age === age);
+  if (existing) existing.count += count;
+  else cohorts.push({ age, count });
+}
+
+/** Remove `count` people from a pipeline stage, oldest first. Returns actual removed. */
+function removeFromStage(stage, count) {
+  if (count <= 0) return 0;
+  const cohorts = gameState.immigration.cohorts[stage];
+  cohorts.sort((a, b) => b.age - a.age); // oldest first
+  let remaining = count;
+  for (let i = cohorts.length - 1; i >= 0 && remaining > 0; i--) {
+    // iterate from end after sort, but we sorted descending so index 0 = oldest
+  }
+  // Re-do: iterate oldest first (index 0 after sort)
+  remaining = count;
+  for (let i = 0; i < cohorts.length && remaining > 0; i++) {
+    const take = Math.min(remaining, cohorts[i].count);
+    cohorts[i].count -= take;
+    remaining -= take;
+  }
+  // Clean up empty entries
+  gameState.immigration.cohorts[stage] = cohorts.filter(c => c.count > 0);
+  return count - remaining;
+}
+
+/** Move `count` people proportionally from one stage to another, preserving age distribution */
+function transferBetweenStages(fromStage, toStage, count) {
+  const from = gameState.immigration.cohorts[fromStage];
+  const total = from.reduce((s, c) => s + c.count, 0);
+  if (total <= 0 || count <= 0) return 0;
+
+  const fraction = Math.min(1, count / total);
+  let moved = 0;
+
+  for (const cohort of from) {
+    const transfer = Math.min(cohort.count, Math.max(1, Math.floor(cohort.count * fraction)));
+    if (transfer > 0 && moved < count) {
+      const actual = Math.min(transfer, count - moved);
+      cohort.count -= actual;
+      addToStage(toStage, cohort.age, actual);
+      moved += actual;
+    }
+  }
+
+  // Clean up empty entries
+  gameState.immigration.cohorts[fromStage] = from.filter(c => c.count > 0);
+  return moved;
+}
+
+/** Generate a realistic age distribution for new arrivals */
+function arrivalAgeDistribution(count) {
+  if (count <= 0) return [];
+  // Immigrants skew young-adult: 18-40, weighted toward 20-30
+  const ages = [];
+  const weights = [
+    { age: 18, w: 2 }, { age: 22, w: 4 }, { age: 26, w: 3 },
+    { age: 30, w: 2 }, { age: 35, w: 1 }, { age: 40, w: 1 },
+  ];
+  const totalWeight = weights.reduce((s, w) => s + w.w, 0);
+
+  let remaining = count;
+  for (let i = 0; i < weights.length && remaining > 0; i++) {
+    const share = i < weights.length - 1
+      ? Math.round(count * weights[i].w / totalWeight)
+      : remaining; // last bucket gets remainder
+    const actual = Math.min(share, remaining);
+    if (actual > 0) ages.push({ age: weights[i].age, count: actual });
+    remaining -= actual;
+  }
+  return ages;
+}
+
 // ---- INIT ----
 
 export function initImmigration(gameStateRef) {
@@ -40,7 +127,7 @@ export function initImmigration(gameStateRef) {
 
   if (!gameState.immigration) {
     gameState.immigration = {
-      cohorts: [0, 0, 0, 0],    // [Arrival, Resident, Participant, Integrated]
+      cohorts: [[], [], [], []],  // [Arrival, Resident, Participant, Integrated] — each is [{age, count}]
       parallelSociety: {
         strength: 0,
         population: 0,
@@ -54,6 +141,20 @@ export function initImmigration(gameStateRef) {
       interventionTurns: 0,      // turns active
       crystallizationEvents: {}, // PSS threshold → true (fired once)
     };
+  }
+
+  // Migrate old integer cohorts to age-based
+  migrateCohortsIfNeeded();
+}
+
+function migrateCohortsIfNeeded() {
+  const imm = gameState.immigration;
+  if (!imm?.cohorts) return;
+  for (let i = 0; i < 4; i++) {
+    if (!Array.isArray(imm.cohorts[i])) {
+      const count = imm.cohorts[i] || 0;
+      imm.cohorts[i] = count > 0 ? [{ age: 25, count }] : [];
+    }
   }
 }
 
@@ -74,9 +175,12 @@ export function processImmigration(report) {
   const arrivals = getActualArrivals(imm.pressure, borderOpenness);
   imm.lastArrivals = arrivals;
 
-  // 3. Add arrivals to Cohort 0
+  // 3. Add arrivals to Cohort 0 with realistic age distribution
   if (arrivals > 0) {
-    imm.cohorts[0] += arrivals;
+    const ageDist = arrivalAgeDistribution(arrivals);
+    for (const entry of ageDist) {
+      addToStage(0, entry.age, entry.count);
+    }
     imm.lifetimeArrivals += arrivals;
     if (arrivals >= 3) {
       if (report) report.events.push(`🚶 ${arrivals} immigrants arrived seeking a new life.`);
@@ -86,37 +190,49 @@ export function processImmigration(report) {
   // 4. Process pipeline advancement (0→1→2→3)
   processPipelineAdvancement(report);
 
-  // 5. Transfer Cohort 3 graduates into general population
-  const graduated = imm.cohorts[3];
-  if (graduated > 0) {
-    gameState.population.total += graduated;
-    gameState.population.idle += graduated;
-    if (window.addToAdultCohort) window.addToAdultCohort(20, graduated); // immigrants enter at adult age
-    imm.lifetimeIntegrated += graduated;
-    imm.cohorts[3] = 0;
-    if (graduated >= 2 && report) {
-      report.events.push(`🤝 ${graduated} immigrants have fully integrated into the community.`);
+  // 5. Transfer Cohort 3 graduates into general population with their actual ages
+  const stage3 = imm.cohorts[3];
+  if (stage3.length > 0) {
+    let totalGraduated = 0;
+    for (const cohort of stage3) {
+      if (cohort.count > 0) {
+        gameState.population.total += cohort.count;
+        gameState.population.idle += cohort.count;
+        if (window.addToAdultCohort) window.addToAdultCohort(cohort.age, cohort.count);
+        totalGraduated += cohort.count;
+      }
+    }
+    imm.cohorts[3] = [];
+    if (totalGraduated > 0) {
+      imm.lifetimeIntegrated += totalGraduated;
+      if (totalGraduated >= 2 && report) {
+        report.events.push(`🤝 ${totalGraduated} immigrants have fully integrated into the community.`);
+      }
     }
   }
 
   // 6. Update parallel society
   updateParallelSociety(report);
 
-  // 7. Process PS internal births (on New Year, like normal births)
+  // 7. Age pipeline and PS populations on New Year
   const nextSeason = window.SEASONS[(gameState.season + 1) % 4];
-  if (nextSeason === 'Spring' && imm.parallelSociety.population > 0) {
-    processPSBirths();
-    // Age PS children
-    for (const cohort of imm.parallelSociety.childCohorts) {
-      cohort.age++;
-    }
-    // PS children reaching working age join PS population (not main population)
-    const workingAge = window.WORKING_AGE;
-    for (let i = imm.parallelSociety.childCohorts.length - 1; i >= 0; i--) {
-      const cohort = imm.parallelSociety.childCohorts[i];
-      if (cohort.age >= workingAge) {
-        imm.parallelSociety.population += cohort.count;
-        imm.parallelSociety.childCohorts.splice(i, 1);
+  if (nextSeason === 'Spring') {
+    agePipelineCohorts();
+
+    if (imm.parallelSociety.population > 0) {
+      processPSBirths();
+      // Age PS children
+      for (const cohort of imm.parallelSociety.childCohorts) {
+        cohort.age++;
+      }
+      // PS children reaching working age join PS population (not main population)
+      const workingAge = window.WORKING_AGE;
+      for (let i = imm.parallelSociety.childCohorts.length - 1; i >= 0; i--) {
+        const cohort = imm.parallelSociety.childCohorts[i];
+        if (cohort.age >= workingAge) {
+          imm.parallelSociety.population += cohort.count;
+          imm.parallelSociety.childCohorts.splice(i, 1);
+        }
       }
     }
   }
@@ -134,6 +250,32 @@ export function processImmigration(report) {
 
   // 11. Check crystallization threshold events
   checkCrystallizationEvents(report);
+}
+
+/** Age all pipeline immigrants by 1 year (called on New Year) */
+function agePipelineCohorts() {
+  const imm = gameState.immigration;
+  const elderAge = window.ELDER_AGE || 50;
+  const maxAge = window.MAX_AGE || 80;
+  const deathRate = window.NATURAL_DEATH_BASE_RATE || 0.02;
+
+  for (let stage = 0; stage < 4; stage++) {
+    const cohorts = imm.cohorts[stage];
+    for (const cohort of cohorts) {
+      cohort.age++;
+
+      // Natural death for elderly pipeline immigrants
+      if (cohort.age >= maxAge) {
+        cohort.count = 0;
+      } else if (cohort.age >= elderAge) {
+        const mortality = deathRate * (cohort.age - elderAge + 1);
+        const deaths = Math.floor(cohort.count * mortality);
+        cohort.count = Math.max(0, cohort.count - deaths);
+      }
+    }
+    // Clean up empty entries
+    imm.cohorts[stage] = cohorts.filter(c => c.count > 0);
+  }
 }
 
 // ---- IMMIGRATION PRESSURE ----
@@ -201,7 +343,8 @@ function processPipelineAdvancement(report) {
 
   // Process advancement from stage 2→3, then 1→2, then 0→1 (reverse to avoid double-counting)
   for (let stage = 2; stage >= 0; stage--) {
-    if (imm.cohorts[stage] <= 0) continue;
+    const total = stageTotal(stage);
+    if (total <= 0) continue;
 
     // Check trust gates
     if (!checkTrustGate(stage, trust, trustPenalty)) continue;
@@ -232,11 +375,10 @@ function processPipelineAdvancement(report) {
 
     rate = Math.max(0.01, Math.min(0.5, rate));
 
-    // Advance a portion of the cohort
-    const advancing = Math.max(1, Math.floor(imm.cohorts[stage] * rate));
-    const actualAdvancing = Math.min(advancing, imm.cohorts[stage]);
-    imm.cohorts[stage] -= actualAdvancing;
-    imm.cohorts[stage + 1] += actualAdvancing;
+    // Advance a portion of the cohort (proportionally across ages)
+    const advancing = Math.max(1, Math.floor(total * rate));
+    const actualAdvancing = Math.min(advancing, total);
+    transferBetweenStages(stage, stage + 1, actualAdvancing);
   }
 }
 
@@ -267,7 +409,7 @@ function updateParallelSociety(report) {
   const totalPop = getTotalImmigrationPopulation();
   if (totalPop <= 0) return;
 
-  const unintegrated = imm.cohorts[0] + imm.cohorts[1];
+  const unintegrated = stageTotal(0) + stageTotal(1);
   const unintegratedRatio = unintegrated / totalPop;
 
   if (unintegratedRatio < PS_CRYSTALLIZATION_THRESHOLD && ps.strength > 0) {
@@ -285,11 +427,12 @@ function updateParallelSociety(report) {
   }
 
   // Gravitational pull: strong PS diverts Arrivals
-  if (ps.strength > 0 && imm.cohorts[0] > 0) {
+  const stage0Total = stageTotal(0);
+  if (ps.strength > 0 && stage0Total > 0) {
     const gravitationalPull = ps.strength * 0.4;
-    const diverted = Math.floor(imm.cohorts[0] * gravitationalPull);
+    const diverted = Math.floor(stage0Total * gravitationalPull);
     if (diverted > 0) {
-      imm.cohorts[0] -= diverted;
+      removeFromStage(0, diverted);
       ps.population += diverted;
     }
   }
@@ -339,7 +482,7 @@ function applyCohortCohesionDrain() {
   let bondsDrain = 0;
 
   for (let i = 0; i < 3; i++) {
-    const cohortPop = imm.cohorts[i];
+    const cohortPop = stageTotal(i);
     if (cohortPop <= 0) continue;
     const ratio = cohortPop / totalPop;
     identityDrain += ratio * COHORTS[i].cohesionDrag * 8;
@@ -425,7 +568,8 @@ function processIntervention(report) {
     if (reintegrated > 0 && ps.population > 0) {
       const actual = Math.min(reintegrated, ps.population);
       ps.population -= actual;
-      imm.cohorts[2] += actual;
+      // Reintegrated PS members enter at median age (30) — they've been outside for a while
+      addToStage(2, 30, actual);
     }
     // PS satisfaction drops slightly
     gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction - 0.5);
@@ -443,7 +587,7 @@ function processIntervention(report) {
     if (reintegrated > 0 && ps.population > 0) {
       const actual = Math.min(reintegrated, ps.population);
       ps.population -= actual;
-      imm.cohorts[1] += actual; // Goes to Resident (not Participant — they resist)
+      addToStage(1, 30, actual); // Goes to Resident (not Participant — they resist)
     }
     // Heavy satisfaction penalty
     gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction - 2);
@@ -487,6 +631,27 @@ function checkCrystallizationEvents(report) {
   }
 }
 
+// ---- STARVATION ----
+
+/**
+ * Apply starvation deaths to pipeline immigrants.
+ * Called from turnProcessing when food deficit remains after children/elders/adults.
+ * Returns actual deaths.
+ */
+export function applyImmigrantStarvation(deaths) {
+  if (!gameState?.immigration || deaths <= 0) return 0;
+  const imm = gameState.immigration;
+  let remaining = deaths;
+
+  // Kill from earliest pipeline stage first (Arrivals most vulnerable)
+  for (let stage = 0; stage < 4 && remaining > 0; stage++) {
+    const removed = removeFromStage(stage, remaining);
+    remaining -= removed;
+  }
+
+  return deaths - remaining;
+}
+
 // ---- QUERY FUNCTIONS ----
 
 export function getImmigrationState() {
@@ -494,8 +659,10 @@ export function getImmigrationState() {
   const imm = gameState.immigration;
   const totalPop = getTotalImmigrationPopulation();
 
+  const cohortTotals = [stageTotal(0), stageTotal(1), stageTotal(2), stageTotal(3)];
+
   return {
-    cohorts: [...imm.cohorts],
+    cohorts: cohortTotals,
     cohortLabels: COHORTS.map(c => c.label),
     cohortWorkforceRates: COHORTS.map(c => c.workforceRate),
     parallelSociety: {
@@ -509,9 +676,9 @@ export function getImmigrationState() {
     lifetimeIntegrated: imm.lifetimeIntegrated,
     interventionActive: imm.interventionActive,
     interventionTurns: imm.interventionTurns,
-    totalUnintegrated: imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2],
-    unintegratedRatio: totalPop > 0 ? (imm.cohorts[0] + imm.cohorts[1]) / totalPop : 0,
-    pipelineTotal: imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2],
+    totalUnintegrated: cohortTotals[0] + cohortTotals[1] + cohortTotals[2],
+    unintegratedRatio: totalPop > 0 ? (cohortTotals[0] + cohortTotals[1]) / totalPop : 0,
+    pipelineTotal: cohortTotals[0] + cohortTotals[1] + cohortTotals[2],
     crystallizationThreshold: PS_CRYSTALLIZATION_THRESHOLD,
   };
 }
@@ -527,7 +694,7 @@ export function getImmigrantWorkforce() {
 
   // Pipeline cohorts contribute at their rate
   for (let i = 0; i < 3; i++) {
-    workforce += imm.cohorts[i] * COHORTS[i].workforceRate;
+    workforce += stageTotal(i) * COHORTS[i].workforceRate;
   }
 
   // PS population contributes at reduced rate (50%)
@@ -546,7 +713,7 @@ export function getImmigrantFoodConsumption() {
   const foodPerChild = window.FOOD_PER_CHILD || 1;
 
   // All cohort adults eat full food
-  const cohortPop = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2];
+  const cohortPop = stageTotal(0) + stageTotal(1) + stageTotal(2);
   // PS adults eat full food
   const psPop = imm.parallelSociety.population;
   // PS children eat child food
@@ -561,7 +728,7 @@ export function getImmigrantFoodConsumption() {
 function getTotalImmigrationPopulation() {
   const basePop = gameState.population.total;
   const imm = gameState.immigration;
-  const cohortPop = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2]; // cohort 3 already in base pop
+  const cohortPop = stageTotal(0) + stageTotal(1) + stageTotal(2); // stage 3 already in base pop
   const psPop = imm.parallelSociety.population;
   return basePop + cohortPop + psPop;
 }
@@ -587,10 +754,23 @@ export function getImmigrationClimateText() {
   if (ps.strength >= 0.30) return { text: 'Unintegrated residents are clustering into separate communities.', cls: 'warning' };
   if (ps.strength >= 0.15) return { text: 'Distinct immigrant neighborhoods are forming.', cls: 'warning' };
 
-  const pipelinePop = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2];
+  const pipelinePop = stageTotal(0) + stageTotal(1) + stageTotal(2);
   if (pipelinePop > 5) return { text: 'Newcomers are settling in. Integration is underway.', cls: '' };
 
   return null;
 }
 
-export { COHORTS };
+/**
+ * Add arrivals directly to stage 0 with age distribution.
+ * Used by events and dev panel.
+ */
+export function addImmigrantArrivals(count) {
+  if (!gameState?.immigration || count <= 0) return;
+  const ageDist = arrivalAgeDistribution(count);
+  for (const entry of ageDist) {
+    addToStage(0, entry.age, entry.count);
+  }
+  gameState.immigration.lifetimeArrivals += count;
+}
+
+export { COHORTS, stageTotal };

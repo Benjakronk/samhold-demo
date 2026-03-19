@@ -145,11 +145,22 @@ export function calculateIncome() {
     return total + upkeep;
   }, 0);
 
+  // Immigrant workforce contributes to production (they can't be assigned to hexes,
+  // but provide general labor — gathering, hauling, assisting)
+  const immigrantLabor = window.getImmigrantWorkforce ? window.getImmigrantWorkforce() : 0;
+  const immigrantFoodBonus = Math.floor(immigrantLabor * 0.5);
+  const immigrantMatBonus = Math.floor(immigrantLabor * 0.2);
+  foodIncome += immigrantFoodBonus;
+  matIncome += immigrantMatBonus;
+
   const foodConsumed = popFoodConsumed + unitFoodUpkeep;
 
   return {
     foodIncome,
     matIncome,
+    immigrantLabor,
+    immigrantFoodBonus,
+    immigrantMatBonus,
     matUpkeep,
     laborUsed: laborUsed + unitLaborUsed,
     constructionWorkers,

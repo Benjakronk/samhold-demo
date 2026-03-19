@@ -714,6 +714,9 @@ window.getLoyalPopulation = Immigration.getLoyalPopulation;
 window.getImmigrationClimateText = Immigration.getImmigrationClimateText;
 window.startIntervention = Immigration.startIntervention;
 window.cancelIntervention = Immigration.cancelIntervention;
+window.addImmigrantArrivals = Immigration.addImmigrantArrivals;
+window.applyImmigrantStarvation = Immigration.applyImmigrantStarvation;
+window.stageTotal = Immigration.stageTotal;
 
 // Class System
 window.initClassSystem = ClassSystem.initClassSystem;

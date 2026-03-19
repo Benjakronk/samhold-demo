@@ -633,7 +633,8 @@ export function renderDevTabContent() {
     const imm = gameState.immigration;
     if (imm) {
       const ps = imm.parallelSociety;
-      const totalPipeline = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2];
+      const st = window.stageTotal || ((s) => (imm.cohorts[s] || []).reduce((a, c) => a + c.count, 0));
+      const totalPipeline = st(0) + st(1) + st(2);
       const psChildren = ps.childCohorts.reduce((s, c) => s + c.count, 0);
       html = `<div>
         <h3 style="color:var(--text-gold);margin:0 0 8px">🚶 Immigration State</h3>
@@ -646,10 +647,10 @@ export function renderDevTabContent() {
         </div>
 
         <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
-          <div>Arrivals (C0): <strong>${imm.cohorts[0]}</strong></div>
-          <div>Residents (C1): <strong>${imm.cohorts[1]}</strong></div>
-          <div>Participants (C2): <strong>${imm.cohorts[2]}</strong></div>
-          <div>Integrating (C3): <strong>${imm.cohorts[3]}</strong></div>
+          <div>Arrivals (C0): <strong>${st(0)}</strong></div>
+          <div>Residents (C1): <strong>${st(1)}</strong></div>
+          <div>Participants (C2): <strong>${st(2)}</strong></div>
+          <div>Integrating (C3): <strong>${st(3)}</strong></div>
         </div>
 
         <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
@@ -661,9 +662,9 @@ export function renderDevTabContent() {
 
         <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">🔧 Dev Controls</h4>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-          <button class="dev-btn" onclick="gameState.immigration.cohorts[0]+=5; renderDevTabContent();" style="font-size:11px">+5 Arrivals</button>
-          <button class="dev-btn" onclick="gameState.immigration.cohorts[0]+=20; renderDevTabContent();" style="font-size:11px">+20 Arrivals</button>
-          <button class="dev-btn" onclick="gameState.immigration.cohorts=[0,0,0,0]; renderDevTabContent();" style="font-size:11px">Clear Pipeline</button>
+          <button class="dev-btn" onclick="if(window.addImmigrantArrivals) addImmigrantArrivals(5); renderDevTabContent();" style="font-size:11px">+5 Arrivals</button>
+          <button class="dev-btn" onclick="if(window.addImmigrantArrivals) addImmigrantArrivals(20); renderDevTabContent();" style="font-size:11px">+20 Arrivals</button>
+          <button class="dev-btn" onclick="gameState.immigration.cohorts=[[],[],[],[]]; renderDevTabContent();" style="font-size:11px">Clear Pipeline</button>
         </div>
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
           <button class="dev-btn" onclick="gameState.immigration.parallelSociety.strength=0.20; gameState.immigration.parallelSociety.population=5; renderDevTabContent();" style="font-size:11px">PS 20%</button>

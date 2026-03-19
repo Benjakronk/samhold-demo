@@ -159,7 +159,7 @@ export function createGameState() {
       rationPriority: { zone: null, turnsInZone: 0 }
     },
     immigration: {
-      cohorts: [0, 0, 0, 0],    // [Arrival, Resident, Participant, Integrated]
+      cohorts: [[], [], [], []], // [Arrival, Resident, Participant, Integrated] — each is [{age, count}]
       parallelSociety: {
         strength: 0,
         population: 0,

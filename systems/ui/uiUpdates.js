@@ -279,6 +279,16 @@ function showTurnSummary(report, seasonName, year) {
     <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}${(() => { const d = (report.childBirths||0) - (report.childDeaths||0) - (report.graduated||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
   `;
 
+  // Immigration summary row
+  const immState = window.getImmigrationState ? window.getImmigrationState() : null;
+  if (immState && (immState.lastArrivals > 0 || immState.pipelineTotal > 0)) {
+    const arrivalText = immState.lastArrivals > 0 ? `<span class="delta-pos">+${immState.lastArrivals} arrived</span>` : '';
+    html += `<div class="summary-row"><span class="s-label">\u{1F6B6} Immigrants in pipeline</span><span class="s-val">${immState.pipelineTotal} ${arrivalText}</span></div>`;
+    if (immState.parallelSociety.population > 0) {
+      html += `<div class="summary-row"><span class="s-label">\u{1F3D8}\uFE0F Parallel society</span><span class="s-val" style="color:#cc6644">${immState.parallelSociety.population} (${Math.round(immState.parallelSociety.strength * 100)}%)</span></div>`;
+    }
+  }
+
   const allEvents = [...report.events];
   if (gameState.eventOutcomesForNextSummary && gameState.eventOutcomesForNextSummary.length > 0) {
     gameState.eventOutcomesForNextSummary.forEach(outcome => {

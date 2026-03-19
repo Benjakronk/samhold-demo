@@ -219,7 +219,7 @@ function evaluateCondition(condition) {
           break;
         case 'immigrationPipelineActive': {
           const imm = gameState.immigration;
-          result = imm && (imm.cohorts[1] + imm.cohorts[2]) >= 3;
+          result = imm && ((window.stageTotal ? window.stageTotal(1) + window.stageTotal(2) : 0)) >= 3;
           break;
         }
         case 'parallelSocietyAbove40':
@@ -645,7 +645,19 @@ function applyImmediateEffects(effects) {
 
   // Apply population changes (less variable)
   if (effects.population) {
-    gameState.population.total = Math.max(1, gameState.population.total + effects.population);
+    if (effects.population > 0) {
+      gameState.population.total += effects.population;
+      gameState.population.idle += effects.population;
+      if (window.addToAdultCohort) window.addToAdultCohort(25, effects.population);
+    } else {
+      const loss = Math.min(Math.abs(effects.population), gameState.population.total - 1);
+      gameState.population.total -= loss;
+      const idleLoss = Math.min(loss, gameState.population.idle);
+      gameState.population.idle -= idleLoss;
+      if (loss > idleLoss) gameState.population.employed -= (loss - idleLoss);
+      if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(loss);
+      if (window.clampWorkers) window.clampWorkers();
+    }
   }
 
   // Apply cohesion changes with modifiers
@@ -705,8 +717,9 @@ function applyImmediateEffects(effects) {
   if (effects.immigrationEffects) {
     const ie = effects.immigrationEffects;
     if (ie.addArrivals && gameState.immigration) {
-      gameState.immigration.cohorts[0] += ie.addArrivals;
-      gameState.immigration.lifetimeArrivals += ie.addArrivals;
+      if (window.addImmigrantArrivals) {
+        window.addImmigrantArrivals(ie.addArrivals);
+      }
     }
     if (ie.cancelIntervention && gameState.immigration) {
       gameState.immigration.interventionActive = null;

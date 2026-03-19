@@ -642,6 +642,15 @@ function processStarvation(deficit, report) {
     }
   }
 
+  // Pipeline immigrants die last (outside core population)
+  if (remainingDeaths > 0 && window.applyImmigrantStarvation) {
+    const immigrantDeaths = window.applyImmigrantStarvation(remainingDeaths);
+    if (immigrantDeaths > 0) {
+      remainingDeaths -= immigrantDeaths;
+      report.events.push(`☠️ ${immigrantDeaths} immigrant${immigrantDeaths !== 1 ? 's' : ''} in the pipeline died from starvation.`);
+    }
+  }
+
   recomputeElderCount();
 
   // Ensure storytellers don't exceed remaining population

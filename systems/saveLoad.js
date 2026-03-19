@@ -149,11 +149,20 @@ function loadGameFromSlot(slotName) {
     // Migrate immigration state for older saves
     if (!loadedGameState.immigration) {
       loadedGameState.immigration = {
-        cohorts: [0, 0, 0, 0],
+        cohorts: [[], [], [], []],
         parallelSociety: { strength: 0, population: 0, childCohorts: [] },
         pressure: 0, lastArrivals: 0, lifetimeArrivals: 0, lifetimeIntegrated: 0,
         interventionActive: null, interventionTurns: 0, crystallizationEvents: {}
       };
+    }
+    // Migrate integer cohorts to age-based arrays
+    if (loadedGameState.immigration?.cohorts) {
+      for (let i = 0; i < 4; i++) {
+        if (!Array.isArray(loadedGameState.immigration.cohorts[i])) {
+          const count = loadedGameState.immigration.cohorts[i] || 0;
+          loadedGameState.immigration.cohorts[i] = count > 0 ? [{ age: 25, count }] : [];
+        }
+      }
     }
 
     // Migrate immigration policy sliders for older saves

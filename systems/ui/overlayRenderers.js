@@ -1030,9 +1030,31 @@ function selectGovernanceModel(modelKey) {
 
 // ---- POPULATION DETAILS ----
 
+let activePopTab = 'summary';
+
 function openPopulationDetails() {
   renderPopulationDetails();
+  wirePopTabs();
   document.getElementById('population-details-overlay').classList.add('visible');
+}
+
+function wirePopTabs() {
+  const tabs = document.querySelectorAll('.pop-tab');
+  tabs.forEach(tab => {
+    tab.onclick = () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activePopTab = tab.dataset.popTab;
+      renderPopulationDetails();
+    };
+  });
+}
+
+function switchPopTab(tabName) {
+  activePopTab = tabName;
+  const tabs = document.querySelectorAll('.pop-tab');
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.popTab === tabName));
+  renderPopulationDetails();
 }
 
 function closePopulationDetails() {
@@ -1040,43 +1062,211 @@ function closePopulationDetails() {
 }
 
 function renderPopulationDetails() {
+  if (activePopTab === 'summary') renderPopSummaryTab();
+  else if (activePopTab === 'pyramid') renderPopPyramidTab();
+  else if (activePopTab === 'cohorts') renderPopCohortsTab();
+  else if (activePopTab === 'society') renderPopSocietyTab();
+}
+
+function getPopStats() {
   const totalChildren = window.getTotalChildren();
-  const workingAgeYouth = gameState.childCohorts
-    .filter(c => c.age >= window.WORKING_AGE && c.age <= 16)
-    .reduce((sum, c) => sum + c.count, 0);
   const totalAdults = gameState.population.total;
   const elderCount = gameState.population.elders || 0;
   const workingAdults = totalAdults - elderCount;
-  const totalPop = totalAdults + totalChildren + workingAgeYouth;
   const elderAge = window.ELDER_AGE || 50;
   const maxAge = window.MAX_AGE || 80;
+  const totalPop = totalAdults + totalChildren;
+  return { totalChildren, totalAdults, elderCount, workingAdults, elderAge, maxAge, totalPop };
+}
+
+function renderPopSummaryTab() {
+  const s = getPopStats();
+  const elderFood = s.elderCount * (window.FOOD_PER_ELDER || 1);
+  const adultFood = s.workingAdults * window.FOOD_PER_POP;
+  const childFood = s.totalChildren * window.FOOD_PER_CHILD;
+  const totalFood = adultFood + elderFood + childFood;
+
+  // Dependency ratio: (children + elders) / working adults
+  const dependents = s.totalChildren + s.elderCount;
+  const depRatio = s.workingAdults > 0 ? (dependents / s.workingAdults) : 0;
+  const depColor = depRatio > 1.0 ? '#c77' : depRatio > 0.6 ? '#ccaa44' : '#6cb66c';
 
   let html = `
-    <div style="margin-bottom: 20px;">
-      <div class="detail-section">
-        <h3>Population Summary</h3>
-        <div class="detail-row"><span>Total Population:</span><span>${totalPop}</span></div>
-        <div class="detail-row"><span>\u{1F465} Working Adults:</span><span>${workingAdults}</span></div>
-        <div class="detail-row"><span>\u{1F9D3} Elders (${elderAge}+):</span><span>${elderCount}</span></div>
-        <div class="detail-row"><span>\u{1F476} Children:</span><span>${totalChildren}</span></div>
-        ${workingAgeYouth > 0 ? `<div class="detail-row"><span>\u{1F9D1} Working Age Youth:</span><span>${workingAgeYouth}</span></div>` : ''}
-        <div class="detail-row">
-          <span>Working Age:</span>
-          <span style="display: flex; align-items: center; gap: 8px;">
-            <button class="dev-btn" onclick="adjustWorkingAge(-1)" style="font-size: 12px; padding: 2px 6px;">\u2212</button>
-            <span id="pop-working-age-value">${window.WORKING_AGE} years</span>
-            <button class="dev-btn" onclick="adjustWorkingAge(1)" style="font-size: 12px; padding: 2px 6px;">+</button>
-          </span>
-        </div>
-        ${elderCount > 0 ? `<div class="detail-row" style="color: #b8a870;"><span>Elder Bonuses/turn:</span><span>+${(elderCount * (window.ELDER_LEGITIMACY_BONUS || 0.08)).toFixed(1)} Leg, +${(elderCount * (window.ELDER_IDENTITY_BONUS || 0.05)).toFixed(1)} Id</span></div>` : ''}
+    <div class="detail-section">
+      <h3>Population Summary</h3>
+      <div class="detail-row"><span>Total Population:</span><span>${s.totalPop}</span></div>
+      <div class="detail-row"><span>\u{1F465} Working Adults:</span><span>${s.workingAdults}</span></div>
+      <div class="detail-row"><span>\u{1F9D3} Elders (${s.elderAge}+):</span><span>${s.elderCount}</span></div>
+      <div class="detail-row"><span>\u{1F476} Children:</span><span>${s.totalChildren}</span></div>
+      <div class="detail-row">
+        <span>Working Age:</span>
+        <span style="display: flex; align-items: center; gap: 8px;">
+          <button class="dev-btn" onclick="adjustWorkingAge(-1)" style="font-size: 12px; padding: 2px 6px;">\u2212</button>
+          <span id="pop-working-age-value">${window.WORKING_AGE} years</span>
+          <button class="dev-btn" onclick="adjustWorkingAge(1)" style="font-size: 12px; padding: 2px 6px;">+</button>
+        </span>
       </div>
+      <div class="detail-row"><span>Dependency Ratio:</span><span style="color: ${depColor}">${depRatio.toFixed(2)} (${dependents} dependents / ${s.workingAdults} workers)</span></div>
+    </div>
+
+    ${s.elderCount > 0 ? `
+    <div class="detail-section">
+      <h3>Elder Contributions</h3>
+      <div class="detail-row" style="color: #b8a870;"><span>Legitimacy/turn:</span><span>+${(s.elderCount * (window.ELDER_LEGITIMACY_BONUS || 0.08)).toFixed(2)}</span></div>
+      <div class="detail-row" style="color: #b8a870;"><span>Identity/turn:</span><span>+${(s.elderCount * (window.ELDER_IDENTITY_BONUS || 0.05)).toFixed(2)}</span></div>
+      <div class="detail-row" style="color: #b8a870;"><span>Knowledge/turn:</span><span>+${(s.elderCount * (window.ELDER_KNOWLEDGE_PER_TURN || 0.3)).toFixed(1)}</span></div>
+      <div class="detail-row"><span>Food cost (half ration):</span><span>${elderFood} \u{1F33E}</span></div>
+    </div>` : ''}
+
+    <div class="detail-section">
+      <h3>Food Consumption</h3>
+      <div class="detail-row"><span>\u{1F465} Working Adults (${s.workingAdults} \u00D7 ${window.FOOD_PER_POP}):</span><span>${adultFood} \u{1F33E}</span></div>
+      ${s.elderCount > 0 ? `<div class="detail-row"><span>\u{1F9D3} Elders (${s.elderCount} \u00D7 ${window.FOOD_PER_ELDER || 1}):</span><span>${elderFood} \u{1F33E}</span></div>` : ''}
+      <div class="detail-row"><span>\u{1F476} Children (${s.totalChildren} \u00D7 ${window.FOOD_PER_CHILD}):</span><span>${childFood} \u{1F33E}</span></div>`;
+
+  const immigrantFood = window.getImmigrantFoodConsumption ? window.getImmigrantFoodConsumption() : 0;
+  const grandTotal = totalFood + immigrantFood;
+
+  if (immigrantFood > 0) {
+    html += `<div class="detail-row"><span>\u{1F6B6} Immigrants (pipeline + PS):</span><span>${immigrantFood} \u{1F33E}</span></div>`;
+    html += `<div class="detail-row total-row"><span><strong>Total per turn:</strong></span><span><strong>${grandTotal} \u{1F33E}</strong></span></div>`;
+  } else {
+    html += `<div class="detail-row total-row"><span><strong>Total per turn:</strong></span><span><strong>${totalFood} \u{1F33E}</strong></span></div>`;
+  }
+
+  html += `</div>`;
+
+  document.getElementById('population-details-content').innerHTML = html;
+}
+
+function renderPopPyramidTab() {
+  const s = getPopStats();
+
+  // Build age brackets: 0-4, 5-9, 10-14, ..., 75-79, 80+
+  const brackets = [];
+  const bracketSize = 5;
+  const maxBracket = Math.ceil((s.maxAge + 1) / bracketSize);
+  for (let i = 0; i < maxBracket; i++) {
+    brackets.push({ minAge: i * bracketSize, maxAge: (i + 1) * bracketSize - 1, label: `${i * bracketSize}-${(i + 1) * bracketSize - 1}`, children: 0, adults: 0, elders: 0, immigrants: 0 });
+  }
+
+  // Fill children
+  for (const cohort of gameState.childCohorts || []) {
+    const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
+    if (brackets[idx]) brackets[idx].children += cohort.count;
+  }
+
+  // Fill adults
+  for (const cohort of gameState.adultCohorts || []) {
+    const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
+    if (brackets[idx]) {
+      if (cohort.age >= s.elderAge) brackets[idx].elders += cohort.count;
+      else brackets[idx].adults += cohort.count;
+    }
+  }
+
+  // Fill pipeline immigrants (age-tracked)
+  let totalImmigrants = 0;
+  const imm = gameState.immigration;
+  if (imm?.cohorts) {
+    for (let stage = 0; stage < 3; stage++) {
+      const stageCohorts = imm.cohorts[stage];
+      if (Array.isArray(stageCohorts)) {
+        for (const cohort of stageCohorts) {
+          const idx = Math.min(Math.floor(cohort.age / bracketSize), brackets.length - 1);
+          if (brackets[idx]) brackets[idx].immigrants += cohort.count;
+          totalImmigrants += cohort.count;
+        }
+      }
+    }
+  }
+
+  // Find max bracket total for scaling
+  const maxCount = Math.max(1, ...brackets.map(b => b.children + b.adults + b.elders + b.immigrants));
+
+  // Summary stats at top
+  let html = `
+    <div class="pyramid-summary">
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalPop + totalImmigrants}</div><div class="pyramid-stat-label">Total</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.workingAdults}</div><div class="pyramid-stat-label">Working Adults</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.elderCount}</div><div class="pyramid-stat-label">Elders</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalChildren}</div><div class="pyramid-stat-label">Children</div></div>
+      ${totalImmigrants > 0 ? `<div class="pyramid-stat"><div class="pyramid-stat-value">${totalImmigrants}</div><div class="pyramid-stat-label">Pipeline</div></div>` : ''}
+    </div>
+    <div class="pyramid-legend">
+      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #7ca0c4;"></div> Children</div>
+      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #8cb87c;"></div> Working Adults</div>
+      <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #c4a04e;"></div> Elders</div>
+      ${totalImmigrants > 0 ? `<div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #cc6644;"></div> Immigrants</div>` : ''}
+    </div>
+    <div class="pyramid-container">`;
+
+  // Render from oldest to youngest (top to bottom)
+  for (let i = brackets.length - 1; i >= 0; i--) {
+    const b = brackets[i];
+    const total = b.children + b.adults + b.elders + b.immigrants;
+    if (total === 0 && i > Math.floor(s.elderAge / bracketSize)) continue; // skip empty high brackets
+
+    // Split citizens (left) and immigrants (right) for the pyramid
+    const citizenTotal = b.children + b.adults + b.elders;
+    const leftCount = citizenTotal;
+    const rightCount = b.immigrants > 0 ? b.immigrants : citizenTotal; // if no immigrants, mirror citizens
+    const leftPct = (leftCount / maxCount) * 100;
+    const rightPct = b.immigrants > 0 ? (rightCount / maxCount) * 100 : leftPct;
+
+    // Left bar: citizen color by dominant type
+    let leftStyle;
+    if (citizenTotal === 0) {
+      leftStyle = 'background: transparent;';
+    } else {
+      // Build gradient from constituent parts
+      const segments = [];
+      let runningPct = 0;
+      if (b.children > 0) { const p = (b.children / citizenTotal) * 100; segments.push(`#7ca0c4 ${runningPct}% ${runningPct + p}%`); runningPct += p; }
+      if (b.adults > 0) { const p = (b.adults / citizenTotal) * 100; segments.push(`#8cb87c ${runningPct}% ${runningPct + p}%`); runningPct += p; }
+      if (b.elders > 0) { const p = (b.elders / citizenTotal) * 100; segments.push(`#c4a04e ${runningPct}% ${runningPct + p}%`); runningPct += p; }
+      leftStyle = segments.length > 1 ? `background: linear-gradient(to right, ${segments.join(', ')});` : `background: ${segments.length ? segments[0].split(' ')[0] : '#8cb87c'};`;
+    }
+
+    // Right bar: immigrants or mirrored citizens
+    const rightStyle = b.immigrants > 0
+      ? 'background: #cc6644;'
+      : leftStyle;
+
+    html += `
+      <div class="pyramid-row">
+        <div class="pyramid-label">${b.label}</div>
+        <div class="pyramid-bar-left">
+          <div class="pyramid-bar" style="width: ${leftPct}%; ${leftStyle}">
+            ${leftCount > 0 ? `<span class="bar-count">${leftCount}</span>` : ''}
+          </div>
+        </div>
+        <div></div>
+        <div class="pyramid-bar-right">
+          <div class="pyramid-bar" style="width: ${rightPct}%; ${rightStyle}">
+            ${(b.immigrants > 0 ? rightCount : leftCount) > 0 ? `<span class="bar-count">${b.immigrants > 0 ? rightCount : leftCount}</span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  html += `</div>
+    <div style="text-align: center; color: var(--text-dim); font-size: 11px; margin-top: 8px;">
+      ${totalImmigrants > 0 ? 'Left: citizens \u00B7 Right: pipeline immigrants' : 'Age brackets shown symmetrically (no gender tracking)'}
     </div>`;
 
-  // Adult cohorts breakdown
+  document.getElementById('population-details-content').innerHTML = html;
+}
+
+function renderPopCohortsTab() {
+  const s = getPopStats();
+  let html = '';
+
+  // Elder cohorts
   if (gameState.adultCohorts && gameState.adultCohorts.length > 0) {
     const sortedAdults = [...gameState.adultCohorts].sort((a, b) => b.age - a.age);
-    const elderCohorts = sortedAdults.filter(c => c.age >= elderAge);
-    const workingCohorts = sortedAdults.filter(c => c.age < elderAge);
+    const elderCohorts = sortedAdults.filter(c => c.age >= s.elderAge);
+    const workingCohorts = sortedAdults.filter(c => c.age < s.elderAge);
 
     if (elderCohorts.length > 0) {
       html += `
@@ -1084,13 +1274,12 @@ function renderPopulationDetails() {
           <h3>Elder Cohorts</h3>
           <div class="cohort-grid">`;
       for (const cohort of elderCohorts) {
-        const yearsLeft = maxAge - cohort.age;
-        const deathRisk = Math.min(0.99, (window.NATURAL_DEATH_BASE_RATE || 0.02) * (cohort.age - elderAge + 1));
+        const deathRisk = Math.min(0.99, (window.NATURAL_DEATH_BASE_RATE || 0.02) * (cohort.age - s.elderAge + 1));
         html += `
           <div class="cohort-row">
             <div class="cohort-age">Age ${cohort.age}</div>
             <div class="cohort-count">${cohort.count} elder${cohort.count !== 1 ? 's' : ''}</div>
-            <div class="cohort-status" style="color: ${deathRisk > 0.3 ? '#c77' : '#b8a870'};">${(deathRisk * 100).toFixed(0)}% mortality</div>
+            <div class="cohort-status" style="color: ${deathRisk > 0.3 ? '#c77' : '#b8a870'};">${(deathRisk * 100).toFixed(0)}% mortality/yr</div>
           </div>`;
       }
       html += `</div></div>`;
@@ -1102,18 +1291,19 @@ function renderPopulationDetails() {
           <h3>Adult Cohorts</h3>
           <div class="cohort-grid">`;
       for (const cohort of workingCohorts) {
-        const yearsToElder = elderAge - cohort.age;
+        const yearsToElder = s.elderAge - cohort.age;
         html += `
           <div class="cohort-row">
             <div class="cohort-age">Age ${cohort.age}</div>
             <div class="cohort-count">${cohort.count} adult${cohort.count !== 1 ? 's' : ''}</div>
-            <div class="cohort-status">${yearsToElder <= 2 ? '\u23F3 ' + yearsToElder + 'y to elder' : ''}</div>
+            <div class="cohort-status">${yearsToElder <= 5 ? '\u23F3 ' + yearsToElder + 'y to elder' : ''}</div>
           </div>`;
       }
       html += `</div></div>`;
     }
   }
 
+  // Child cohorts
   if (gameState.childCohorts.length > 0) {
     html += `
       <div class="detail-section">
@@ -1129,14 +1319,11 @@ function renderPopulationDetails() {
       if (cohort.age >= window.WORKING_AGE) {
         statusText = '\u{1F4BC} Working';
         countLabel = `${cohort.count} workers`;
-      } else if (yearsToWork === 0) {
-        statusText = '\u{1F393} Ready to work';
-        countLabel = `${cohort.count} children`;
-      } else if (yearsToWork === 1) {
-        statusText = '\u23F3 1 year to work';
+      } else if (yearsToWork <= 1) {
+        statusText = '\u{1F393} Ready soon';
         countLabel = `${cohort.count} children`;
       } else {
-        statusText = `\u23F3 ${yearsToWork} years to work`;
+        statusText = `\u23F3 ${yearsToWork}y to work`;
         countLabel = `${cohort.count} children`;
       }
 
@@ -1151,19 +1338,175 @@ function renderPopulationDetails() {
     html += `</div></div>`;
   }
 
-  const elderFood = elderCount * (window.FOOD_PER_ELDER || 1);
-  const adultFood = workingAdults * window.FOOD_PER_POP;
-  const childFood = totalChildren * window.FOOD_PER_CHILD;
-  const totalFood = adultFood + elderFood + childFood;
+  if (!html) html = '<div class="detail-section"><p style="color: var(--text-dim);">No cohort data available.</p></div>';
 
+  document.getElementById('population-details-content').innerHTML = html;
+}
+
+function renderPopSocietyTab() {
+  const s = getPopStats();
+  let html = '';
+
+  // --- Immigration Demographics ---
+  const immState = window.getImmigrationState ? window.getImmigrationState() : null;
+  if (immState) {
+    const pipelineTotal = immState.pipelineTotal;
+    const psTotal = immState.parallelSociety.population;
+    const psChildren = immState.parallelSociety.children;
+    const totalWithImm = s.totalPop + pipelineTotal + psTotal + psChildren;
+    const nativeRatio = totalWithImm > 0 ? (s.totalPop / totalWithImm * 100).toFixed(0) : '100';
+    const immRatio = totalWithImm > 0 ? ((pipelineTotal + psTotal + psChildren) / totalWithImm * 100).toFixed(0) : '0';
+
+    html += `
+      <div class="detail-section">
+        <h3>Immigration Overview</h3>
+        <div class="detail-row"><span>Total Community (incl. pipeline):</span><span>${totalWithImm}</span></div>
+        <div class="detail-row"><span>Native/Integrated Citizens:</span><span>${s.totalPop} (${nativeRatio}%)</span></div>
+        <div class="detail-row"><span>In Integration Pipeline:</span><span>${pipelineTotal} (${immRatio}%)</span></div>
+        <div class="detail-row"><span>Lifetime Arrivals / Integrated:</span><span>${immState.lifetimeArrivals} / ${immState.lifetimeIntegrated}</span></div>
+      </div>`;
+
+    // Pipeline breakdown with progress bars
+    if (pipelineTotal > 0) {
+      const stageColors = ['#cc6644', '#ccaa33', '#6699cc', '#6cb66c'];
+      const stageLabels = ['Arrivals', 'Residents', 'Participants', 'Integrating'];
+      const workforceRates = [40, 70, 90, 100];
+
+      html += `
+        <div class="detail-section">
+          <h3>Integration Pipeline</h3>`;
+
+      for (let i = 0; i < 3; i++) {
+        const count = immState.cohorts[i];
+        if (count <= 0) continue;
+        const pct = pipelineTotal > 0 ? (count / pipelineTotal * 100).toFixed(0) : 0;
+        html += `
+          <div style="margin-bottom: 8px;">
+            <div class="detail-row">
+              <span style="color: ${stageColors[i]}">${stageLabels[i]}</span>
+              <span>${count} people (${workforceRates[i]}% workforce)</span>
+            </div>
+            <div style="background: rgba(0,0,0,0.3); border-radius: 3px; height: 6px; margin-top: 2px;">
+              <div style="background: ${stageColors[i]}; width: ${pct}%; height: 100%; border-radius: 3px; min-width: 2px;"></div>
+            </div>
+          </div>`;
+      }
+
+      // Workforce contribution
+      const immLabor = window.getImmigrantWorkforce ? window.getImmigrantWorkforce() : 0;
+      if (immLabor > 0) {
+        html += `<div class="detail-row" style="color: #b8a870; margin-top: 8px;"><span>Effective Workforce Contribution:</span><span>${immLabor.toFixed(1)} workers</span></div>`;
+      }
+
+      html += `</div>`;
+    }
+
+    // Parallel Society
+    if (psTotal > 0 || immState.parallelSociety.strength > 0.05) {
+      const pss = immState.parallelSociety.strength;
+      const psPct = Math.round(pss * 100);
+      const psColor = pss >= 0.5 ? '#cc4444' : pss >= 0.3 ? '#cc8844' : '#ccaa44';
+
+      html += `
+        <div class="detail-section">
+          <h3>Parallel Society</h3>
+          <div class="detail-row"><span>Strength:</span><span style="color: ${psColor}; font-weight: bold;">${psPct}%</span></div>
+          <div style="background: rgba(0,0,0,0.3); border-radius: 3px; height: 8px; margin: 4px 0 8px;">
+            <div style="background: ${psColor}; width: ${psPct}%; height: 100%; border-radius: 3px; transition: width 0.3s;"></div>
+          </div>
+          <div class="detail-row"><span>PS Adults:</span><span>${psTotal}</span></div>
+          ${psChildren > 0 ? `<div class="detail-row"><span>PS Children:</span><span>${psChildren}</span></div>` : ''}
+          ${immState.interventionActive ? `<div class="detail-row"><span>Active Intervention:</span><span style="color: #ccaa44;">${immState.interventionActive} (${immState.interventionTurns} turns)</span></div>` : ''}
+        </div>`;
+    }
+  } else {
+    html += `<div class="detail-section"><p style="color: var(--text-dim);">Immigration has not started yet (begins turn 12).</p></div>`;
+  }
+
+  // --- Class System Demographics ---
+  const classState = window.getClassSystemState ? window.getClassSystemState() : null;
+  if (classState && classState.active) {
+    const privCount = classState.privilegedCount;
+    const commonsCount = Math.max(0, s.totalAdults - privCount);
+    const privPct = s.totalAdults > 0 ? (privCount / s.totalAdults * 100).toFixed(0) : 0;
+    const commonsPct = s.totalAdults > 0 ? (commonsCount / s.totalAdults * 100).toFixed(0) : 0;
+
+    html += `
+      <div class="detail-section">
+        <h3>Stratification: ${classState.basisDef?.icon || ''} ${classState.basisDef?.name || classState.basis}</h3>
+        <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+          <div style="flex: ${privPct}; background: #c4a04e; height: 20px; border-radius: 3px 0 0 3px; min-width: 2px; position: relative;">
+            ${privCount > 0 ? `<span style="position: absolute; left: 4px; top: 2px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">${privCount}</span>` : ''}
+          </div>
+          <div style="flex: ${commonsPct}; background: #6a7a5a; height: 20px; border-radius: 0 3px 3px 0; min-width: 2px; position: relative;">
+            ${commonsCount > 0 ? `<span style="position: absolute; right: 4px; top: 2px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">${commonsCount}</span>` : ''}
+          </div>
+        </div>
+        <div class="detail-row"><span>Privileged:</span><span style="color: #c4a04e;">${privCount} (${privPct}%)</span></div>
+        <div class="detail-row"><span>Commons:</span><span>${commonsCount} (${commonsPct}%)</span></div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Differential Levels</h3>`;
+
+    const DIFFS = window.DIFFERENTIALS || {};
+    const tierLabels = ['Equal', 'Preferential', 'Stratified'];
+    const tierColors = ['#6cb66c', '#ccaa44', '#cc6644'];
+
+    for (const [key, val] of Object.entries(classState.differentials)) {
+      const diffDef = DIFFS[key];
+      const tier = val || 0;
+      const tierName = diffDef?.tiers?.[tier]?.label || tierLabels[tier] || 'Unknown';
+      html += `
+        <div class="detail-row">
+          <span>${diffDef?.icon || ''} ${diffDef?.name || key}:</span>
+          <span style="color: ${tierColors[tier]};">${tierName}</span>
+        </div>`;
+    }
+
+    // Effects summary
+    if (classState.classMultiplier > 1.0) {
+      html += `<div class="detail-row" style="margin-top: 8px; color: #cc6644;"><span>Crime Multiplier:</span><span>\u00D7${classState.classMultiplier.toFixed(2)}</span></div>`;
+    }
+    if (classState.trustReduction > 0) {
+      html += `<div class="detail-row" style="color: #cc8844;"><span>Trust Reduction:</span><span>-${classState.trustReduction.toFixed(2)}</span></div>`;
+    }
+
+    html += `</div>`;
+  } else if (classState && !classState.active) {
+    html += `<div class="detail-section"><h3>Stratification</h3><p style="color: var(--text-dim);">No formal class system is active. ${classState.canActivate ? 'A stratification basis can be established from the Governance panel.' : `Available after turn ${window.MIN_TURNS_FOR_ACTIVATION || 8}.`}</p></div>`;
+  }
+
+  // --- Workforce Composition ---
   html += `
     <div class="detail-section">
-      <h3>Food Consumption</h3>
-      <div class="detail-row"><span>\u{1F465} Working Adults (${workingAdults} \u00D7 ${window.FOOD_PER_POP}):</span><span>${adultFood} \u{1F33E}</span></div>
-      ${elderCount > 0 ? `<div class="detail-row"><span>\u{1F9D3} Elders (${elderCount} \u00D7 ${window.FOOD_PER_ELDER || 1}):</span><span>${elderFood} \u{1F33E}</span></div>` : ''}
-      <div class="detail-row"><span>\u{1F476} Children (${totalChildren} \u00D7 ${window.FOOD_PER_CHILD}):</span><span>${childFood} \u{1F33E}</span></div>
-      <div class="detail-row total-row"><span><strong>Total per turn:</strong></span><span><strong>${totalFood} \u{1F33E}</strong></span></div>
-    </div>`;
+      <h3>Workforce Composition</h3>
+      <div class="detail-row"><span>Employed:</span><span>${gameState.population.employed}</span></div>
+      <div class="detail-row"><span>Idle:</span><span style="color: ${gameState.population.idle > 5 ? '#ccaa44' : 'var(--text-light)'}">${gameState.population.idle}</span></div>`;
+
+  // Unit breakdown
+  const unitCounts = {};
+  for (const unit of gameState.units || []) {
+    unitCounts[unit.type] = (unitCounts[unit.type] || 0) + 1;
+  }
+  if (Object.keys(unitCounts).length > 0) {
+    html += `<div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border-gold-dim);">`;
+    for (const [type, count] of Object.entries(unitCounts)) {
+      const uDef = window.UNIT_TYPES?.[type];
+      if (uDef) {
+        html += `<div class="detail-row" style="margin-left: 12px;"><span>${uDef.icon || ''} ${uDef.name}:</span><span>${count}</span></div>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  // Storytellers
+  const storytellers = gameState.culture?.storytellers ?? 0;
+  if (storytellers > 0) {
+    html += `<div class="detail-row" style="margin-left: 12px;"><span>Storytellers:</span><span>${storytellers}</span></div>`;
+  }
+
+  html += `</div>`;
 
   document.getElementById('population-details-content').innerHTML = html;
 }

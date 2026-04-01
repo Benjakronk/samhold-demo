@@ -813,7 +813,8 @@ function drawFeatureLabels() {
   const features = gameState.culture.namedFeatures ?? [];
   const featureNames = features.map(f => f.name).join('\x00');
   const regionNames = (gameState.culture?.namedRegions ?? []).map(r => `${r.name}:${r.hexes.length}`).join('\x00');
-  const cacheKey = `${cam.x.toFixed(1)},${cam.y.toFixed(1)},${cam.zoom.toFixed(3)}\x00${featureNames}\x00${regionNames}`;
+  const settlementNames = (gameState.settlements ?? []).map(s => `${s.name || ''}:${s.col},${s.row}`).join('\x00');
+  const cacheKey = `${cam.x.toFixed(1)},${cam.y.toFixed(1)},${cam.zoom.toFixed(3)}\x00${featureNames}\x00${regionNames}\x00${settlementNames}`;
   if (cacheKey === _featureLabelCacheKey) return;
   _featureLabelCacheKey = cacheKey;
 
@@ -823,22 +824,54 @@ function drawFeatureLabels() {
   const sizeStyle = `font-size:${fontSize}px`;
 
   const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  let html = '';
 
-  // Terrain feature names (non-lake, non-river)
-  for (const feature of features) {
-    if (feature.type === 'river') continue;
-    // Lakes are rendered separately at cluster centroid
-    if (feature.type === 'lake' && feature.lakeCluster != null) continue;
-    const hex = gameState.map[feature.row]?.[feature.col];
+  // Collect all label candidates with priority order before rendering.
+  // Priority 0 = highest (always placed first). Labels that would overlap a
+  // higher-priority label are suppressed. All labels use translate(-50%,-50%)
+  // so cx/cy is the visual center of the span.
+  const candidates = []; // {cx, cy, text, html, priority}
+
+  // Settlement names — priority 0 (highest), positioned above hex
+  for (const settlement of (gameState.settlements ?? [])) {
+    if (!settlement.name) continue;
+    const hex = gameState.map[settlement.row]?.[settlement.col];
     if (!hex?.revealed) continue;
-    const wp = hexToPixel(feature.col, feature.row, CONSTANTS.HEX_SIZE);
+    const wp = hexToPixel(settlement.col, settlement.row, CONSTANTS.HEX_SIZE);
     const sp = window.worldToScreen(wp.x, wp.y);
-    const offset = CONSTANTS.HEX_SIZE * cam.zoom * 0.3;
-    html += `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y + offset}px;${sizeStyle}">${esc(feature.name)}</span>`;
+    const offset = CONSTANTS.HEX_SIZE * cam.zoom * 0.55;
+    const cx = sp.x, cy = sp.y - offset;
+    candidates.push({ cx, cy, text: settlement.name, priority: 0,
+      html: `<span class="map-settlement-label" style="left:${cx}px;top:${cy}px;${sizeStyle}">${esc(settlement.name)}</span>` });
   }
 
-  // Lake names — one label per cluster at centroid of all revealed lake hexes
+  // Region names — priority 1
+  for (const region of (gameState.culture?.namedRegions ?? [])) {
+    let sumX = 0, sumY = 0, count = 0;
+    for (const key of region.hexes) {
+      const [hc, hr] = key.split(',').map(Number);
+      const hex = gameState.map[hr]?.[hc];
+      if (!hex?.revealed) continue;
+      const wp = hexToPixel(hc, hr, CONSTANTS.HEX_SIZE);
+      sumX += wp.x; sumY += wp.y; count++;
+    }
+    if (count === 0) continue;
+    const sp = window.worldToScreen(sumX / count, sumY / count);
+    candidates.push({ cx: sp.x, cy: sp.y, text: region.name, priority: 1,
+      html: `<span class="map-region-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(region.name)}</span>` });
+  }
+
+  // River names — priority 2
+  for (const river of (gameState.rivers ?? [])) {
+    const named = window.getNamedRiver?.(river.id);
+    if (!named) continue;
+    const mid = getRiverRevealedMidpoint(river);
+    if (!mid) continue;
+    const sp = window.worldToScreen(mid.x, mid.y);
+    candidates.push({ cx: sp.x, cy: sp.y, text: named.name, priority: 2,
+      html: `<span class="map-river-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(named.name)}</span>` });
+  }
+
+  // Lake names — priority 3 (one label per cluster at centroid)
   for (const feature of features) {
     if (feature.type !== 'lake' || feature.lakeCluster == null) continue;
     let sumX = 0, sumY = 0, count = 0;
@@ -855,32 +888,50 @@ function drawFeatureLabels() {
     }
     if (count === 0) continue;
     const sp = window.worldToScreen(sumX / count, sumY / count);
-    html += `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(feature.name)}</span>`;
+    candidates.push({ cx: sp.x, cy: sp.y, text: feature.name, priority: 3,
+      html: `<span class="map-feature-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(feature.name)}</span>` });
   }
 
-  // Region names — at centroid of revealed hexes
-  for (const region of (gameState.culture?.namedRegions ?? [])) {
-    let sumX = 0, sumY = 0, count = 0;
-    for (const key of region.hexes) {
-      const [hc, hr] = key.split(',').map(Number);
-      const hex = gameState.map[hr]?.[hc];
-      if (!hex?.revealed) continue;
-      const wp = hexToPixel(hc, hr, CONSTANTS.HEX_SIZE);
-      sumX += wp.x; sumY += wp.y; count++;
+  // Terrain feature names (non-lake, non-river) — priority 4 (lowest)
+  for (const feature of features) {
+    if (feature.type === 'river') continue;
+    if (feature.type === 'lake' && feature.lakeCluster != null) continue;
+    const hex = gameState.map[feature.row]?.[feature.col];
+    if (!hex?.revealed) continue;
+    const wp = hexToPixel(feature.col, feature.row, CONSTANTS.HEX_SIZE);
+    const sp = window.worldToScreen(wp.x, wp.y);
+    const yOffset = CONSTANTS.HEX_SIZE * cam.zoom * 0.3;
+    const cx = sp.x, cy = sp.y + yOffset;
+    candidates.push({ cx, cy, text: feature.name, priority: 4,
+      html: `<span class="map-feature-label" style="left:${cx}px;top:${cy}px;${sizeStyle}">${esc(feature.name)}</span>` });
+  }
+
+  // Collision detection — place labels in priority order, suppress overlapping ones.
+  // Estimate bounding box: Almendra serif ≈ 0.55× char width, 1.4× line height.
+  // All spans use translate(-50%,-50%) so cx/cy is already the visual center.
+  const CHAR_W_FACTOR = 0.55;
+  const LINE_H_FACTOR = 1.4;
+  const MARGIN = 6; // extra gap between labels (px)
+
+  candidates.sort((a, b) => a.priority - b.priority);
+  const placed = []; // [{cx, cy, hw, hh}]
+
+  function labelsOverlap(cx, cy, hw, hh) {
+    for (const p of placed) {
+      if (Math.abs(cx - p.cx) < hw + p.hw + MARGIN &&
+          Math.abs(cy - p.cy) < hh + p.hh + MARGIN) return true;
     }
-    if (count === 0) continue;
-    const sp = window.worldToScreen(sumX / count, sumY / count);
-    html += `<span class="map-region-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(region.name)}</span>`;
+    return false;
   }
 
-  // River names — at midpoint of revealed portion
-  for (const river of (gameState.rivers ?? [])) {
-    const named = window.getNamedRiver?.(river.id);
-    if (!named) continue;
-    const mid = getRiverRevealedMidpoint(river);
-    if (!mid) continue;
-    const sp = window.worldToScreen(mid.x, mid.y);
-    html += `<span class="map-river-label" style="left:${sp.x}px;top:${sp.y}px;${sizeStyle}">${esc(named.name)}</span>`;
+  let html = '';
+  for (const c of candidates) {
+    const hw = (c.text.length * fontSize * CHAR_W_FACTOR) / 2;
+    const hh = (fontSize * LINE_H_FACTOR) / 2;
+    if (!labelsOverlap(c.cx, c.cy, hw, hh)) {
+      placed.push({ cx: c.cx, cy: c.cy, hw, hh });
+      html += c.html;
+    }
   }
 
   overlay.innerHTML = html;

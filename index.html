@@ -13,8 +13,8 @@
   <div class="divider"></div>
   <div id="turn-display">Year 1 — Spring</div>
   <div class="divider"></div>
-  <div class="resource-group"><div class="resource-icon" style="background:#7a5a30;">🌾</div><span>Food</span><span class="value" id="res-food">200</span><span class="delta delta-zero" id="delta-food"></span></div>
-  <div class="resource-group"><div class="resource-icon" style="background:#5a5a5a;">🪵</div><span>Materials</span><span class="value" id="res-materials">50</span><span class="delta delta-zero" id="delta-materials"></span></div>
+  <div class="resource-group topbar-toggle" onclick="showResourceBreakdown('food')" title="Food — click for breakdown" style="cursor:pointer"><div class="resource-icon" style="background:#7a5a30;">🌾</div><span>Food</span><span class="value" id="res-food">200</span><span class="delta delta-zero" id="delta-food"></span></div>
+  <div class="resource-group topbar-toggle" onclick="showResourceBreakdown('materials')" title="Materials — click for breakdown" style="cursor:pointer"><div class="resource-icon" style="background:#5a5a5a;">🪵</div><span>Materials</span><span class="value" id="res-materials">50</span><span class="delta delta-zero" id="delta-materials"></span></div>
   <div class="resource-group topbar-toggle" id="pop-toggle" title="Toggle Labor panel"><div class="resource-icon" style="background:#4a6a4a;">👥</div><span>Population</span><span class="value" id="res-pop">25</span></div>
   <div class="resource-group"><div class="resource-icon" style="background:#4a5a7a;">📖</div><span>Knowledge</span><span class="value" id="res-knowledge">5</span></div>
   <div id="panels-menu" class="panels-menu">
@@ -65,10 +65,10 @@
   </div>
   <div class="panel-section collapsed" id="society-section">
     <h3 onclick="toggleSocietySection()" style="cursor: pointer;">Society <span class="section-toggle-hint">click to toggle</span></h3>
-    <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-identity)"></div><span class="pillar-name">Identity</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-identity" style="background:var(--pillar-identity);width:60%"></div></div><span class="pillar-value" id="val-identity" style="color:var(--pillar-identity)">60</span></div>
-    <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-legitimacy)"></div><span class="pillar-name">Legitimacy</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-legitimacy" style="background:var(--pillar-legitimacy);width:70%"></div></div><span class="pillar-value" id="val-legitimacy" style="color:var(--pillar-legitimacy)">70</span></div>
-    <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-satisfaction)"></div><span class="pillar-name">Satisfaction</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-satisfaction" style="background:var(--pillar-satisfaction);width:65%"></div></div><span class="pillar-value" id="val-satisfaction" style="color:var(--pillar-satisfaction)">65</span></div>
-    <div class="pillar-row"><div class="pillar-dot" style="background:var(--pillar-bonds)"></div><span class="pillar-name">Bonds</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-bonds" style="background:var(--pillar-bonds);width:55%"></div></div><span class="pillar-value" id="val-bonds" style="color:var(--pillar-bonds)">55</span></div>
+    <div class="pillar-row" onclick="showPillarBreakdown('identity')" style="cursor:pointer" title="Click for breakdown"><div class="pillar-dot" style="background:var(--pillar-identity)"></div><span class="pillar-name">Identity</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-identity" style="background:var(--pillar-identity);width:60%"></div></div><span class="pillar-value" id="val-identity" style="color:var(--pillar-identity)">60</span></div>
+    <div class="pillar-row" onclick="showPillarBreakdown('legitimacy')" style="cursor:pointer" title="Click for breakdown"><div class="pillar-dot" style="background:var(--pillar-legitimacy)"></div><span class="pillar-name">Legitimacy</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-legitimacy" style="background:var(--pillar-legitimacy);width:70%"></div></div><span class="pillar-value" id="val-legitimacy" style="color:var(--pillar-legitimacy)">70</span></div>
+    <div class="pillar-row" onclick="showPillarBreakdown('satisfaction')" style="cursor:pointer" title="Click for breakdown"><div class="pillar-dot" style="background:var(--pillar-satisfaction)"></div><span class="pillar-name">Satisfaction</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-satisfaction" style="background:var(--pillar-satisfaction);width:65%"></div></div><span class="pillar-value" id="val-satisfaction" style="color:var(--pillar-satisfaction)">65</span></div>
+    <div class="pillar-row" onclick="showPillarBreakdown('bonds')" style="cursor:pointer" title="Click for breakdown"><div class="pillar-dot" style="background:var(--pillar-bonds)"></div><span class="pillar-name">Bonds</span><div class="pillar-bar-bg"><div class="pillar-bar-fill" id="bar-bonds" style="background:var(--pillar-bonds);width:55%"></div></div><span class="pillar-value" id="val-bonds" style="color:var(--pillar-bonds)">55</span></div>
 
     <div id="trust-climate" style="margin-top:10px;"></div>
 
@@ -89,6 +89,10 @@
       <div style="display:flex; justify-content:space-between;">
         <span>Working Age:</span>
         <span id="policy-summary-working-age">11 (Balanced)</span>
+      </div>
+      <div style="display:flex; justify-content:space-between;">
+        <span>Retirement Age:</span>
+        <span id="policy-summary-retirement-age">60 (Moderate)</span>
       </div>
     </div>
 
@@ -202,8 +206,11 @@
       <button class="dev-tab" data-tab="rivers">Rivers</button>
       <button class="dev-tab" data-tab="economy">Economy</button>
       <button class="dev-tab" data-tab="population">Population</button>
+      <button class="dev-tab" data-tab="cohesion">Cohesion</button>
       <button class="dev-tab" data-tab="governance">Governance</button>
+      <button class="dev-tab" data-tab="territory">Territory</button>
       <button class="dev-tab" data-tab="buildings">Buildings</button>
+      <button class="dev-tab" data-tab="culture">Culture</button>
       <button class="dev-tab" data-tab="events">Events</button>
       <button class="dev-tab" data-tab="units">Units</button>
       <button class="dev-tab" data-tab="trust">Trust</button>
@@ -435,6 +442,24 @@
         <span>Prosperity</span>
       </div>
       <div class="policy-lag-status" id="policy-lag-workingAge"></div>
+
+      <div class="policy-category-header" id="policy-header-retirement-age">Elder Retirement</div>
+      <div class="policy-slider">
+        <div class="policy-label">Retirement Age</div>
+        <input type="range" class="policy-range" id="policy-retirement-age" min="50" max="80" step="1" value="60">
+        <div class="policy-value" id="retirement-age-value">60</div>
+      </div>
+      <div class="policy-ends">
+        <span>Early Retirement (50)</span>
+        <span>Work Until Death (80)</span>
+      </div>
+      <div class="policy-labels">
+        <span>Generous</span>
+        <span>Moderate</span>
+        <span>Pragmatic</span>
+        <span>Demanding</span>
+      </div>
+      <div class="policy-lag-status" id="policy-lag-retirementAge"></div>
 
       <div class="policy-batch-controls" id="policy-batch-controls"></div>
 

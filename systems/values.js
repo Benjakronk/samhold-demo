@@ -114,16 +114,18 @@ export function processValues(report) {
         }
       }
 
-      // Start tracking new zone
+      // Start tracking new zone (with ±2 turn jitter to prevent simultaneous crystallization)
       tracking.zone = currentZone;
       tracking.turnsInZone = 1;
+      tracking.crystallizeOffset = Math.floor(Math.random() * 5) - 2; // -2 to +2
     }
 
     // Check for crystallization
     const valueId = getValueId(axis, currentZone);
     const alreadyRecognized = gameState.values.some(v => v.id === valueId);
 
-    if (!alreadyRecognized && tracking.turnsInZone >= VALUE_CRYSTALLIZE_TURNS) {
+    const crystallizeThreshold = VALUE_CRYSTALLIZE_TURNS + (tracking.crystallizeOffset || 0);
+    if (!alreadyRecognized && tracking.turnsInZone >= crystallizeThreshold) {
       crystallizeValue(valueId, report);
     }
 
@@ -226,8 +228,8 @@ export function getValueTrackingStatus() {
           axis,
           zone: tracking.zone,
           turnsInZone: tracking.turnsInZone,
-          turnsNeeded: VALUE_CRYSTALLIZE_TURNS,
-          progress: tracking.turnsInZone / VALUE_CRYSTALLIZE_TURNS,
+          turnsNeeded: VALUE_CRYSTALLIZE_TURNS + (tracking.crystallizeOffset || 0),
+          progress: tracking.turnsInZone / (VALUE_CRYSTALLIZE_TURNS + (tracking.crystallizeOffset || 0)),
           def
         });
       }

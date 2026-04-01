@@ -18,11 +18,12 @@ function initSaveLoad(gameStateRef, getCurrentSeedFunc, setCurrentSeedFunc) {
 function saveGameToSlot(slotName) {
   // Prepare save data with proper Set/Map serialization
   const saveData = {
-    version: 2,
+    version: 3,
     timestamp: Date.now(),
     gameState: {
       ...gameState,
       territory: Array.from(gameState.territory), // Convert Set to Array
+      claimedHexes: gameState.claimedHexes ? Array.from(gameState.claimedHexes) : [], // Convert Set to Array
       riverSegmentCounts: Array.from(gameState.riverSegmentCounts.entries()) // Convert Map to Array of entries
     },
     currentSeed: getCurrentSeed ? getCurrentSeed() : null
@@ -85,8 +86,27 @@ function loadGameFromSlot(slotName) {
     if (loadedGameState.territory) {
       loadedGameState.territory = new Set(loadedGameState.territory);
     }
+    if (loadedGameState.claimedHexes) {
+      loadedGameState.claimedHexes = new Set(loadedGameState.claimedHexes);
+    } else {
+      loadedGameState.claimedHexes = new Set();
+    }
+    if (loadedGameState.expansionPoints === undefined) {
+      loadedGameState.expansionPoints = 0;
+    }
     if (loadedGameState.riverSegmentCounts) {
       loadedGameState.riverSegmentCounts = new Map(loadedGameState.riverSegmentCounts);
+    }
+
+    // Migrate settlements to new structure (Phase 15A)
+    if (loadedGameState.settlements) {
+      for (const s of loadedGameState.settlements) {
+        if (s.coreRadius === undefined) s.coreRadius = window.STARTING_SETTLEMENT_RADIUS || 2;
+        if (s.name === undefined) s.name = null;
+        if (s.culturalStrength === undefined) s.culturalStrength = 0;
+        if (s.health === undefined) s.health = 100;
+        if (s.maxHealth === undefined) s.maxHealth = 100;
+      }
     }
 
     // Migrate missing fields for saves created before newer phases.
@@ -123,9 +143,23 @@ function loadGameFromSlot(slotName) {
     // Migrate policy lag state for older saves
     if (!loadedGameState.policyLag) {
       loadedGameState.policyLag = {
-        freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null,
-        pending: { freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null }
+        freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null, retirementAge: null,
+        pending: { freedom: null, mercy: null, tradition: null, isolation: null, workingAge: null, retirementAge: null }
       };
+    }
+    // Add retirementAge to existing policy lag state if missing
+    if (loadedGameState.policyLag && !('retirementAge' in loadedGameState.policyLag)) {
+      loadedGameState.policyLag.retirementAge = null;
+      if (loadedGameState.policyLag.pending) {
+        loadedGameState.policyLag.pending.retirementAge = null;
+      }
+    }
+
+    // Migrate retirement age from older saves
+    if (loadedGameState.governance && loadedGameState.governance.policies && loadedGameState.governance.policies.retirementAge != null) {
+      window.RETIREMENT_AGE = loadedGameState.governance.policies.retirementAge;
+    } else if (loadedGameState.governance && loadedGameState.governance.policies) {
+      loadedGameState.governance.policies.retirementAge = 60;
     }
 
     // Migrate crime state for older saves
@@ -306,6 +340,9 @@ function loadGameFromSlot(slotName) {
     // Restore globals that live outside gameState
     if (gameState.governance && gameState.governance.policies && gameState.governance.policies.workingAge != null) {
       window.WORKING_AGE = gameState.governance.policies.workingAge;
+    }
+    if (gameState.governance && gameState.governance.policies && gameState.governance.policies.retirementAge != null) {
+      window.RETIREMENT_AGE = gameState.governance.policies.retirementAge;
     }
 
     // Update seed

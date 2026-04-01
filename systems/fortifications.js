@@ -206,11 +206,7 @@ export function getSettlementFortificationBonus(settlementCol, settlementRow) {
     const col = parseInt(parts[0]);
     const row = parseInt(parts[1]);
 
-    const dist = window.cubeDistance(
-      window.offsetToCube(col, row),
-      window.offsetToCube(settlementCol, settlementRow)
-    );
-    if (dist <= window.TERRITORY_RADIUS) {
+    if (window.isInTerritory && window.isInTerritory(col, row)) {
       bonus += def.defenseBonus;
     }
   }

@@ -74,12 +74,6 @@ function handleHexClick(e) {
     const isValidTarget = validTargets.some(t => t.col === h.col && t.row === h.row);
 
     if (isValidTarget) {
-      // Settler founding
-      if (gameState.selectedUnit.type === 'settler' && window.canFoundSettlement(h.col, h.row)) {
-        window.showSettlementFoundingConfirmation(h.col, h.row);
-        return;
-      }
-
       const success = window.moveUnit(gameState.selectedUnit.id, h.col, h.row);
       if (success) {
         gameState.selectedHex = hex;

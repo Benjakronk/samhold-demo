@@ -97,6 +97,7 @@ export function changeGovernanceModel(newModel) {
 
 function initMonarchy() {
   const gs = window.gameState;
+  if (!gs.governance.monarchy) gs.governance.monarchy = { dynastyName: null, currentRuler: null, heir: null, dynastyAge: 0, successionCrisisActive: false };
   const mon = gs.governance.monarchy;
   mon.dynastyName = randomName(DYNASTY_NAMES);
   mon.currentRuler = generateRuler();
@@ -121,6 +122,15 @@ export function processMonarchyTurn(report) {
   if (!mon.currentRuler) initMonarchy();
 
   mon.dynastyAge++;
+
+  // Succession crisis countdown
+  if (mon.successionCrisisActive && mon.successionCrisisTurnsRemaining > 0) {
+    mon.successionCrisisTurnsRemaining--;
+    if (mon.successionCrisisTurnsRemaining <= 0) {
+      mon.successionCrisisActive = false;
+      if (report) report.events.push(`👑 The succession crisis has ended. ${mon.currentRuler.name} has consolidated power.`);
+    }
+  }
 
   // Ruler quality affects legitimacy drift
   const qualityEffect = (mon.currentRuler.quality - 0.5) * 0.4; // -0.08 to +0.2
@@ -179,8 +189,8 @@ function triggerSuccession(report) {
       window.addChronicleEntry(`A succession crisis tore at the ${mon.dynastyName} dynasty. ${mon.currentRuler.name} claimed the throne, but legitimacy suffered.`, 'crisis');
     }
 
-    // Crisis resolves after a few turns
-    setTimeout(() => { mon.successionCrisisActive = false; }, 0);
+    // Crisis resolves after 3 turns (decremented in processMonarchyTurn)
+    mon.successionCrisisTurnsRemaining = 3;
   }
 }
 
@@ -188,6 +198,7 @@ function triggerSuccession(report) {
 
 function initMilitaryRule() {
   const gs = window.gameState;
+  if (!gs.governance.militaryRule) gs.governance.militaryRule = { commanderStrength: 1.0, consecutiveVictories: 0, turnsInPower: 0 };
   const mil = gs.governance.militaryRule;
   mil.commanderStrength = 1.0;
   mil.consecutiveVictories = 0;
@@ -245,11 +256,11 @@ export function onCombatDefeat() {
 
 export function getMilitaryCombatBonuses() {
   const gs = window.gameState;
-  if (gs.governance.model !== 'militaryRule') return { attack: 1, defense: 1, trainingSpeed: 1 };
+  if (gs.governance.model !== 'militaryRule') return null;
   const model = window.GOVERNANCE_MODELS.militaryRule;
   return {
-    attack: model.combatBonuses.unitAttack,
-    defense: model.combatBonuses.unitDefense,
+    attackBonus: model.combatBonuses.unitAttack,
+    defenseBonus: model.combatBonuses.unitDefense,
     trainingSpeed: model.combatBonuses.trainingSpeed
   };
 }
@@ -258,6 +269,7 @@ export function getMilitaryCombatBonuses() {
 
 function initDemocracy() {
   const gs = window.gameState;
+  if (!gs.governance.democracy) gs.governance.democracy = { pendingPolicyChanges: [], electionTimer: 0, voterSatisfaction: 50 };
   const dem = gs.governance.democracy;
   dem.pendingPolicyChanges = [];
   dem.electionTimer = 8 + Math.floor(Math.random() * 5); // 8-12 turns
@@ -409,13 +421,41 @@ export function getWorkingAgeLabel(age) {
   return labels[index];
 }
 
+export function adjustRetirementAge(delta) {
+  const newAge = Math.max(window.RETIREMENT_AGE_MIN, Math.min(window.RETIREMENT_AGE_MAX, window.RETIREMENT_AGE + delta));
+  if (window.setPendingPolicy) {
+    window.setPendingPolicy('retirementAge', newAge);
+  }
+
+  const retirementAgeDisplay = document.getElementById('retirement-age-value');
+  if (retirementAgeDisplay) {
+    retirementAgeDisplay.textContent = newAge;
+  }
+
+  const retirementAgeHeader = document.getElementById('policy-header-retirement-age');
+  if (retirementAgeHeader) {
+    const ageLevel = getRetirementAgeLabel(newAge);
+    retirementAgeHeader.textContent = `Elder Retirement (${ageLevel})`;
+  }
+
+  updatePolicySummary();
+}
+
+export function getRetirementAgeLabel(age) {
+  const labels = ['Honored Elders', 'Early Retirement', 'Respected Rest', 'Moderate', 'Late Retirement', 'No Rest'];
+  // Map retirement age 50-80 to 6 labels
+  const index = Math.min(5, Math.floor((age - 50) / 5));
+  return labels[index];
+}
+
 export function updatePolicySummary() {
   const summaryElements = {
     freedom: document.getElementById('policy-summary-freedom'),
     mercy: document.getElementById('policy-summary-mercy'),
     tradition: document.getElementById('policy-summary-tradition'),
     isolation: document.getElementById('policy-summary-isolation'),
-    workingAge: document.getElementById('policy-summary-working-age')
+    workingAge: document.getElementById('policy-summary-working-age'),
+    retirementAge: document.getElementById('policy-summary-retirement-age')
   };
 
   const lagIndicator = (policy) => {
@@ -442,5 +482,9 @@ export function updatePolicySummary() {
   if (summaryElements.workingAge) {
     const ageLabel = getWorkingAgeLabel(window.WORKING_AGE);
     summaryElements.workingAge.textContent = `${window.WORKING_AGE} (${ageLabel})${lagIndicator('workingAge')}`;
+  }
+  if (summaryElements.retirementAge) {
+    const raLabel = getRetirementAgeLabel(window.RETIREMENT_AGE);
+    summaryElements.retirementAge.textContent = `${window.RETIREMENT_AGE} (${raLabel})${lagIndicator('retirementAge')}`;
   }
 }

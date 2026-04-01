@@ -168,6 +168,10 @@ function applyCrimeEffects(report) {
 
     if (effectiveFoodDrain > 0) gameState.resources.food = Math.max(0, gameState.resources.food - effectiveFoodDrain);
     if (effectiveMatDrain > 0) gameState.resources.materials = Math.max(0, gameState.resources.materials - effectiveMatDrain);
+    if (report) {
+      report.crimeTheftFood = (report.crimeTheftFood || 0) + effectiveFoodDrain;
+      report.crimeTheftMat = (report.crimeTheftMat || 0) + effectiveMatDrain;
+    }
 
     // Satisfaction damage
     const satDamage = c.theft * 0.08 * mercyAbsorb;

@@ -1,7 +1,7 @@
 // js/core/initGame.js
 // Game initialization — creates game state, generates map, sets up all systems
 
-import { MAP_COLS, MAP_ROWS, TERRITORY_RADIUS, DEV_MODE, MM_W, MM_H } from '../../data/constants.js';
+import { MAP_COLS, MAP_ROWS, STARTING_SETTLEMENT_RADIUS, DEV_MODE, MM_W, MM_H } from '../../data/constants.js';
 import { TERRAIN } from '../../data/terrain.js';
 
 export function initGameCore(seed) {
@@ -108,13 +108,23 @@ export function initGameCore(seed) {
   // Place starting settlement
   gameState.map[sr][sc].building = 'settlement';
   gameState.map[sr][sc].buildProgress = 0;
-  gameState.settlements.push({ col: sc, row: sr });
+  gameState.settlements.push({
+    col: sc, row: sr,
+    name: null,
+    coreRadius: STARTING_SETTLEMENT_RADIUS,
+    culturalStrength: 0,
+    health: 100,
+    maxHealth: 100
+  });
   window.recalcTerritory();
+
+  // Flag to show settlement naming dialog after first render
+  gameState.needsSettlementNaming = true;
 
   // Auto-assign gatherers to nearby grassland hexes to give starting food income
   let autoAssigned = 0;
   const targetAssign = 10;
-  for (let radius = 1; radius <= TERRITORY_RADIUS && autoAssigned < targetAssign; radius++) {
+  for (let radius = 1; radius <= STARTING_SETTLEMENT_RADIUS && autoAssigned < targetAssign; radius++) {
     for (let r = 0; r < MAP_ROWS && autoAssigned < targetAssign; r++) {
       for (let c = 0; c < MAP_COLS && autoAssigned < targetAssign; c++) {
         if (window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(sc, sr)) !== radius) continue;
@@ -324,6 +334,21 @@ export function initGameCore(seed) {
   if (!DEV_MODE) document.getElementById('dev-badge').style.display = 'none';
   else window.updateDevBadge();
   if (window.render) window.render();
+
+  // Show settlement naming dialog on first game start, then welcome tutorial hint
+  if (gameState.needsSettlementNaming) {
+    delete gameState.needsSettlementNaming;
+    setTimeout(() => {
+      if (window.showSettlementNamingDialog) {
+        window.showSettlementNamingDialog(0, () => {
+          if (window.updateAllUI) window.updateAllUI();
+          if (window.render) window.render();
+          // Show turn 1 tutorial hint after naming dialog is closed
+          setTimeout(() => { if (window.showTutorialHint) window.showTutorialHint(); }, 300);
+        });
+      }
+    }, 500);
+  }
 
   return gameState;
 }

@@ -419,3 +419,46 @@ export function getResistanceState() {
 export function isOrganizedResistance() {
   return (gameState?.resistance?.pressure ?? 0) >= PRESSURE_THRESHOLDS.organized;
 }
+
+/**
+ * Project next turn's pressure delta without mutating state.
+ * Mirrors the generation/decay logic in processResistance().
+ */
+export function projectResistanceDelta() {
+  if (!gameState?.resistance) return 0;
+
+  const r = gameState.resistance;
+  const trust = gameState.trust?.institutional ?? 0.7;
+
+  // Generation: institutional trust deficit
+  const baseGeneration = (1 - trust) * GENERATION_MULTIPLIER;
+
+  // Passive pressure from in-progress policy changes
+  let lagPressure = 0;
+  if (gameState.policyLag) {
+    for (const policy of ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge']) {
+      const lag = gameState.policyLag[policy];
+      if (!lag) continue;
+      const categoryMult = lag.category === 'cultural' ? 1.5 : 1.0;
+      const tcMult = r.tcConsensusPolicies?.[policy] ? 0.5 : 1.0;
+      lagPressure += 0.5 * categoryMult * tcMult;
+    }
+  }
+
+  const totalGeneration = (baseGeneration + lagPressure) * r.recurrenceMultiplier;
+
+  // Decay
+  const trustModifier = 0.5 + trust;
+  const dispositionIndex = DISPOSITIONS.indexOf(r.faction.disposition);
+  const dispositionModifier = 1.0 - dispositionIndex * 0.15;
+  const cohesionTotal = gameState.cohesion?.total ?? 50;
+  const cohesionModifier = cohesionTotal >= 60 ? 1.2 : cohesionTotal >= 40 ? 1.0 : 0.7;
+
+  const totalDecay = DECAY_BASE * trustModifier * dispositionModifier * cohesionModifier;
+
+  // Clamp to valid range
+  const projected = r.pressure + totalGeneration - totalDecay;
+  const clampedDelta = Math.max(0, Math.min(100, projected)) - r.pressure;
+
+  return clampedDelta;
+}

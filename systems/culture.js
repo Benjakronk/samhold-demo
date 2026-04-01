@@ -276,6 +276,20 @@ export function getScaledTraditionCost(baseCost) {
   return Math.max(baseCost, Math.round(baseCost * pop / 20));
 }
 
+/** Returns total food and material costs for traditions due to fire this turn. */
+export function getProjectedTraditionCosts() {
+  if (!gameState) return { food: 0, materials: 0 };
+  let food = 0, materials = 0;
+  for (const tradition of (gameState.traditions || [])) {
+    const template = TRADITIONS[tradition.id];
+    if (!template || template.triggerOn) continue;
+    if (!isTraditionDue(tradition, template)) continue;
+    food += getScaledTraditionCost(template.cost.food || 0);
+    materials += getScaledTraditionCost(template.cost.materials || 0);
+  }
+  return { food, materials };
+}
+
 function fireTradition(tradition, template, report) {
   const displayName = traditionDisplayName(tradition);
   const foodCost = getScaledTraditionCost(template.cost.food || 0);
@@ -305,6 +319,10 @@ function fireTradition(tradition, template, report) {
   // Pay costs
   gameState.resources.food -= foodCost;
   gameState.resources.materials -= matCost;
+  if (report) {
+    report.traditionFoodCost = (report.traditionFoodCost || 0) + foodCost;
+    report.traditionMatCost = (report.traditionMatCost || 0) + matCost;
+  }
 
   // Apply cohesion effects (scaled by Tradition/Innovation policy)
   const bonusMultiplier = getTraditionBonusMultiplier(tradition);
@@ -1483,28 +1501,21 @@ export function deactivateStewardTend(unitId) {
 
 /**
  * Check if a settlement's territory already has a meeting hall.
+ * Uses getSettlementForHex to determine which settlement "owns" each hex.
  */
 export function hasSettlementMeetingHall(col, row) {
-  // Find the nearest settlement to this hex
-  let nearestSettlement = null;
-  let nearestDist = Infinity;
-  for (const s of gameState.settlements) {
-    const d = window.cubeDistance(window.offsetToCube(col, row), window.offsetToCube(s.col, s.row));
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearestSettlement = s;
-    }
-  }
+  const nearestSettlement = window.getSettlementForHex ? window.getSettlementForHex(col, row) : null;
   if (!nearestSettlement) return false;
 
-  // Check all hexes in that settlement's territory radius for a meeting hall
+  // Check all territory hexes that belong to this settlement for a meeting hall
   for (let r = 0; r < window.MAP_ROWS; r++) {
     for (let c = 0; c < window.MAP_COLS; c++) {
       const hex = gameState.map[r][c];
       if (hex.building !== 'meeting_hall') continue;
-      // Check if this meeting hall is in the same settlement's territory
-      const d = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nearestSettlement.col, nearestSettlement.row));
-      if (d <= window.TERRITORY_RADIUS) return true;
+      if (!window.isInTerritory(c, r)) continue;
+      // Check if this hex also belongs to the same settlement
+      const owner = window.getSettlementForHex(c, r);
+      if (owner && owner.col === nearestSettlement.col && owner.row === nearestSettlement.row) return true;
     }
   }
   return false;
@@ -1514,23 +1525,16 @@ export function hasSettlementMeetingHall(col, row) {
  * Check if a settlement's territory already has a market.
  */
 export function hasSettlementMarket(col, row) {
-  let nearestSettlement = null;
-  let nearestDist = Infinity;
-  for (const s of gameState.settlements) {
-    const d = window.cubeDistance(window.offsetToCube(col, row), window.offsetToCube(s.col, s.row));
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearestSettlement = s;
-    }
-  }
+  const nearestSettlement = window.getSettlementForHex ? window.getSettlementForHex(col, row) : null;
   if (!nearestSettlement) return false;
 
   for (let r = 0; r < window.MAP_ROWS; r++) {
     for (let c = 0; c < window.MAP_COLS; c++) {
       const hex = gameState.map[r][c];
       if (hex.building !== 'market') continue;
-      const d = window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nearestSettlement.col, nearestSettlement.row));
-      if (d <= window.TERRITORY_RADIUS) return true;
+      if (!window.isInTerritory(c, r)) continue;
+      const owner = window.getSettlementForHex(c, r);
+      if (owner && owner.col === nearestSettlement.col && owner.row === nearestSettlement.row) return true;
     }
   }
   return false;

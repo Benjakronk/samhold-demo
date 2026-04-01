@@ -440,6 +440,25 @@ export function getClassMultiplier() {
            + (cs.differentials.political * W.political);
 }
 
+/**
+ * Economic production bonus from class stratification.
+ * Higher economic differential = more surplus extraction from the privileged class.
+ * Returns a multiplier (e.g., 1.0 = no bonus, 1.15 = +15%).
+ */
+export function getClassProductionMultiplier() {
+  const gs = gameState || window.gameState;
+  if (!gs?.classSystem) return 1.0;
+  const cs = gs.classSystem;
+  if (!cs.active) return 1.0;
+
+  // Economic differential provides production bonus: +5%/+12% at tier 1/2
+  const econBonus = cs.differentials.economic === 2 ? 0.12 : cs.differentials.economic === 1 ? 0.05 : 0;
+  // Political differential provides minor organizational bonus: +3%/+6%
+  const polBonus = cs.differentials.political === 2 ? 0.06 : cs.differentials.political === 1 ? 0.03 : 0;
+
+  return 1.0 + econBonus + polBonus;
+}
+
 export function getInterpersonalTrustReduction() {
   const cs = gameState.classSystem;
   if (!cs.active) return 0;

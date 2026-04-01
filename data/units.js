@@ -50,40 +50,17 @@ export const UNIT_TYPES = {
     combat: 0,
     abilities: ['tend'],
     description: 'Tends monuments and sacred sites. Activate on a building to maintain it. Moving deactivates tending.'
+  },
+  settler: {
+    name: 'Settler',
+    icon: '🏕️',
+    cost: { population: 5, materials: 25 },
+    upkeep: { food: 3 },
+    training: 6,
+    movement: 1,
+    vision: 1,
+    combat: 0,
+    abilities: ['found'],
+    description: 'Founds new settlements. Consumed on founding. New settlement starts with small territory.'
   }
-  // MORE UNIT TYPES TO BE ADDED LATER
-  // },
-  // worker: {
-  //   name: 'Worker',
-  //   icon: '🔨',
-  //   cost: { population: 1, materials: 3 }, // basic tools
-  //   upkeep: { food: 1 },
-  //   training: 2, // basic skills training
-  //   movement: 1, // very slow
-  //   combat: 0, // no combat ability
-  //   abilities: ['build'],
-  //   description: 'Builds improvements on hexes. Slow but essential for expansion.'
-  // },
-  // elder: {
-  //   name: 'Elder',
-  //   icon: '👴',
-  //   cost: { population: 1, materials: 1 }, // minimal materials, more ceremonial
-  //   upkeep: { food: 1 },
-  //   training: 3, // wisdom and cultural training
-  //   movement: 1, // slow movement
-  //   combat: 0, // no combat ability
-  //   abilities: ['culture'],
-  //   description: 'Maintains cultural traditions and generates Identity. Loss is devastating to oral tradition.'
-  // },
-  // settler: {
-  //   name: 'Settler',
-  //   icon: '🚛',
-  //   cost: { population: 3, materials: 15 }, // high population and material cost
-  //   upkeep: { food: 4 }, // high food cost for multiple people
-  //   training: 5, // extensive preparation and organization
-  //   movement: 1, // very slow due to carrying supplies
-  //   combat: 1, // minimal defensive capability
-  //   abilities: ['found'],
-  //   description: 'Founds new settlements. Expansion splits population and dilutes cohesion.'
-  // }
 };

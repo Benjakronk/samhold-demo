@@ -60,7 +60,8 @@ export function showConfirmationDialog(title, bodyHtml, onConfirm) {
 }
 
 // Non-destructive confirmation dialog (primary style instead of danger)
-export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancelLabel, onConfirm) {
+// options.noBackdropDismiss: if true, clicking the backdrop will not close the dialog
+export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancelLabel, onConfirm, options) {
     document.getElementById('confirm-title').textContent = title;
     document.getElementById('confirm-body').innerHTML = bodyHtml;
     document.getElementById('confirm-ok').textContent = okLabel;
@@ -72,6 +73,8 @@ export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancel
     okBtn.classList.add('primary');
 
     const dialog = document.getElementById('confirm-dialog');
+    // Track whether backdrop dismiss is allowed
+    dialog.dataset.noBackdropDismiss = (options && options.noBackdropDismiss) ? 'true' : '';
     // Hide overlay first, then wait one frame before showing the dialog.
     // Prevents overlay removal + dialog compositor-layer creation from
     // being batched into the same Metal flush on Skia Graphite/Intel Mac.
@@ -82,9 +85,11 @@ export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancel
 
     function cleanup() {
         dialog.classList.remove('visible');
+        dialog.dataset.noBackdropDismiss = '';
         // Reset to default danger styling for future destructive confirmations
         okBtn.classList.remove('primary');
         okBtn.classList.add('danger');
+        cancelBtn.style.display = '';
         okBtn.replaceWith(okBtn.cloneNode(true));
         cancelBtn.replaceWith(cancelBtn.cloneNode(true));
     }
@@ -255,6 +260,7 @@ export function closeDialog() {
     const dialog = document.getElementById('confirm-dialog');
     if (dialog) {
         dialog.classList.remove('visible');
+        dialog.dataset.noBackdropDismiss = '';
         showLabelsOverlay();
     }
 }
@@ -273,6 +279,8 @@ function setupDialogEventListeners() {
     if (dialog) {
         dialog.addEventListener('click', (e) => {
             if (e.target === dialog) {
+                // Don't dismiss if noBackdropDismiss flag is set (e.g. naming dialogs with input fields)
+                if (dialog.dataset.noBackdropDismiss === 'true') return;
                 // Only close on background click for non-destructive dialogs
                 const okBtn = document.getElementById('confirm-ok');
                 if (okBtn && okBtn.classList.contains('primary')) {

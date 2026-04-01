@@ -65,7 +65,8 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
         const gateCost = FORTS?.gate?.cost?.materials ?? 8;
         const canPal = mats >= palCost;
         const canGate = mats >= gateCost;
-        const noIdle = gameState.population.idle <= 0;
+        const _assignableIdle = window.getAssignableIdle ? window.getAssignableIdle() : Math.max(0, gameState.population.idle - (window.getRetiredElderCount ? window.getRetiredElderCount() : 0));
+        const noIdle = _assignableIdle <= 0;
         const cheapest = Math.min(palCost, gateCost);
         let warning = '';
         if (mats < cheapest) {
@@ -86,7 +87,7 @@ function _fortEdgeControls(hex, hexForts, selEdge) {
     if (fort.buildProgress > 0) {
         const maxW = def?.buildWorkers ?? 1;
         const wc = fort.workers ?? 0;
-        const canAdd = wc < maxW && gameState.population.idle > 0;
+        const canAdd = wc < maxW && (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) > 0;
         const statusStr = wc > 0
             ? `<span class="yield-val" style="color:var(--text-gold)">Building... (${fort.buildProgress} turn${fort.buildProgress !== 1 ? 's' : ''} left)</span>`
             : `<span class="yield-none">stalled — assign a builder!</span>`;
@@ -194,16 +195,80 @@ export function updateSidePanel(hex) {
             html += `<div class="building-display">
                 <div class="bd-name">${bDef.icon} ${bDef.name}</div>`;
             if (hex.building === 'settlement') {
-                html += `<div class="bd-detail">🌾+${bDef.autoFood || 0} food (community foraging)</div>`;
+                // Find settlement data for name/health display
+                const settlement = gameState.settlements.find(s => s.col === hex.col && s.row === hex.row);
+                const sIdx = gameState.settlements.indexOf(settlement);
+                const sName = settlement?.name || 'Unnamed';
+                const sHealth = settlement?.health ?? 100;
+                const sMaxHealth = settlement?.maxHealth ?? 100;
+                const healthPct = Math.round((sHealth / sMaxHealth) * 100);
+                const healthColor = healthPct > 60 ? 'var(--accent-green)' : healthPct > 30 ? '#c9a84c' : 'var(--accent-red)';
+
+                // Cultural reach progress
+                const culturalStrength = settlement?.culturalStrength ?? 0;
+                const BASE_COST = window.CULTURAL_GROWTH_BASE_COST || 8;
+                const STEP = window.CULTURAL_GROWTH_STEP || 4;
+                let claimedCount = 0;
+                if (gameState.claimedHexes && window.getSettlementForHex) {
+                    for (const key of gameState.claimedHexes) {
+                        const [cc, cr] = key.split(',').map(Number);
+                        const owner = window.getSettlementForHex(cc, cr);
+                        if (owner && owner.col === hex.col && owner.row === hex.row) claimedCount++;
+                    }
+                }
+                const culturalThreshold = BASE_COST + claimedCount * STEP;
+                const culturalRatio = culturalStrength / culturalThreshold;
+                const culturalPct = Math.min(100, culturalRatio * 100);
+                const culturalColor = 'var(--text-gold)';
+
+                html += `<div class="bd-detail" style="margin-bottom:4px">
+                    <strong>${sName}</strong>
+                    <button class="named-rename-btn" onclick="window.showSettlementNamingDialog(${sIdx})" style="margin-left:6px">Rename</button>
+                </div>
+                <div class="bd-detail">Territory center — assign workers to surrounding hexes to gather resources.</div>
+                <div class="bd-detail" style="margin-top:4px">
+                    <span>❤️ Health: ${sHealth}/${sMaxHealth}</span>
+                    <div class="building-progress-bar" style="margin-top:2px">
+                        <div class="progress-fill" style="width:${healthPct}%;background:${healthColor}"></div>
+                    </div>
+                </div>
+                <div class="bd-detail" style="margin-top:4px">
+                    <span title="Grows when workers or buildings are on border hexes. Reaching the threshold claims a new adjacent hex.">🌿 Cultural Reach: ${culturalStrength.toFixed(1)} / ${culturalThreshold}</span>
+                    <div class="building-progress-bar" style="margin-top:2px">
+                        <div class="progress-fill" style="width:${culturalStrength > 0 ? Math.max(2, culturalPct) : 0}%;background:${culturalColor}"></div>
+                    </div>
+                </div>
+                <div class="bd-detail" style="margin-top:4px">
+                    <span>📜 Expansion Points: ${Math.floor(gameState.expansionPoints || 0)}</span>
+                </div>`;
+                // Governance strain from large territory
+                if (window.getTerritoryGovernanceStrain) {
+                    const strain = window.getTerritoryGovernanceStrain();
+                    if (strain.legitimacy > 0 || strain.bonds > 0) {
+                        html += `<div class="bd-detail" style="font-size:11px;color:#cc6633;margin-top:4px">⚠️ Governance strain: −${strain.legitimacy.toFixed(1)} legitimacy, −${strain.bonds.toFixed(1)} bonds/turn (${strain.excess} hexes over threshold)</div>`;
+                    }
+                }
             } else if (bDef.isSocietyBuilding && bDef.maxWorkers === 0 && bDef.permanentIdentityBonus) {
                 // Monument — permanent passive effect, no workers
                 const subject = hex.monumentSubject || '';
                 const refund = Math.floor((bDef.cost.materials || 0) / 2);
+                const mState = hex.monumentState || 'active';
+                const mNeglectTurns = hex.neglectTurns || 0;
+                const mSteward = gameState.units.find(u => u.type === 'steward' && u.col === hex.col && u.row === hex.row && u.activeAction === 'tending_monument');
+                const mRestoreCost = window.getMonumentRestoreCost ? window.getMonumentRestoreCost(hex) : (5 + 2 * mNeglectTurns);
+                let monumentStatus = '';
+                if (mState === 'neglected') {
+                    monumentStatus = `<div class="bd-detail" style="color:var(--accent-red)">⚠️ Neglected — draining identity &amp; bonds (−0.05/turn each) · Restore: 🪵${mRestoreCost}</div>`;
+                } else if (mSteward) {
+                    monumentStatus = `<div class="bd-detail" style="color:var(--accent-green)">✨ Steward tending</div>`;
+                }
                 html += `<div class="bd-detail">🗿 Permanent Identity +${bDef.permanentIdentityBonus}${subject ? '<br><em>Commemorating: ' + subject + '</em>' : ''}</div>
+                ${monumentStatus}
                 <button class="demolish-btn" onclick="demolishBuilding(${hex.col},${hex.row})">✕ Demolish (🪵+${refund})</button>`;
             } else {
                 const refund = Math.floor((bDef.cost.materials || 0) / 2);
-                html += `<div class="bd-detail">Bonus: ${bDef.foodBonus ? '🌾+' + bDef.foodBonus : ''}${bDef.foodBonus && bDef.materialBonus ? ' ' : ''}${bDef.materialBonus ? '🪵+' + bDef.materialBonus : ''} (at full workers)</div>
+                const satYield = bDef.satisfactionPerWorker ? ` · 😊+${(bDef.satisfactionPerWorker * (bDef.maxWorkers || 1)).toFixed(2)} Satisfaction` : '';
+                html += `<div class="bd-detail">Bonus: ${bDef.foodBonus ? '🌾+' + bDef.foodBonus : ''}${bDef.foodBonus && bDef.materialBonus ? ' ' : ''}${bDef.materialBonus ? '🪵+' + bDef.materialBonus : ''}${satYield} (at full workers)</div>
                 <button class="demolish-btn" onclick="demolishBuilding(${hex.col},${hex.row})">✕ Demolish (🪵+${refund})</button>`;
             }
             html += `</div>`;
@@ -227,6 +292,11 @@ export function updateSidePanel(hex) {
             // Surveyor: Found Region action
             if (unit.type === 'surveyor' && window.canFoundRegion && window.canFoundRegion(unit.col, unit.row)) {
               actionButtons += `<button class="detail-btn unit-control-btn" onclick="showRegionFoundingConfirmation(${unit.col},${unit.row},${unit.id})">🗺️ Found Region</button>`;
+            }
+
+            // Settler: Found Settlement action
+            if (unit.type === 'settler' && window.canFoundSettlement && window.canFoundSettlement(unit.col, unit.row)) {
+              actionButtons += `<button class="detail-btn unit-control-btn" onclick="window.showSettlementFoundingConfirmation(${unit.col},${unit.row},${unit.id})">🏕️ Found Settlement</button>`;
             }
 
             // Steward: Tend actions based on what's on this hex
@@ -337,7 +407,7 @@ export function updateSidePanel(hex) {
 
     // Worker assignment controls
     if (inTerr && maxW > 0) {
-        const canAdd = hex.workers < maxW && gameState.population.idle > 0;
+        const canAdd = hex.workers < maxW && (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) > 0;
         const canRemove = hex.workers > 0;
         const isConstruction = hex.building && hex.buildProgress > 0;
         const workerLabel = isConstruction ? '🔨 Builders' : (hex.building ? '👥 Workers' : '👥 Gatherer');
@@ -358,15 +428,29 @@ export function updateSidePanel(hex) {
                 if (bDef.legitimacyYield) yieldParts.push(`🏛️+${(bDef.legitimacyYield * hex.workers).toFixed(2)} Legitimacy`);
                 const upkeepStr = bDef.upkeepMaterials ? ` · 🪵−${bDef.upkeepMaterials * hex.workers}/turn` : '';
                 statusStr = `<span class="yield-val">${yieldParts.join(' · ')}/turn${upkeepStr}</span>`;
+                // Justice Hall: show detection level and suppression info
+                if (hex.building === 'justice_hall') {
+                    const detLvl = window.getJusticeHallDetection ? window.getJusticeHallDetection() : 0;
+                    const suppPct = Math.round(detLvl * 0.35 * 100);
+                    const detLabels = ['None', 'Theft visible', 'Theft + Violence visible', 'Full detection'];
+                    statusStr += `<br><span class="yield-val" style="font-size:11px">🔍 Detection: ${detLvl}/3 — ${detLabels[detLvl]}</span>`;
+                    statusStr += `<br><span class="yield-val" style="font-size:11px">🛡️ Passive suppression: ${suppPct}%</span>`;
+                }
             } else if (bDef.maxWorkers === 0 && bDef.permanentIdentityBonus) {
                 const subject = hex.monumentSubject || '';
-                statusStr = `<span class="yield-val">🗿 Permanent Identity +${bDef.permanentIdentityBonus}${subject ? ' — ' + subject : ''}</span>`;
+                const mSt = hex.monumentState || 'active';
+                const mNT = hex.neglectTurns || 0;
+                const mRC = window.getMonumentRestoreCost ? window.getMonumentRestoreCost(hex) : (5 + 2 * mNT);
+                const neglectSuffix = mSt === 'neglected' ? ` <span style="color:var(--accent-red)">⚠️ Neglected (−0.05 id/bonds · 🪵${mRC} to restore)</span>` : '';
+                statusStr = `<span class="yield-val">🗿 Permanent Identity +${bDef.permanentIdentityBonus}${subject ? ' — ' + subject : ''}${neglectSuffix}</span>`;
             } else {
                 statusStr = `<span class="yield-none">${emptyMsg}</span>`;
             }
         } else {
-            statusStr = (y.food || y.materials)
-                ? `<span class="yield-val">${y.food ? '🌾' + y.food : ''}${y.food && y.materials ? ' ' : ''}${y.materials ? '🪵' + y.materials : ''}</span>`
+            const satPW = hex.building && BUILDINGS[hex.building]?.satisfactionPerWorker;
+            const satStr = satPW && hex.workers > 0 ? ` · 😊+${(satPW * hex.workers).toFixed(2)} Satisfaction` : '';
+            statusStr = (y.food || y.materials || satStr)
+                ? `<span class="yield-val">${y.food ? '🌾' + y.food : ''}${y.food && y.materials ? ' ' : ''}${y.materials ? '🪵' + y.materials : ''}${satStr}</span>`
                 : `<span class="yield-none">${emptyMsg}</span>`;
         }
 
@@ -382,13 +466,6 @@ export function updateSidePanel(hex) {
             <div class="yield-row">
                 <span class="yield-label">${isConstruction ? 'Progress:' : 'Producing:'}</span>
                 ${statusStr}
-            </div>
-        </div>`;
-    } else if (inTerr && hex.building === 'settlement') {
-        html += `<div class="worker-section">
-            <div class="yield-row">
-                <span class="yield-label">Producing:</span>
-                <span class="yield-val">🌾${y.food}</span>
             </div>
         </div>`;
     }
@@ -548,7 +625,7 @@ export function updateSidePanel(hex) {
     if (inTerr && nearSettlement) {
         let trainHtml = '';
         for (const [key, unitType] of Object.entries(UNIT_TYPES)) {
-            const canAffordPop = gameState.population.idle >= unitType.cost.population;
+            const canAffordPop = (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) >= unitType.cost.population;
             const canAffordMaterials = gameState.resources.materials >= unitType.cost.materials;
             const canTrain = canAffordPop && canAffordMaterials;
 
@@ -679,6 +756,29 @@ export function updateSidePanel(hex) {
       </div>`;
     }
 
+    // Abandon button for claimed (non-core) territory hexes
+    if (inTerr && window.isClaimedHex && window.isClaimedHex(hex.col, hex.row) && !(window.isCoreHex && window.isCoreHex(hex.col, hex.row))) {
+      html += `<div style="margin-top:8px;border-top:1px solid rgba(180,150,80,0.15);padding-top:8px">
+        <button class="demolish-btn" onclick="window.showForfeitConfirmation(${hex.col},${hex.row})">🚫 Abandon Territory</button>
+      </div>`;
+    }
+
+    // Claim Hex button for non-territory hexes adjacent to territory (hex purchase)
+    if (!inTerr && window.isAdjacentToTerritoryHex && window.isAdjacentToTerritoryHex(hex.col, hex.row)) {
+      const canBuy = window.canPurchaseHex ? window.canPurchaseHex(hex.col, hex.row) : false;
+      const cost = window.getHexPurchaseCost ? window.getHexPurchaseCost(hex.col, hex.row) : '?';
+      const pts = Math.floor(gameState.expansionPoints || 0);
+      const reason = hex.terrain === 'ocean' || hex.terrain === 'mountain' ? 'Cannot claim this terrain'
+        : pts < cost ? `Need ${cost} expansion points (have ${pts})` : '';
+      html += `<div style="margin-top:8px;border-top:1px solid rgba(180,150,80,0.15);padding-top:8px">
+        <button class="build-btn" ${canBuy ? '' : 'disabled'} onclick="window.showPurchaseHexConfirmation(${hex.col},${hex.row})"
+          title="${reason}">
+          <span class="b-name">📜 Claim Territory</span>
+          <span class="b-cost">${cost} expansion pts (have ${pts})</span>
+        </button>
+      </div>`;
+    }
+
     // Snapshot open/closed state of collapsible sections before replacing innerHTML
     const collapsibleIds = ['build-content', 'training-content', 'culture-content', 'fort-content'];
     const wasOpen = {};
@@ -700,7 +800,7 @@ export function updateSidePanel(hex) {
 
 export function clearSidePanel() {
     document.querySelector('#hex-info-section h3').innerHTML = 'Select a Hex <span class="section-toggle-hint">click to toggle</span>';
-    document.getElementById('hex-info-content').innerHTML = '<p class="help-text">Click any hex to see details and build options. Your territory extends 3 hexes from each settlement.</p>';
+    document.getElementById('hex-info-content').innerHTML = '<p class="help-text">Click any hex to see details and build options. Territory grows from settlements through culture and expansion.</p>';
 }
 
 // Helper functions - these need to be available globally

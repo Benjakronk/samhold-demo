@@ -594,6 +594,7 @@ function processIntervention(report) {
       return;
     }
     gameState.resources.materials -= matCost;
+    if (report) report.interventionMatCost = (report.interventionMatCost || 0) + matCost;
 
     // Pull small % of PS back into pipeline (Cohort 2)
     const effectiveness = ps.strength <= 0.5 ? 0.08 : 0.03; // less effective at high PSS
@@ -615,6 +616,7 @@ function processIntervention(report) {
       return;
     }
     gameState.resources.materials -= matCost;
+    if (report) report.interventionMatCost = (report.interventionMatCost || 0) + matCost;
 
     const reintegrated = Math.max(1, Math.floor(ps.population * 0.12));
     if (reintegrated > 0 && ps.population > 0) {
@@ -682,6 +684,25 @@ export function applyImmigrantStarvation(deaths) {
     remaining -= removed;
   }
 
+  // PS children die before PS adults (youngest first)
+  if (remaining > 0 && imm.parallelSociety.childCohorts?.length > 0) {
+    imm.parallelSociety.childCohorts.sort((a, b) => a.age - b.age);
+    for (const cohort of imm.parallelSociety.childCohorts) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, cohort.count);
+      cohort.count -= take;
+      remaining -= take;
+    }
+    imm.parallelSociety.childCohorts = imm.parallelSociety.childCohorts.filter(c => c.count > 0);
+  }
+
+  // PS adults starve last
+  if (remaining > 0 && imm.parallelSociety.population > 0) {
+    const psDeaths = Math.min(remaining, imm.parallelSociety.population);
+    imm.parallelSociety.population -= psDeaths;
+    remaining -= psDeaths;
+  }
+
   return deaths - remaining;
 }
 
@@ -717,8 +738,9 @@ export function getImmigrationState() {
 }
 
 /**
- * Returns total immigrant workforce contribution (fractional adults).
- * Called by economy system to adjust effective labor.
+ * Returns total immigrant workforce contribution (effective labor units).
+ * Called by economy system to fill unoccupied territory hexes with immigrant gatherers.
+ * Each effective unit fills one hex slot at the terrain's full yield.
  */
 export function getImmigrantWorkforce() {
   if (!gameState?.immigration) return 0;

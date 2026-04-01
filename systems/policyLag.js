@@ -82,12 +82,14 @@ function createDefaultLagState() {
     tradition: null,
     isolation: null,
     workingAge: null,
+    retirementAge: null,
     pending: {
       freedom: null,
       mercy: null,
       tradition: null,
       isolation: null,
-      workingAge: null
+      workingAge: null,
+      retirementAge: null
     }
   };
 }
@@ -103,6 +105,10 @@ function createDefaultLagState() {
  */
 export function classifyPolicyChange(policy, magnitude, direction) {
   if (policy === 'workingAge') {
+    return { category: 'directive', baseLag: BASE_LAG.directive };
+  }
+
+  if (policy === 'retirementAge') {
     return { category: 'directive', baseLag: BASE_LAG.directive };
   }
 
@@ -262,9 +268,11 @@ export function commitPolicyChange(policy) {
   const pendingValue = gameState.policyLag.pending[policy];
   if (pendingValue === null || pendingValue === undefined) return;
 
-  // Current effective value (what's in gameState.governance.policies or WORKING_AGE)
+  // Current effective value (what's in gameState.governance.policies or WORKING_AGE/RETIREMENT_AGE)
   const startValue = policy === 'workingAge'
     ? window.WORKING_AGE
+    : policy === 'retirementAge'
+    ? window.RETIREMENT_AGE
     : gameState.governance.policies[policy];
 
   if (pendingValue === startValue) {
@@ -329,6 +337,9 @@ export function abandonPolicyChange(policy) {
   if (policy === 'workingAge') {
     window.WORKING_AGE = lag.startValue;
     gameState.governance.policies.workingAge = lag.startValue;
+  } else if (policy === 'retirementAge') {
+    window.RETIREMENT_AGE = lag.startValue;
+    gameState.governance.policies.retirementAge = lag.startValue;
   } else {
     gameState.governance.policies[policy] = lag.startValue;
   }
@@ -362,6 +373,9 @@ export function forcePolicyChange(policy) {
     if (lag.target < oldAge) {
       graduateCohorts(lag.target);
     }
+  } else if (policy === 'retirementAge') {
+    window.RETIREMENT_AGE = lag.target;
+    gameState.governance.policies.retirementAge = lag.target;
   } else {
     gameState.governance.policies[policy] = lag.target;
   }
@@ -397,7 +411,7 @@ export function forcePolicyChange(policy) {
 export function processPolicyLag(report) {
   if (!gameState?.policyLag) return;
 
-  const policies = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge'];
+  const policies = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge', 'retirementAge'];
 
   for (const policy of policies) {
     const lag = gameState.policyLag[policy];
@@ -447,6 +461,10 @@ function updateEffectiveValue(policy, lag) {
     const rounded = Math.round(effective);
     window.WORKING_AGE = rounded;
     gameState.governance.policies.workingAge = rounded;
+  } else if (policy === 'retirementAge') {
+    const rounded = Math.round(effective);
+    window.RETIREMENT_AGE = rounded;
+    gameState.governance.policies.retirementAge = rounded;
   } else {
     gameState.governance.policies[policy] = Math.round(effective);
   }
@@ -461,6 +479,27 @@ function finalizePolicyChange(policy, lag, report) {
       graduateCohorts(lag.target);
     }
     if (report) report.events.push(`📋 Working age policy change is now in effect (${lag.target}).`);
+  } else if (policy === 'retirementAge') {
+    const oldRetirementAge = window.RETIREMENT_AGE;
+    window.RETIREMENT_AGE = lag.target;
+    gameState.governance.policies.retirementAge = lag.target;
+    const ELDER_AGE = window.ELDER_AGE || 50;
+    if (lag.target < oldRetirementAge && window.releaseWorkersFromHexes) {
+      // Retirement age lowered — pull workers off jobs in newly-retired range
+      const newlyRetired = (gameState.adultCohorts || [])
+        .filter(c => c.age >= Math.max(ELDER_AGE, lag.target) && c.age < oldRetirementAge && c.count > 0)
+        .reduce((sum, c) => sum + c.count, 0);
+      if (newlyRetired > 0) window.releaseWorkersFromHexes(newlyRetired);
+    } else if (lag.target > oldRetirementAge) {
+      // Retirement age raised — previously-retired elders become idle and eligible to work
+      const newlyActive = (gameState.adultCohorts || [])
+        .filter(c => c.age >= Math.max(ELDER_AGE, oldRetirementAge) && c.age < lag.target && c.count > 0)
+        .reduce((sum, c) => sum + c.count, 0);
+      if (newlyActive > 0) {
+        gameState.population.idle = (gameState.population.idle || 0) + newlyActive;
+      }
+    }
+    if (report) report.events.push(`📋 Retirement age policy change is now in effect (${lag.target}).`);
   } else {
     gameState.governance.policies[policy] = lag.target;
     const label = window.getPolicyLabel ? window.getPolicyLabel(policy, lag.target) : lag.target;
@@ -506,6 +545,7 @@ function enforceModelConstraints() {
  */
 function getCurrentEffective(policy) {
   if (policy === 'workingAge') return window.WORKING_AGE;
+  if (policy === 'retirementAge') return window.RETIREMENT_AGE;
   return gameState.governance.policies[policy];
 }
 
@@ -526,7 +566,7 @@ export function getPolicyLagState(policy) {
  */
 export function hasAnyPolicyActivity() {
   if (!gameState?.policyLag) return false;
-  const policies = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge'];
+  const policies = ['freedom', 'mercy', 'tradition', 'isolation', 'workingAge', 'retirementAge'];
   for (const p of policies) {
     if (gameState.policyLag[p]) return true;
     if (gameState.policyLag.pending?.[p] !== null && gameState.policyLag.pending?.[p] !== undefined) return true;

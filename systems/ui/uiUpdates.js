@@ -12,8 +12,8 @@ function updateAllUI() {
   const inc = window.calculateIncome();
 
   const isWinter = window.SEASONS[gameState.season] === 'Winter';
-  const winterCost = isWinter ? Math.ceil(gameState.population.total * 0.5) : 0;
-  const effectiveNetFood = inc.netFood - winterCost;
+  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
+  const effectiveNetFood = inc.netFood - winterCost - (inc.projectedFoodDrains || 0);
 
   document.getElementById('res-food').textContent = gameState.resources.food;
   document.getElementById('res-materials').textContent = gameState.resources.materials;
@@ -23,14 +23,22 @@ function updateAllUI() {
   const df = document.getElementById('delta-food');
   df.textContent = effectiveNetFood >= 0 ? `+${effectiveNetFood}` : `${effectiveNetFood}`;
   df.className = `delta ${effectiveNetFood > 0 ? 'delta-pos' : effectiveNetFood < 0 ? 'delta-neg' : 'delta-zero'}`;
+  const effectiveNetMat = inc.netMat - (inc.projectedMatDrains || 0);
   const dm = document.getElementById('delta-materials');
-  dm.textContent = inc.netMat >= 0 ? `+${inc.netMat}` : `${inc.netMat}`;
-  dm.className = `delta ${inc.netMat > 0 ? 'delta-pos' : inc.netMat < 0 ? 'delta-neg' : 'delta-zero'}`;
+  dm.textContent = effectiveNetMat >= 0 ? `+${effectiveNetMat}` : `${effectiveNetMat}`;
+  dm.className = `delta ${effectiveNetMat > 0 ? 'delta-pos' : effectiveNetMat < 0 ? 'delta-neg' : 'delta-zero'}`;
 
   const storytellers = gameState.culture?.storytellers ?? 0;
-  gameState.population.employed = inc.laborUsed + storytellers;
-  gameState.population.idle = Math.max(0, gameState.population.total - inc.laborUsed - storytellers);
-  const idleWarn = gameState.population.idle > 5 ? ' \u26A0\uFE0F' : '';
+  const trainingPop = (gameState.unitsInTraining || []).reduce((s, t) => {
+    const uType = window.UNIT_TYPES?.[t.type];
+    return s + (uType?.cost?.population || 0);
+  }, 0);
+  const retiredElders = window.getRetiredElderCount ? window.getRetiredElderCount() : 0;
+  const workingElders = window.getWorkingElderCount ? window.getWorkingElderCount() : 0;
+  gameState.population.employed = inc.laborUsed + storytellers + trainingPop;
+  gameState.population.idle = Math.max(0, gameState.population.total - inc.laborUsed - storytellers - trainingPop);
+  const assignableIdle = window.getAssignableIdle ? window.getAssignableIdle() : Math.max(0, gameState.population.idle - retiredElders);
+  const idleWarn = assignableIdle > 5 ? ' \u26A0\uFE0F' : '';
   const elderCount = gameState.population.elders || 0;
   const elderSuffix = elderCount > 0 ? ` \u00B7 \u{1F9D3} ${elderCount} elders` : '';
   document.getElementById('pop-display').textContent = `\u{1F465} ${gameState.population.total} adults${elderSuffix} \u00B7 \u{1F476} ${window.getTotalChildren()} children`;
@@ -41,7 +49,7 @@ function updateAllUI() {
     : '';
   const nextIsWinter = window.SEASONS[(gameState.season + 1) % 4] === 'Winter';
   const winterWarning = nextIsWinter
-    ? `<div class="hex-info-row"><span class="label">\u26A0\uFE0F Winter next</span><span class="value" style="color:#6699cc">\u2212${Math.ceil(gameState.population.total * 0.5)} food</span></div>`
+    ? `<div class="hex-info-row"><span class="label">\u26A0\uFE0F Winter next</span><span class="value" style="color:#6699cc">\u2212${Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5))} food</span></div>`
     : '';
   const constructionRow = inc.constructionWorkers > 0
     ? `<div class="hex-info-row"><span class="label">\u{1F528} Builder rations (\u00D72)</span><span class="value" style="color:#cc8844">\u2212${inc.constructionWorkers * window.FOOD_PER_POP} extra</span></div>`
@@ -66,27 +74,76 @@ function updateAllUI() {
   const sexCounts = window.getAdultSexCounts ? window.getAdultSexCounts() : null;
   const sexSuffix = sexCounts ? ` <span style="color:#6ca0d4;font-size:11px">${sexCounts.male}\u2642</span><span style="color:#d47ca0;font-size:11px">${sexCounts.female}\u2640</span>` : '';
   const nursingCount = window.getTotalNursing ? window.getTotalNursing() : 0;
-  const nursingRow = nursingCount > 0 ? `<div class="hex-info-row"><span class="label">\u{1F931} Nursing</span><span class="value">${nursingCount} (50% labor)</span></div>` : '';
+  let nursingDetail = '';
+  if (nursingCount > 0 && gameState.nursing && gameState.nursing.length > 0) {
+    const parts = gameState.nursing.filter(e => e.count > 0).map(e => `${e.count} finish in ${e.turnsLeft}t`);
+    nursingDetail = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+  }
+  const nursingRow = nursingCount > 0 ? `<div class="hex-info-row"><span class="label">\u{1F931} Nursing</span><span class="value">${nursingCount}${nursingDetail} <span style="color:var(--text-dim)">(50% labor)</span></span></div>` : '';
+
+  const immState = window.getImmigrationState ? window.getImmigrationState() : null;
+  const totalImmigrants = immState ? (immState.cohorts[0] + immState.cohorts[1] + immState.cohorts[2] + immState.parallelSociety.population) : 0;
+  const totalImmigrantChildren = immState ? (immState.parallelSociety.children || 0) : 0;
+  const immigrantRow = totalImmigrants > 0 ? `<div class="hex-info-row"><span class="label">🚶 Immigrants</span><span class="value">${totalImmigrants}</span></div>` : '';
+  const immigrantChildRow = totalImmigrantChildren > 0 ? `<div class="hex-info-row"><span class="label" style="margin-left:16px;">↳ Children</span><span class="value">${totalImmigrantChildren}</span></div>` : '';
 
   document.getElementById('labor-content').innerHTML = `
     <div class="hex-info-row"><span class="label">\u{1F465} Adults</span><span class="value">${gameState.population.total}${elderCount > 0 ? ` (${elderCount} elders)` : ''} ${sexSuffix}</span></div>
     <div class="hex-info-row"><span class="label">\u{1F476} Children</span><span class="value">${totalChildren}</span></div>
+    ${immigrantRow}
+    ${immigrantChildRow}
     ${nursingRow}
     ${graduationInfo}
     <div class="hex-info-row"><span class="label">Workers assigned</span><span class="value">${gameState.population.employed}</span></div>
     <div class="hex-info-row" style="margin-left:16px;"><span class="label">\u2022 Stationary</span><span class="value">${buildingWorkers}</span></div>
     <div class="hex-info-row" style="margin-left:16px;"><span class="label">\u2022 Units</span><span class="value">${unitPopulation}</span></div>
-    <div class="hex-info-row"><span class="label">Idle</span><span class="value" style="color:${idleColor}">${gameState.population.idle}${idleWarn}</span></div>
-    <div class="hex-info-row"><span class="label">Food per turn</span><span class="value" style="color:${inc.netFood >= 0 ? '#6cb66c' : '#cc6666'}">${inc.netFood >= 0 ? '+' : ''}${inc.netFood}</span></div>
+    ${trainingPop > 0 ? `<div class="hex-info-row" style="margin-left:16px;"><span class="label">\u2022 In training</span><span class="value">${trainingPop}</span></div>` : ''}
+    <div class="hex-info-row"><span class="label">Idle</span><span class="value" style="color:${idleColor}">${assignableIdle}${retiredElders > 0 ? ` (+${retiredElders} retired)` : ''}${idleWarn}</span></div>
+    <div class="hex-info-row"><span class="label">Food this turn</span><span class="value" style="color:${effectiveNetFood >= 0 ? '#6cb66c' : '#cc6666'}">${effectiveNetFood >= 0 ? '+' : ''}${effectiveNetFood}</span></div>
     ${constructionRow}
     ${trainingRow}
+    ${isWinter ? `<div class="hex-info-row"><span class="label" style="margin-left:16px;">❄️ Winter penalty</span><span class="value" style="color:#6699cc">−${winterCost}</span></div>` : ''}
+    ${(() => {
+      const rows = [];
+      if (window.getProjectedTraditionCosts && gameState?.traditions) {
+        const tc = window.getProjectedTraditionCosts();
+        if (tc.food > 0) rows.push(`<div class="hex-info-row"><span class="label" style="margin-left:16px;">🎭 Traditions (due)</span><span class="value" style="color:#cc8844">−${tc.food}</span></div>`);
+      }
+      const crime = window.getCrimeState ? window.getCrimeState() : null;
+      if (crime && crime.theft > 1) {
+        const projFood = Math.max(0, gameState.resources.food + inc.netFood);
+        let theft = Math.floor(projFood * 0.02 * crime.theft);
+        if (crime.organizedPredation) theft *= 2;
+        if (theft > 0) rows.push(`<div class="hex-info-row"><span class="label" style="margin-left:16px;">🔪 Crime theft</span><span class="value" style="color:#cc6666">−${theft}</span></div>`);
+      }
+      return rows.join('');
+    })()}
     ${inc.nursingProductionPenalty > 0 ? `<div class="hex-info-row"><span class="label">\u{1F931} Nursing penalty</span><span class="value" style="color:#cc8844">\u2212${inc.nursingProductionPenalty}% output</span></div>` : ''}
+    ${winterWarning}
     <div class="hex-info-row" style="padding-top:8px;">
       <button class="detail-btn" onclick="openPopulationDetails()">\u{1F4CA} Population Details</button>
     </div>
-    ${winterRow}
-    ${winterWarning}
-    <div class="hex-info-row"><span class="label">Materials per turn</span><span class="value" style="color:${inc.netMat >= 0 ? '#6cb66c' : '#cc6666'}">${inc.netMat >= 0 ? '+' : ''}${inc.netMat}</span></div>
+    <div class="hex-info-row"><span class="label">Materials this turn</span><span class="value" style="color:${effectiveNetMat >= 0 ? '#6cb66c' : '#cc6666'}">${effectiveNetMat >= 0 ? '+' : ''}${effectiveNetMat}</span></div>
+    ${(() => {
+      const rows = [];
+      if (window.getProjectedTraditionCosts && gameState?.traditions) {
+        const tc = window.getProjectedTraditionCosts();
+        if (tc.materials > 0) rows.push(`<div class="hex-info-row"><span class="label" style="margin-left:16px;">🎭 Traditions (due)</span><span class="value" style="color:#cc8844">−${tc.materials}</span></div>`);
+      }
+      const crime = window.getCrimeState ? window.getCrimeState() : null;
+      if (crime && crime.theft > 1) {
+        const projMat = Math.max(0, gameState.resources.materials + inc.netMat);
+        let theft = Math.floor(projMat * 0.01 * crime.theft);
+        if (crime.organizedPredation) theft *= 2;
+        if (theft > 0) rows.push(`<div class="hex-info-row"><span class="label" style="margin-left:16px;">🔪 Crime theft</span><span class="value" style="color:#cc6666">−${theft}</span></div>`);
+      }
+      const imm = gameState?.immigration;
+      if (imm?.interventionActive === 'integration' || imm?.interventionActive === 'coercive') {
+        const cost = Math.ceil(gameState.population.total * 0.05);
+        rows.push(`<div class="hex-info-row"><span class="label" style="margin-left:16px;">🚶 Integration program</span><span class="value" style="color:#cc8844">−${cost}</span></div>`);
+      }
+      return rows.join('');
+    })()}
     <button class="manage-workers-btn" onclick="openWorkforceOverlay()">\u{1F465} Manage Workers</button>
   `;
 
@@ -115,13 +172,11 @@ function updateCohesionDisplay() {
   // Compute projected next-turn deltas
   const projected = window.previewCohesionDeltas ? window.previewCohesionDeltas() : c.lastUpdate;
 
-  // Show 1 decimal for sub-integer changes; suppress if negligible (< 0.05)
+  // Show 2 decimal places; suppress if negligible (< 0.005)
   const fmtDelta = d => {
-    if (Math.abs(d) < 0.05) return '';
-    const sign = d > 0 ? '+' : '-';
-    const abs = Math.abs(d);
-    const str = abs % 1 < 0.05 ? Math.round(abs).toString() : (Math.round(abs * 10) / 10).toFixed(1);
-    return ` (${sign}${str})`;
+    if (Math.abs(d) < 0.005) return '';
+    const sign = d > 0 ? '+' : '';
+    return ` (${sign}${d.toFixed(2)})`;
   };
   const disp = p => Math.round(c[p]);
 
@@ -276,15 +331,36 @@ function showTurnSummary(report, seasonName, year) {
   let html = `
     <div class="summary-row"><span class="s-label">\u{1F33E} Food harvested</span><span class="s-val delta-pos">+${report.foodIncome}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F37D}\uFE0F Food consumed</span><span class="s-val delta-neg">-${report.foodConsumed}</span></div>
+    ${report.foodBreakdown ? (() => {
+      const bd = report.foodBreakdown;
+      const elderCount = gameState.population.elders || 0;
+      const workingElders = bd.workingElders || 0;
+      const retiredElders = bd.retiredElders || 0;
+      let rows = '';
+      if (bd.adults > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F465} Working adults \u00D7 ${window.FOOD_PER_POP}</span><span class="s-val delta-neg">-${bd.adults}</span></div>`;
+      if (workingElders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F9D3} Working elders \u00D7 ${window.FOOD_PER_POP}</span><span class="s-val delta-neg">-${workingElders}</span></div>`;
+      if (retiredElders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F9D3} Retired elders \u00D7 ${window.FOOD_PER_ELDER || 1}</span><span class="s-val delta-neg">-${retiredElders}</span></div>`;
+      if (bd.children > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F476} Children \u00D7 ${window.FOOD_PER_CHILD}</span><span class="s-val delta-neg">-${bd.children}</span></div>`;
+      if (bd.builders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F528} Builders (\u00D72)</span><span class="s-val delta-neg">-${bd.builders}</span></div>`;
+      if (bd.training > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u2694\uFE0F Training (\u00D72)</span><span class="s-val delta-neg">-${bd.training}</span></div>`;
+      if (bd.immigrants > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F6B6} Immigrants</span><span class="s-val delta-neg">-${bd.immigrants}</span></div>`;
+      if (bd.units > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F6E1}\uFE0F Unit upkeep</span><span class="s-val delta-neg">-${bd.units}</span></div>`;
+      return rows;
+    })() : ''}
+    ${report.traditionFoodCost > 0 ? `<div class="summary-row"><span class="s-label">🎭 Traditions observed</span><span class="s-val delta-neg">-${report.traditionFoodCost} food</span></div>` : ''}
+    ${report.crimeTheftFood > 0 ? `<div class="summary-row"><span class="s-label">🔪 Crime theft</span><span class="s-val delta-neg">-${report.crimeTheftFood} food</span></div>` : ''}
     <div class="summary-row"><span class="s-label">\u{1FAB5} Materials gathered</span><span class="s-val delta-pos">+${report.matIncome}</span></div>
     ${report.matUpkeep ? `<div class="summary-row"><span class="s-label">🪵 Materials consumed</span><span class="s-val delta-neg">-${report.matUpkeep}</span></div>` : ''}
+    ${report.traditionMatCost > 0 ? `<div class="summary-row"><span class="s-label">🎭 Traditions observed</span><span class="s-val delta-neg">-${report.traditionMatCost} materials</span></div>` : ''}
+    ${report.crimeTheftMat > 0 ? `<div class="summary-row"><span class="s-label">🔪 Crime theft</span><span class="s-val delta-neg">-${report.crimeTheftMat} materials</span></div>` : ''}
+    ${report.interventionMatCost > 0 ? `<div class="summary-row"><span class="s-label">🚶 Integration program</span><span class="s-val delta-neg">-${report.interventionMatCost} materials</span></div>` : ''}
     <hr class="summary-divider">
     <div class="summary-row"><span class="s-label">\u{1F4E6} Food stockpile</span><span class="s-val">${gameState.resources.food}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F4E6} Materials stockpile</span><span class="s-val">${gameState.resources.materials}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F465} Adults</span><span class="s-val">${gameState.population.total}${(() => { const d = (report.graduated||0) - (report.adultDeaths||0) - (report.elderDeaths||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
     ${(gameState.population.elders || 0) > 0 ? `<div class="summary-row"><span class="s-label">\u{1F9D3} Elders</span><span class="s-val">${gameState.population.elders}${report.elderDeaths ? ' <span class="delta-neg">(-' + report.elderDeaths + ' passed)</span>' : ''}</span></div>` : ''}
     <div class="summary-row"><span class="s-label">\u{1F476} Children</span><span class="s-val">${window.getTotalChildren()}${(() => { const d = (report.childBirths||0) - (report.childDeaths||0) - (report.graduated||0); return d > 0 ? ' <span class="delta-pos">(+' + d + ')</span>' : d < 0 ? ' <span class="delta-neg">(' + d + ')</span>' : ''; })()}</span></div>
-    ${report.nursingCount > 0 ? `<div class="summary-row"><span class="s-label">\u{1F931} Nursing mothers</span><span class="s-val">${report.nursingCount} <span style="color:var(--text-dim)">(50% labor)</span></span></div>` : ''}
+    ${report.nursingCount > 0 ? `<div class="summary-row"><span class="s-label">\u{1F931} Nursing mothers</span><span class="s-val">${report.nursingCount}${(() => { const n = gameState.nursing || []; const parts = n.filter(e => e.count > 0).map(e => e.count + ' finish in ' + e.turnsLeft + 't'); return parts.length > 0 ? ' (' + parts.join(', ') + ')' : ''; })()} <span style="color:var(--text-dim)">(50% labor)</span></span></div>` : ''}
   `;
 
   // Immigration summary row

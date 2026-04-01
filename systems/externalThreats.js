@@ -26,19 +26,31 @@ export function spawnThreat(threatType, col, row) {
 }
 
 export function findRandomMapEdge() {
-  // Pick a random edge of the map
-  const edge = Math.floor(Math.random() * 4); // 0=top, 1=right, 2=bottom, 3=left
+  // Pick a random edge position, retry if ocean (cap at 20 attempts)
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const edge = Math.floor(Math.random() * 4); // 0=top, 1=right, 2=bottom, 3=left
+    let col, row;
 
-  switch (edge) {
-    case 0: // top
-      return { col: Math.floor(Math.random() * window.MAP_COLS), row: 0 };
-    case 1: // right
-      return { col: window.MAP_COLS - 1, row: Math.floor(Math.random() * window.MAP_ROWS) };
-    case 2: // bottom
-      return { col: Math.floor(Math.random() * window.MAP_COLS), row: window.MAP_ROWS - 1 };
-    case 3: // left
-      return { col: 0, row: Math.floor(Math.random() * window.MAP_ROWS) };
+    switch (edge) {
+      case 0: col = Math.floor(Math.random() * window.MAP_COLS); row = 0; break;
+      case 1: col = window.MAP_COLS - 1; row = Math.floor(Math.random() * window.MAP_ROWS); break;
+      case 2: col = Math.floor(Math.random() * window.MAP_COLS); row = window.MAP_ROWS - 1; break;
+      case 3: col = 0; row = Math.floor(Math.random() * window.MAP_ROWS); break;
+    }
+
+    const hex = window.gameState?.map?.[row]?.[col];
+    if (hex && hex.terrain !== 'ocean' && hex.terrain !== 'lake') {
+      return { col, row };
+    }
   }
+  // Fallback: return any land edge hex
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (const c of [0, window.MAP_COLS - 1]) {
+      const hex = window.gameState?.map?.[r]?.[c];
+      if (hex && hex.terrain !== 'ocean' && hex.terrain !== 'lake') return { col: c, row: r };
+    }
+  }
+  return { col: 0, row: 0 };
 }
 
 export function findNearestSettlement(threat) {
@@ -190,6 +202,11 @@ export function attackSettlement(threat, settlement, report) {
     const damage = attackStrength - defensiveStrength;
     applyRaidDamage(damage, report);
 
+    // Damage settlement health
+    if (window.damageSettlement) {
+      window.damageSettlement(settlement.col, settlement.row, damage * 10);
+    }
+
     report.events.push(`🏴‍☠️ ${threatType.name} ${threatType.icon} raided your settlement! The attack caused significant damage.`);
 
     // Major cohesion hit from successful raid
@@ -202,6 +219,25 @@ export function attackSettlement(threat, settlement, report) {
 
     // Small legitimacy boost for successful defense
     window.gameState.cohesion.legitimacy = Math.min(100, window.gameState.cohesion.legitimacy + 5);
+
+    // If fortifications helped repel the attack, they take damage from the assault
+    const fortBonus = window.getSettlementFortificationBonus
+      ? window.getSettlementFortificationBonus(settlement.col, settlement.row)
+      : 0;
+    if (fortBonus > 0 && window.damageFortification && window.hexNeighbor) {
+      // Find the edge direction from threat toward settlement
+      for (let dir = 0; dir < 6; dir++) {
+        const neighbor = window.hexNeighbor(threat.col, threat.row, dir);
+        if (neighbor.col === settlement.col && neighbor.row === settlement.row) {
+          const damage = threatType.combat * 8;
+          const destroyed = window.damageFortification(threat.col, threat.row, dir, damage);
+          if (destroyed && window.addChronicleEntry) {
+            window.addChronicleEntry(`${threatType.name} broke through our fortifications during the assault!`, 'military');
+          }
+          break;
+        }
+      }
+    }
   }
 }
 
@@ -223,9 +259,6 @@ export function calculateDefensiveStrength(settlement) {
     }
   }
 
-  // Base settlement defense
-  strength += 1;
-
   // Fortification defense bonus
   if (window.getSettlementFortificationBonus) {
     strength += window.getSettlementFortificationBonus(settlement.col, settlement.row);
@@ -236,11 +269,7 @@ export function calculateDefensiveStrength(settlement) {
     for (let c = 0; c < window.MAP_COLS; c++) {
       const hex = window.gameState.map[r][c];
       if (hex.building === 'watchtower' && hex.buildProgress <= 0 && hex.workers > 0) {
-        const dist = window.cubeDistance(
-          window.offsetToCube(c, r),
-          window.offsetToCube(settlement.col, settlement.row)
-        );
-        if (dist <= window.TERRITORY_RADIUS) {
+        if (window.isInTerritory && window.isInTerritory(c, r)) {
           strength += 1;
         }
       }

@@ -191,7 +191,10 @@ export function getActiveGovernanceTab() {
 }
 
 // Event listener setup for overlay interactions
+let _overlayListenersRegistered = false;
 function setupOverlayEventListeners() {
+    if (_overlayListenersRegistered) return;
+    _overlayListenersRegistered = true;
     console.log('Setting up overlay event listeners');
     // Workforce overlay event listeners
     const wfCloseBtn = document.getElementById('wf-close');

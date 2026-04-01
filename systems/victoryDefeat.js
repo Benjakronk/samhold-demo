@@ -5,7 +5,7 @@
 let gameState = null;
 
 // Victory scoring system - evaluates at target turn (60-80)
-const VICTORY_TARGET_TURN = 50; // Reduced for better pacing in educational setting
+const VICTORY_TARGET_TURN = 400; // Extended to 100 years for deeper societal development
 
 export function initVictoryDefeat(gameStateRef) {
     gameState = gameStateRef;

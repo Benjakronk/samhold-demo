@@ -18,8 +18,9 @@ function showTutorialHint() {
       hintText = {
         title: "Welcome to Samhold!",
         content: "Your small tribe has settled in this fertile land. Click on the hexes around your settlement to explore them. Look for good spots to assign workers for food and materials.",
-        highlight: "exploration"
+        highlight: "exploration",
       };
+      console.log("DEBUG: hintText 1 displayed");
       break;
 
     case 2:
@@ -28,13 +29,14 @@ function showTutorialHint() {
         content: "Your people need 2 food per person each turn. Check your resource bars at the top - if food goes negative, people will starve. Assign workers to grassland hexes to gather food.",
         highlight: "resources"
       };
+      console.log("DEBUG: hintText 2 displayed");
       break;
 
     case 3:
       hintText = {
-        title: "Building Your First Farm",
-        content: "For stable food production, build a Farm on grassland. Open the side panel (click any hex), go to the Build tab, select Farm, then click a grassland hex in your territory to place it.",
-        highlight: "building"
+        title: "Winter Is Coming",
+        content: "Winter arrives next turn! Your people will need extra food to survive the cold months. Make sure you have a surplus stored — winter can cost additional food beyond normal consumption. Consider building a Farm on grassland for stable food production.",
+        highlight: "seasons"
       };
       break;
 
@@ -58,9 +60,9 @@ function showTutorialHint() {
 
     case 12:
       hintText = {
-        title: "Seasons and Planning",
-        content: "Pay attention to the seasons! Winter requires extra food to survive the cold. Plan ahead by storing food in autumn, or your people may starve during the harsh winter months.",
-        highlight: "seasons"
+        title: "New Arrivals",
+        content: "As word of your settlement spreads, immigrants may begin arriving. Check the Immigration tab in the Governance panel to manage newcomers. They go through integration stages before becoming full members of your society.",
+        highlight: "immigration"
       };
       break;
 

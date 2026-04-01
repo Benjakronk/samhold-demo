@@ -90,11 +90,21 @@ export const GENDER_EFFECTS = {
      '2': { trustBaseline: 0.03, knowledge: 0.05, maintenanceLegitimacy: -0.2 }
   },
   military: {
-    '-2': { reproPenaltyMod: 0, legitimacy: 0.10 },     // eliminates repro penalty; leg only under Chieftain/MilRule (checked in code)
-    '-1': { reproPenaltyMod: 0.5, legitimacy: 0.05 },   // 50% reduction; leg only under traditional gov
-     '0': { reproPenaltyMod: 1.0 },
-     '1': { bonds: 0.05 },
-     '2': { bonds: 0.08, identity: 0.03, maintenanceLegitimacy: -0.1 }
+    // reproPenaltyMod is a multiplier on the military reproductive penalty applied in birth rate
+    // calculation (see turnProcessing.js getMilitaryFemaleCount / getReproductiveAvailability).
+    // The penalty exists because female soldiers are removed from the reproductive pool while
+    // serving. Restrictive positions (R1/R2) exclude women from military → fewer women serve →
+    // penalty is reduced or eliminated. Egalitarian positions (E1/E2) include women equally →
+    // the full penalty applies because women are actually serving. Counterintuitively, R2
+    // reproPenaltyMod: 0 does NOT mean "no reproductive cost" — it means women aren't in the
+    // military at all, so there is no military-sourced reproductive cost to apply. The demographic
+    // trade-off is explicit: R positions preserve birth rate but halve your recruitment pool;
+    // E positions cost births but field a full gender-integrated force.
+    '-2': { reproPenaltyMod: 0, legitimacy: 0.10 },     // women excluded; no military repro cost; leg only under Chieftain/MilRule
+    '-1': { reproPenaltyMod: 0.5, legitimacy: 0.05 },   // women limited; half repro cost; leg only under traditional gov
+     '0': { reproPenaltyMod: 1.0 },                     // unformalized; full penalty (default behaviour)
+     '1': { bonds: 0.05 },                              // open service; full penalty; community bonds grow
+     '2': { bonds: 0.08, identity: 0.03, maintenanceLegitimacy: -0.1 } // mandated inclusion; full penalty; legitimacy maintenance cost
   },
   inheritance: {
     '-2': { trustBaseline: -0.04, legitimacy: 0.08 },    // leg only under Monarchy/Chieftain

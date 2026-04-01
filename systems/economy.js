@@ -122,6 +122,61 @@ export function calculateIncome() {
     matIncome = Math.round(matIncome * genderProdMult);
   }
 
+  // Class system economic production bonus (stratification extracts more surplus)
+  const classProdMult = window.getClassProductionMultiplier ? window.getClassProductionMultiplier() : 1.0;
+  if (classProdMult !== 1.0) {
+    foodIncome = Math.round(foodIncome * classProdMult);
+    matIncome = Math.round(matIncome * classProdMult);
+  }
+
+  // Immigrant labor: unintegrated immigrants work unoccupied territory hexes.
+  // They gather from the land at reduced efficiency based on integration stage
+  // (Arrivals 40%, Residents 70%, Participants 90%). Production is grounded in
+  // real terrain yields — immigrants can only produce what the land supports,
+  // and only from hexes not already worked by the player's own population.
+  // This creates a compelling economic incentive to accept immigrants (they work
+  // land you can't staff yourself), while the cohesion cost from the immigration
+  // system provides the counterweight. The trap: a player who takes in many
+  // immigrants for the production boost without investing in integration will
+  // face a parallel society crisis when the cohesion bill comes due.
+  const immigrantLabor = window.getImmigrantWorkforce ? window.getImmigrantWorkforce() : 0;
+  let immigrantFoodYield = 0;
+  let immigrantMatYield = 0;
+  let immigrantHexesWorked = 0;
+  if (immigrantLabor > 0) {
+    // Collect unoccupied gatherable territory hexes
+    const emptyHexes = [];
+    for (let r = 0; r < window.MAP_ROWS; r++) for (let c = 0; c < window.MAP_COLS; c++) {
+      if (!isInTerritory(c, r)) continue;
+      const hex = window.gameState.map[r][c];
+      if (hex.workers > 0) continue;
+      if (hex.building === 'settlement') continue;
+      if (hex.building && hex.buildProgress <= 0) continue; // completed building — specialized work
+      const terrain = window.TERRAIN[hex.terrain];
+      if (!terrain) continue;
+      const food = terrain.food || 0;
+      const materials = terrain.materials || 0;
+      if (food + materials <= 0) continue;
+      // Include fresh water bonus (same as regular gatherers)
+      const freshBonus = hexHasFreshWater(hex) ? 1 : 0;
+      emptyHexes.push({ food: food + freshBonus, materials, total: food + freshBonus + materials });
+    }
+    // Best hexes first — immigrants naturally work the most productive available land
+    emptyHexes.sort((a, b) => b.total - a.total);
+
+    let remaining = immigrantLabor;
+    for (const hy of emptyHexes) {
+      if (remaining <= 0) break;
+      const allocation = Math.min(1, remaining);
+      immigrantFoodYield += hy.food * allocation;
+      immigrantMatYield += hy.materials * allocation;
+      immigrantHexesWorked++;
+      remaining -= allocation;
+    }
+    foodIncome += Math.floor(immigrantFoodYield);
+    matIncome += Math.floor(immigrantMatYield);
+  }
+
   // Count fortification construction workers
   for (const fort of Object.values(window.gameState.fortifications || {})) {
     if (fort.buildProgress > 0 && fort.workers > 0) {
@@ -150,11 +205,13 @@ export function calculateIncome() {
   const unitPopulation = window.gameState.units.reduce((sum, u) => sum + window.UNIT_TYPES[u.type].cost.population, 0);
   const civilianPop = Math.max(0, window.gameState.population.total - unitPopulation);
   const elderCount = window.gameState.population.elders || 0;
+  const workingElders = window.getWorkingElderCount ? window.getWorkingElderCount() : 0;
+  const retiredElders = Math.max(0, elderCount - workingElders);
   const workingAdults = Math.max(0, civilianPop - elderCount);
   // Immigrant food consumption (pipeline cohorts + PS adults + PS children)
   const immigrantFood = window.getImmigrantFoodConsumption ? window.getImmigrantFoodConsumption() : 0;
 
-  const popFoodConsumed = workingAdults * foodPerPop + elderCount * foodPerElder + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood;
+  const popFoodConsumed = workingAdults * foodPerPop + workingElders * foodPerPop + retiredElders * foodPerElder + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood;
 
   // Unit food = their population share (foodPerPop) + unit-specific upkeep
   const unitFoodUpkeep = window.gameState.units.reduce((total, unit) => {
@@ -163,22 +220,15 @@ export function calculateIncome() {
     return total + upkeep;
   }, 0);
 
-  // Immigrant workforce contributes to production (they can't be assigned to hexes,
-  // but provide general labor — gathering, hauling, assisting)
-  const immigrantLabor = window.getImmigrantWorkforce ? window.getImmigrantWorkforce() : 0;
-  const immigrantFoodBonus = Math.floor(immigrantLabor * 0.5);
-  const immigrantMatBonus = Math.floor(immigrantLabor * 0.2);
-  foodIncome += immigrantFoodBonus;
-  matIncome += immigrantMatBonus;
-
   const foodConsumed = popFoodConsumed + unitFoodUpkeep;
 
   return {
     foodIncome,
     matIncome,
     immigrantLabor,
-    immigrantFoodBonus,
-    immigrantMatBonus,
+    immigrantFoodYield: Math.floor(immigrantFoodYield),
+    immigrantMatYield: Math.floor(immigrantMatYield),
+    immigrantHexesWorked,
     matUpkeep,
     laborUsed: laborUsed + unitLaborUsed,
     constructionWorkers,
@@ -186,10 +236,62 @@ export function calculateIncome() {
     popFoodConsumed,
     unitFoodUpkeep,
     foodConsumed,
+    // Consumption breakdown for UI
+    foodBreakdown: {
+      adults:    (workingAdults - constructionWorkers) * foodPerPop,
+      workingElders: workingElders * foodPerPop,
+      retiredElders: retiredElders * foodPerElder,
+      children:  totalChildren * foodPerChild,
+      builders:  constructionWorkers * foodPerPop * 2,   // double rations
+      training:  unitsInTraining * foodPerPop * 2,       // double rations
+      immigrants: immigrantFood,
+      units:     unitFoodUpkeep,
+    },
     nursingCount: totalNursing,
     nursingProductionPenalty: Math.round(nursingProductionPenalty * 100),
     netFood: foodIncome - foodConsumed, // total net for UI display only
-    netMat: matIncome - matUpkeep
+    netMat: matIncome - matUpkeep,
+    // Additional per-turn drains not captured in matUpkeep (for UI delta display only)
+    // These are NOT subtracted from netMat so that projectTraditionDeltas() stays correct
+    projectedMatDrains: (() => {
+      let drains = 0;
+      // Crime theft
+      const crime = window.getCrimeState ? window.getCrimeState() : null;
+      if (crime && crime.theft > 1) {
+        const projMat = Math.max(0, window.gameState.resources.materials + (matIncome - matUpkeep));
+        let theft = Math.floor(projMat * 0.01 * crime.theft);
+        if (crime.organizedPredation) theft *= 2;
+        drains += theft;
+      }
+      // Traditions due this turn
+      if (window.getProjectedTraditionCosts && window.gameState?.traditions) {
+        const tradCosts = window.getProjectedTraditionCosts();
+        drains += tradCosts.materials;
+      }
+      // Active immigration intervention (integration or coercive)
+      const imm = window.gameState?.immigration;
+      if (imm?.interventionActive === 'integration' || imm?.interventionActive === 'coercive') {
+        drains += Math.ceil(window.gameState.population.total * 0.05);
+      }
+      return drains;
+    })(),
+    projectedFoodDrains: (() => {
+      let drains = 0;
+      // Crime theft
+      const crime = window.getCrimeState ? window.getCrimeState() : null;
+      if (crime && crime.theft > 1) {
+        const projFood = Math.max(0, window.gameState.resources.food + (foodIncome - foodConsumed));
+        let theft = Math.floor(projFood * 0.02 * crime.theft);
+        if (crime.organizedPredation) theft *= 2;
+        drains += theft;
+      }
+      // Traditions due this turn
+      if (window.getProjectedTraditionCosts && window.gameState?.traditions) {
+        const tradCosts = window.getProjectedTraditionCosts();
+        drains += tradCosts.food;
+      }
+      return drains;
+    })()
   };
 }
 
@@ -216,7 +318,7 @@ export function assignWorker(col, row) {
   const hex = window.gameState.map[row][col];
   const max = getMaxWorkers(hex);
   if (hex.workers >= max) return;
-  if (window.gameState.population.idle <= 0) return;
+  if ((window.getAssignableIdle ? window.getAssignableIdle() : window.gameState.population.idle) <= 0) return;
   hex.workers++;
   window.gameState.population.employed++;
   window.gameState.population.idle--;
@@ -273,7 +375,7 @@ export function updateAllUI() {
 
   // Calculate winter penalty for display
   const isWinter = window.SEASONS[window.gameState.season] === 'Winter';
-  const winterCost = isWinter ? Math.ceil(window.gameState.population.total * 0.5) : 0;
+  const winterCost = isWinter ? Math.ceil(window.gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
   const effectiveNetFood = inc.netFood - winterCost;
 
   document.getElementById('res-food').textContent = window.gameState.resources.food;
@@ -357,17 +459,20 @@ export function renderWorkersTab() {
   const pop = window.gameState.population;
 
   const storytellers = window.gameState.culture?.storytellers ?? 0;
+  const assignableIdle = window.getAssignableIdle ? window.getAssignableIdle() : pop.idle;
+  const retiredCount = window.getRetiredElderCount ? window.getRetiredElderCount() : 0;
+  const retiredNote = retiredCount > 0 ? ` <span style="color:var(--text-dim)">(+${retiredCount} retired)</span>` : '';
   document.getElementById('wf-summary').innerHTML =
     `Population: <strong>${pop.total}</strong> · ` +
     `Working: <strong>${pop.employed}</strong> · ` +
-    `Idle: <strong style="color:${pop.idle > 5 ? '#ccaa44' : 'var(--text-light)'}">${pop.idle}</strong>`;
+    `Idle: <strong style="color:${assignableIdle > 5 ? '#ccaa44' : 'var(--text-light)'}">${assignableIdle}</strong>${retiredNote}`;
 
   const construction = groups.filter(g => g.isConstruction);
   const improved = groups.filter(g => !g.isConstruction && !g.key.startsWith('gather:'));
   const unimproved = groups.filter(g => g.key.startsWith('gather:'));
 
   function renderGroup(g) {
-    const canAdd = g.workers < g.maxWorkers && window.gameState.population.idle > 0;
+    const canAdd = g.workers < g.maxWorkers && (window.getAssignableIdle ? window.getAssignableIdle() : window.gameState.population.idle) > 0;
     const canRemove = g.workers > 0;
 
     let yieldStr;

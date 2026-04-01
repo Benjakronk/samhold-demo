@@ -16,6 +16,12 @@ function setupTurnEventListeners() {
   document.getElementById('summary-ok').addEventListener('click', () => {
     document.getElementById('turn-summary').classList.remove('visible');
 
+    // Show tutorial hint after turn summary is dismissed (so it's not hidden behind it)
+    if (gameState.pendingTutorialHint) {
+      gameState.pendingTutorialHint = false;
+      setTimeout(() => window.showTutorialHint(), 100);
+    }
+
     // Process events after turn summary is closed
     if (gameState.pendingEventCheck) {
       gameState.pendingEventCheck = false;
@@ -49,9 +55,9 @@ function setupTurnEventListeners() {
     if (window.render) window.render();
     window.showTurnSummary(report, summarySeasonName, summaryYear);
 
-    // Show tutorial hints for early turns
-    if (gameState.turn <= 15) {
-      setTimeout(() => window.showTutorialHint(), 1500);
+    // Show tutorial hints for early turns (queued after turn summary is dismissed)
+    if (gameState.turn <= 15 && gameState.turn > 1) {
+      gameState.pendingTutorialHint = true;
     }
 
     gameState.pendingEventCheck = true;
@@ -68,6 +74,7 @@ function processTurn() {
   report.matIncome = inc.matIncome;
   report.matUpkeep = inc.matUpkeep;
   report.foodConsumed = inc.foodConsumed;
+  report.foodBreakdown = inc.foodBreakdown;
 
   // Advance construction based on assigned workers
   for (let r = 0; r < window.MAP_ROWS; r++) for (let c = 0; c < window.MAP_COLS; c++) {
@@ -105,10 +112,12 @@ function processTurn() {
     }
   }
 
-  // Advance unit training
+  // Advance unit training (military rule training speed bonus)
+  const milBonuses = window.getMilitaryCombatBonuses ? window.getMilitaryCombatBonuses() : null;
+  const trainingDecrement = (milBonuses && milBonuses.trainingSpeed < 1) ? 2 : 1;
   for (let i = gameState.unitsInTraining.length - 1; i >= 0; i--) {
     const trainingUnit = gameState.unitsInTraining[i];
-    trainingUnit.trainingProgress--;
+    trainingUnit.trainingProgress -= trainingDecrement;
 
     if (trainingUnit.trainingProgress <= 0) {
       // Training completed — population was already claimed by startUnitTraining,
@@ -142,7 +151,7 @@ function processTurn() {
 
   // Winter penalty — applied before food consumption
   if (window.SEASONS[gameState.season] === 'Winter') {
-    let baseCost = Math.ceil(gameState.population.total * 0.5);
+    let baseCost = Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5));
 
     // Apply event-based winter food reduction modifiers
     let totalReduction = 0;
@@ -209,32 +218,45 @@ function processTurn() {
   }
 
   // Birth system - fractional accumulator produces whole children
-  processBirths(report);
+  if (!window.devToggles || window.devToggles.births !== false) {
+    processBirths(report);
+  }
 
   // Aging system - trigger on New Year (when NEXT season would be spring)
   const nextSeason = window.SEASONS[(gameState.season + 1) % 4];
-  if (nextSeason === 'Spring') {
+  if (nextSeason === 'Spring' && (!window.devToggles || window.devToggles.aging !== false)) {
     processAging(report);
   }
 
   // Elder bonuses (every turn, not just New Year)
-  processElderBonuses(report);
+  if (!window.devToggles || window.devToggles.cohElderBonuses !== false) processElderBonuses(report);
 
   // Process pending events (delayed consequences)
   window.processPendingEvents();
 
   // Process traditions (fire due traditions, pay costs, apply cohesion bonuses)
-  if (window.processTraditions) window.processTraditions(report);
+  if (window.processTraditions && (!window.devToggles || window.devToggles.traditions !== false)) window.processTraditions(report);
 
   // Process oral tradition (storytellers compose/lose stories)
   if (window.processStories) window.processStories(report);
 
   // Process society buildings (sacred sites, shrines, meeting halls — cohesion yields)
-  if (window.processSocietyBuildings) window.processSocietyBuildings(report);
-  else if (window.processSacredPlaces) window.processSacredPlaces(report);
+  if ((!window.devToggles || window.devToggles.societyBuildings !== false)) {
+    if (window.processSocietyBuildings) window.processSocietyBuildings(report);
+    else if (window.processSacredPlaces) window.processSacredPlaces(report);
+  }
 
   // Process named regions (strength accumulation, expansion, decay)
   if (window.processRegions) window.processRegions(report);
+
+  // Process expansion points from Admin Hall workers
+  if (window.processExpansionPoints) window.processExpansionPoints(report);
+
+  // Process settlement cultural growth (territory expansion from activity)
+  if (window.processSettlementCulturalGrowth) window.processSettlementCulturalGrowth(report);
+
+  // Process settlement health regeneration
+  if (window.processSettlementHealth) window.processSettlementHealth(report);
 
   // Process fortification construction
   if (window.processFortificationConstruction) window.processFortificationConstruction();
@@ -243,25 +265,25 @@ function processTurn() {
   if (window.processPolicyLag) window.processPolicyLag(report);
 
   // Process resistance (pressure generation, faction effects, promise checks)
-  if (window.processResistance) window.processResistance(report);
+  if (window.processResistance && (!window.devToggles || window.devToggles.resistance !== false)) window.processResistance(report);
 
   // Process crime (theft, violence, transgression — reads trust, feeds into resistance)
-  if (window.processCrime) window.processCrime(report);
+  if (window.processCrime && (!window.devToggles || window.devToggles.crime !== false)) window.processCrime(report);
 
   // Process immigration (pipeline advancement, parallel society, cohort drain)
-  if (window.processImmigration) window.processImmigration(report);
+  if (window.processImmigration && (!window.devToggles || window.devToggles.immigration !== false)) window.processImmigration(report);
 
   // Process governance model-specific effects (monarchy succession, military decay, democracy votes)
-  if (window.processGovernanceTurn) window.processGovernanceTurn(report);
+  if (window.processGovernanceTurn && (!window.devToggles || window.devToggles.governanceTurn !== false)) window.processGovernanceTurn(report);
 
   // Process shared values (crystallization, violation, bonuses)
-  if (window.processValues) window.processValues(report);
+  if (window.processValues && (!window.devToggles || window.devToggles.values !== false)) window.processValues(report);
 
   // Process class system (differential effects, privileged class recalc, temporary effects)
-  if (window.processClassSystem) window.processClassSystem(report);
+  if (window.processClassSystem && (!window.devToggles || window.devToggles.classSystem !== false)) window.processClassSystem(report);
 
   // Process gender formalization (dimension drift, cohesion effects)
-  if (window.processGenderFormalization) window.processGenderFormalization(report);
+  if (window.processGenderFormalization && (!window.devToggles || window.devToggles.genderFormalization !== false)) window.processGenderFormalization(report);
 
   // Calculate cohesion system (includes Working Age effects)
   window.calculateCohesion();
@@ -290,7 +312,7 @@ function processTurn() {
   window.processCombatPhase(report);
 
   // Check for events to trigger
-  window.checkEventTriggers();
+  if (!window.devToggles || window.devToggles.events !== false) window.checkEventTriggers();
 
   // Check for governance transition completion
   if (gameState.governanceTransitionCompleted) {
@@ -495,6 +517,40 @@ function processBirths(report) {
   }
 }
 
+/**
+ * Release `count` workers from hex assignments when workers retire or die.
+ * Removes from unimproved hexes first (gatherers), then buildings.
+ * Does NOT adjust population.employed — that's recalculated from hex.workers each turn.
+ */
+function releaseWorkersFromHexes(count) {
+  if (count <= 0) return;
+  let remaining = count;
+
+  // Collect all worked hexes, unimproved first, then buildings
+  const hexes = [];
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gameState.map[r][c];
+      if (hex.workers > 0 && hex.building !== 'settlement') {
+        hexes.push(hex);
+      }
+    }
+  }
+  // Sort: unimproved (no building) first, then buildings (more valuable to keep staffed)
+  hexes.sort((a, b) => {
+    const aBuilding = a.building ? 1 : 0;
+    const bBuilding = b.building ? 1 : 0;
+    return aBuilding - bBuilding;
+  });
+
+  for (const hex of hexes) {
+    if (remaining <= 0) break;
+    const release = Math.min(remaining, hex.workers);
+    hex.workers -= release;
+    remaining -= release;
+  }
+}
+
 function processAging(report) {
   const ELDER_AGE = window.ELDER_AGE || 50;
   const MAX_AGE = window.MAX_AGE || 80;
@@ -529,6 +585,19 @@ function processAging(report) {
     cohort.age++;
   }
 
+  // 3b. Release workers for elders that just crossed RETIREMENT_AGE this year
+  const retirementAge = window.RETIREMENT_AGE || 60;
+  const newlyRetired = gameState.adultCohorts
+    .filter(c => c.age === retirementAge && c.count > 0)
+    .reduce((sum, c) => sum + c.count, 0);
+  if (newlyRetired > 0) {
+    releaseWorkersFromHexes(newlyRetired);
+    if (window.addChronicleEntry) {
+      window.addChronicleEntry(`${newlyRetired} elder${newlyRetired !== 1 ? 's' : ''} retired from work, enjoying their well-earned rest.`, 'milestone');
+    }
+    report.events.push(`🧓 ${newlyRetired} elder${newlyRetired !== 1 ? 's' : ''} retired from the workforce.`);
+  }
+
   // 4. Natural deaths for elders
   let elderDeaths = 0;
   for (const cohort of gameState.adultCohorts) {
@@ -544,8 +613,11 @@ function processAging(report) {
       continue;
     }
 
-    // Increasing probability: 2% per year past elder age
-    const deathChance = DEATH_RATE * (cohort.age - ELDER_AGE + 1);
+    // Increasing probability: 2% per year past elder age, higher for working elders
+    const retirementAge = window.RETIREMENT_AGE || 60;
+    const isWorkingElder = cohort.age < retirementAge;
+    const deathMult = isWorkingElder ? (window.WORKING_ELDER_DEATH_MULTIPLIER || 1.5) : 1.0;
+    const deathChance = DEATH_RATE * (cohort.age - ELDER_AGE + 1) * deathMult;
     const expected = cohort.count * deathChance;
     const deaths = Math.floor(expected) + (Math.random() < (expected - Math.floor(expected)) ? 1 : 0);
     const actualDeaths = Math.min(deaths, cohort.count);
@@ -611,33 +683,75 @@ function recomputeElderCount() {
     .reduce((sum, c) => sum + c.count, 0);
 }
 
+function getWorkingElderCount() {
+  if (!gameState) return 0;
+  const ELDER_AGE = window.ELDER_AGE || 50;
+  const retirementAge = window.RETIREMENT_AGE || 60;
+  return (gameState.adultCohorts || [])
+    .filter(c => c.age >= ELDER_AGE && c.age < retirementAge)
+    .reduce((sum, c) => sum + c.count, 0);
+}
+
+function getRetiredElderCount() {
+  if (!gameState) return 0;
+  const retirementAge = window.RETIREMENT_AGE || 60;
+  return (gameState.adultCohorts || [])
+    .filter(c => c.age >= retirementAge)
+    .reduce((sum, c) => sum + c.count, 0);
+}
+
+// Single source of truth for how many idle people can be assigned to work.
+// Excludes retired elders, who are idle but not available for assignment.
+function getAssignableIdle() {
+  if (!gameState) return 0;
+  return Math.max(0, (gameState.population.idle || 0) - getRetiredElderCount());
+}
+
 function processElderBonuses(report) {
-  const elders = gameState.population.elders || 0;
-  if (elders <= 0) return;
+  const retiredElders = getRetiredElderCount();
 
-  const legBonus = elders * (window.ELDER_LEGITIMACY_BONUS || 0.08);
-  const idBonus = elders * (window.ELDER_IDENTITY_BONUS || 0.05);
-  const knowBonus = elders * (window.ELDER_KNOWLEDGE_PER_TURN || 0.3);
+  // Only retired elders give passive bonuses
+  if (retiredElders > 0) {
+    const legBonus = retiredElders * (window.ELDER_LEGITIMACY_BONUS || 0.08);
+    const idBonus = retiredElders * (window.ELDER_IDENTITY_BONUS || 0.05);
+    const knowBonus = retiredElders * (window.ELDER_KNOWLEDGE_PER_TURN || 0.3);
 
-  gameState.cohesion.legitimacy = Math.min(100, gameState.cohesion.legitimacy + legBonus);
-  gameState.cohesion.identity = Math.min(100, gameState.cohesion.identity + idBonus);
-  gameState.resources.knowledge = (gameState.resources.knowledge || 0) + knowBonus;
+    gameState.cohesion.legitimacy = Math.min(100, gameState.cohesion.legitimacy + legBonus);
+    gameState.cohesion.identity = Math.min(100, gameState.cohesion.identity + idBonus);
+    gameState.resources.knowledge = (gameState.resources.knowledge || 0) + knowBonus;
+  }
+
+  // Working elders: resentment penalty to satisfaction
+  const workingElders = getWorkingElderCount();
+  if (workingElders > 0) {
+    const resentment = workingElders * (window.WORKING_ELDER_RESENTMENT || 0.03);
+    gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction - resentment);
+  }
 }
 
 function processStarvation(deficit, report) {
   const starvePerFood = 2; // 2 people die per 1 food deficit
-  let totalDeaths = Math.min(deficit * starvePerFood, gameState.population.total);
+  const imm = gameState.immigration;
+  const pipelinePop = imm ? (
+    (imm.cohorts[0] ? (Array.isArray(imm.cohorts[0]) ? imm.cohorts[0].reduce((s,c)=>s+c.count,0) : imm.cohorts[0]) : 0) +
+    (imm.cohorts[1] ? (Array.isArray(imm.cohorts[1]) ? imm.cohorts[1].reduce((s,c)=>s+c.count,0) : imm.cohorts[1]) : 0) +
+    (imm.cohorts[2] ? (Array.isArray(imm.cohorts[2]) ? imm.cohorts[2].reduce((s,c)=>s+c.count,0) : imm.cohorts[2]) : 0) +
+    (imm.parallelSociety?.childCohorts ? imm.parallelSociety.childCohorts.reduce((s,c)=>s+c.count,0) : 0) +
+    (imm.parallelSociety?.population || 0)
+  ) : 0;
+  const rawDeaths = deficit * starvePerFood;
+
+  // Native deaths are capped at population.total - 1 (sole survivor protection)
+  const nativeDeathBudget = Math.max(0, gameState.population.total - 1);
+  const nativeDeaths = Math.min(rawDeaths, nativeDeathBudget);
+  // Immigrant deaths absorb whatever the native population cannot
+  const immigrantDeathBudget = Math.min(rawDeaths - nativeDeaths, pipelinePop);
 
   // Track deaths for tradition unlocks
-  if (totalDeaths > 0 && gameState.culture) gameState.culture.deathsOccurred = true;
-
-  // Protect sole survivor
-  if (gameState.population.total - totalDeaths < 1) {
-    totalDeaths = Math.max(0, gameState.population.total - 1);
-  }
+  if ((nativeDeaths + immigrantDeathBudget) > 0 && gameState.culture) gameState.culture.deathsOccurred = true;
 
   // Children die first (youngest first)
-  let remainingDeaths = totalDeaths;
+  let remainingDeaths = nativeDeaths;
   const sortedByAge = [...gameState.childCohorts].sort((a, b) => a.age - b.age);
   for (const cohort of sortedByAge) {
     if (remainingDeaths <= 0) break;
@@ -706,11 +820,10 @@ function processStarvation(deficit, report) {
     }
   }
 
-  // Pipeline immigrants die last (outside core population)
-  if (remainingDeaths > 0 && window.applyImmigrantStarvation) {
-    const immigrantDeaths = window.applyImmigrantStarvation(remainingDeaths);
+  // Pipeline immigrants die in parallel with natives — their budget is separate from remainingDeaths
+  if (immigrantDeathBudget > 0 && window.applyImmigrantStarvation) {
+    const immigrantDeaths = window.applyImmigrantStarvation(immigrantDeathBudget);
     if (immigrantDeaths > 0) {
-      remainingDeaths -= immigrantDeaths;
       report.events.push(`☠️ ${immigrantDeaths} immigrant${immigrantDeaths !== 1 ? 's' : ''} in the pipeline died from starvation.`);
     }
   }
@@ -888,6 +1001,9 @@ export {
   removeFromAdultCohorts,
   removeSexProportional,
   recomputeElderCount,
+  getWorkingElderCount,
+  getRetiredElderCount,
+  getAssignableIdle,
   getFertileFemaleCount,
   getAdultSexCounts,
   getTotalNursing,
@@ -895,7 +1011,8 @@ export {
   getMilitaryFemaleCount,
   getReproductiveAvailability,
   checkVictoryConditions,
-  trackGovernanceChange
+  trackGovernanceChange,
+  releaseWorkersFromHexes
 };
 
 // For browser compatibility, attach to window if available

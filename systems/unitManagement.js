@@ -17,8 +17,10 @@ function startUnitTraining(type, col, row) {
   }
 
   const unitType = window.UNIT_TYPES[type];
+  const retiredElders = window.getRetiredElderCount ? window.getRetiredElderCount() : 0;
+  const assignableIdle = Math.max(0, gameState.population.idle - retiredElders);
 
-  if (unitType.cost.population > gameState.population.idle) {
+  if (unitType.cost.population > assignableIdle) {
     return null;
   }
   if (unitType.cost.materials > gameState.resources.materials) {

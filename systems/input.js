@@ -450,9 +450,8 @@ function setupOverlayEventListeners() {
   const devApplyLive = document.getElementById('dev-apply-live');
   if (devApplyLive) {
     devApplyLive.addEventListener('click', function() {
-      if (window.applyDevValues && window.closeDevOverlay) {
+      if (window.applyDevValues) {
         window.applyDevValues();
-        window.closeDevOverlay();
       }
     });
   }

@@ -40,9 +40,11 @@ export function createGameState() {
         progressiveness: 50,    // 0-100: Passive ←→ Active integration
         rationPriority: 'people', // 'people' | 'military' | 'equal'
         // workingAge is global variable WORKING_AGE, not in policies
+        // retirementAge is global variable RETIREMENT_AGE, persisted here for saves
+        retirementAge: 60,
       },
       modelChangeTimer: 0,  // turns remaining for governance change transition
-      lastChanged: { model: 0, policies: { freedom: 0, mercy: 0, tradition: 0, isolation: 0 } }, // change tracking
+      lastChanged: { model: 0, policies: { freedom: 0, mercy: 0, tradition: 0, isolation: 0, retirementAge: 0 } }, // change tracking
       monarchy: {
         dynastyName: null,
         currentRuler: null,    // { name, quality (0-1), reignStart }
@@ -68,7 +70,9 @@ export function createGameState() {
     },
     gameEnded: false, // prevents multiple end-game triggers
     map: [],
-    settlements: [], // list of {col, row}
+    settlements: [], // list of {col, row, name, coreRadius, culturalStrength, health, maxHealth}
+    claimedHexes: new Set(), // persistent hex claims from cultural growth + purchases ("col,row" strings)
+    expansionPoints: 0, // accumulated from Admin Hall for hex purchasing
     rivers: [], // list of { id, path, reachedTerminus, mergedIntoExisting }
     riverSegmentCounts: new Map(), // segment key -> traversal count for tributary width
     selectedHex: null,
@@ -133,6 +137,7 @@ export function createGameState() {
       culturalOpenness: null,
       progressiveness: null,
       workingAge: null,
+      retirementAge: null,
       pending: {
         freedom: null,
         mercy: null,
@@ -140,7 +145,8 @@ export function createGameState() {
         isolation: null,
         culturalOpenness: null,
         progressiveness: null,
-        workingAge: null
+        workingAge: null,
+        retirementAge: null
       }
     },
     trust: {
@@ -157,6 +163,7 @@ export function createGameState() {
       tradition: { zone: null, turnsInZone: 0 },
       isolation: { zone: null, turnsInZone: 0 },
       workingAge: { zone: null, turnsInZone: 0 },
+      retirementAge: { zone: null, turnsInZone: 0 },
       rationPriority: { zone: null, turnsInZone: 0 }
     },
     immigration: {

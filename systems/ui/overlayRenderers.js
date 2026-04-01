@@ -3,7 +3,7 @@
 // Extracted from main game file for modular architecture
 
 let gameState = null;
-let governanceActiveTab = 'governance';
+// governanceActiveTab lives in overlayManager.js — read via window.getActiveGovernanceTab()
 
 function initOverlayRenderers(gameStateRef) {
   gameState = gameStateRef;
@@ -284,7 +284,7 @@ function getModelSpecificDetails(modelKey) {
       ${mon.successionCrisisActive ? '<div class="model-detail-row" style="color:var(--accent-red)">⚠️ Succession crisis active!</div>' : ''}
     `;
   }
-  if (modelKey === 'militaryRule') {
+  if (modelKey === 'militaryRule' && gs.governance.militaryRule) {
     const mil = gs.governance.militaryRule;
     const strengthBar = '█'.repeat(Math.round((mil.commanderStrength ?? 1) * 5)) + '░'.repeat(5 - Math.round((mil.commanderStrength ?? 1) * 5));
     return `
@@ -296,7 +296,7 @@ function getModelSpecificDetails(modelKey) {
       <div class="model-detail-row" style="color:orange">• Freedom locked to 20 max. Satisfaction erodes each turn.</div>
     `;
   }
-  if (modelKey === 'democracy') {
+  if (modelKey === 'democracy' && gs.governance.democracy) {
     const dem = gs.governance.democracy;
     const pendingStr = (dem.pendingPolicyChanges?.length > 0)
       ? dem.pendingPolicyChanges.map(p => `${p.policy}: ${p.newValue} (${p.turnsRemaining} turns)`).join(', ')
@@ -315,7 +315,7 @@ function getModelSpecificDetails(modelKey) {
 function renderGovernanceOverlay() {
   document.querySelectorAll('.governance-tab').forEach(t => {
     t.onclick = () => window.switchGovernanceTab(t.dataset.tab);
-    t.classList.toggle('active', t.dataset.tab === governanceActiveTab);
+    t.classList.toggle('active', t.dataset.tab === (window.getActiveGovernanceTab ? window.getActiveGovernanceTab() : 'models'));
   });
 
   const modelsContainer = document.getElementById('governance-models');
@@ -487,6 +487,38 @@ function renderGovernanceOverlay() {
   }
 
   renderPolicyLagStatus('workingAge');
+
+  // Retirement Age slider
+  const retAgeSlider = document.getElementById('policy-retirement-age');
+  const retAgeDisplay = document.getElementById('retirement-age-value');
+  const retAgeHeader = document.getElementById('policy-header-retirement-age');
+
+  if (retAgeSlider) {
+    const raLag = window.getPolicyLagState ? window.getPolicyLagState('retirementAge') : null;
+    const raPending = raLag?.pending;
+    const raEffective = window.RETIREMENT_AGE;
+    const raDisplay = raPending !== null && raPending !== undefined ? raPending : raEffective;
+    retAgeSlider.value = raDisplay;
+    retAgeSlider.oninput = (e) => {
+      const newAge = parseInt(e.target.value);
+      window.adjustRetirementAge(newAge - window.RETIREMENT_AGE);
+      renderPolicyLagStatus('retirementAge');
+      renderPolicyBatchControls();
+    };
+  }
+  if (retAgeDisplay) {
+    const raLag2 = window.getPolicyLagState ? window.getPolicyLagState('retirementAge') : null;
+    const raDisp = raLag2?.pending !== null && raLag2?.pending !== undefined ? raLag2.pending : window.RETIREMENT_AGE;
+    retAgeDisplay.textContent = raDisp;
+  }
+  if (retAgeHeader) {
+    const raLabel = window.getRetirementAgeLabel ? window.getRetirementAgeLabel(window.RETIREMENT_AGE) : '';
+    const raLag3 = window.getPolicyLagState ? window.getPolicyLagState('retirementAge') : null;
+    const raLagNote = raLag3?.lag ? ` ⏳ → ${raLag3.lag.target} (${raLag3.lag.turnsRemaining}t)` : '';
+    retAgeHeader.textContent = `Elder Retirement (${raLabel})${raLagNote}`;
+  }
+  renderPolicyLagStatus('retirementAge');
+
   renderPolicyBatchControls();
 
   // Render resistance panel content (always, so it's ready when tab is clicked)
@@ -526,7 +558,7 @@ function renderPolicyLagStatus(policy) {
 
     html += `<div class="policy-lag-row pending">
       <span class="policy-lag-text">📝 Uncommitted: ${effective} → ${pending} (${lagCalc.turns}t ${lagCalc.category})</span>
-      <button class="policy-lag-btn commit" onclick="window.commitPolicyChange('${policy}'); renderGovernanceOverlay();">Commit</button>
+      <button class="policy-lag-btn commit" onclick="confirmCommitPolicy('${policy}', ${effective}, ${pending}, '${lagCalc.category}', ${lagCalc.turns});">Commit</button>
       <button class="policy-lag-btn discard" onclick="window.discardPendingPolicy('${policy}'); renderGovernanceOverlay();">Discard</button>
     </div>`;
   }
@@ -537,13 +569,91 @@ function renderPolicyLagStatus(policy) {
     const transType = lag.category === 'directive' ? 'snap' : 'interpolating';
     html += `<div class="policy-lag-row active">
       <span class="policy-lag-text">⏳ ${lag.startValue} → ${lag.target} (${lag.turnsRemaining}t left, ${transType})</span>
-      <button class="policy-lag-btn abandon" onclick="window.abandonPolicyChange('${policy}'); renderGovernanceOverlay();">Abandon</button>
-      <button class="policy-lag-btn force" onclick="window.forcePolicyChange('${policy}'); renderGovernanceOverlay();">Force</button>
+      <button class="policy-lag-btn abandon" onclick="confirmAbandonPolicy('${policy}', ${lag.startValue}, ${lag.target});">Abandon</button>
+      <button class="policy-lag-btn force" onclick="confirmForcePolicy('${policy}', ${lag.startValue}, ${lag.target}, '${lag.category}');">Force</button>
     </div>
     <div class="policy-lag-progress"><div class="policy-lag-progress-fill" style="width:${progress}%"></div></div>`;
   }
 
   el.innerHTML = html;
+}
+
+function confirmCommitPolicy(policy, effective, pending, category, turns) {
+  const policyName = policy.charAt(0).toUpperCase() + policy.slice(1);
+  window.showConfirmDialogNonDestructive(
+    `Commit ${policyName} Change`,
+    `<p>Commit this policy change?</p>
+     <p><strong>${policyName}:</strong> ${effective} → ${pending}</p>
+     <p><strong>Category:</strong> ${category}</p>
+     <p><strong>Propagation time:</strong> ${turns} turn${turns !== 1 ? 's' : ''}</p>
+     <p><em>Once committed, the change will take effect gradually. You can abandon or force it later.</em></p>`,
+    'Commit',
+    'Cancel',
+    () => {
+      window.commitPolicyChange(policy);
+      renderGovernanceOverlay();
+    }
+  );
+}
+
+function confirmAbandonPolicy(policy, startValue, target) {
+  const policyName = policy.charAt(0).toUpperCase() + policy.slice(1);
+  window.showConfirmDialog(
+    `Abandon ${policyName} Change`,
+    `<p>Abandon this in-progress policy change?</p>
+     <p><strong>${policyName}:</strong> will revert to ${startValue} (was heading to ${target})</p>
+     <div style="margin-top:8px;padding:8px;background:rgba(255,80,80,0.1);border-radius:4px">
+       <p style="margin:0 0 4px;font-weight:bold;color:var(--danger)">Costs:</p>
+       <p style="margin:0">Legitimacy: <strong>-6</strong></p>
+       <p style="margin:0">Institutional Trust: <strong>damaged</strong></p>
+     </div>`,
+    'Abandon',
+    'Cancel',
+    () => {
+      window.abandonPolicyChange(policy);
+      renderGovernanceOverlay();
+    }
+  );
+}
+
+function confirmForcePolicy(policy, startValue, target, category) {
+  const policyName = policy.charAt(0).toUpperCase() + policy.slice(1);
+  const gs = window.gameState;
+  const model = gs?.governance?.model || 'tribalCouncil';
+
+  // Legitimacy cost by governance model
+  const legCosts = { tribalCouncil: 18, chieftain: 8, theocracy: 12, monarchy: 10, militaryRule: 6, democracy: 14 };
+  const legCost = legCosts[model] ?? 10;
+
+  // Satisfaction cost by category
+  const satCosts = { directive: 3, behavioral: 6, cultural: 10 };
+  const satCost = satCosts[category] ?? 6;
+
+  // Material cost
+  const matCost = Math.ceil((gs?.population?.total || 0) * 0.15);
+
+  // Trust cost
+  const hasOrganizedResistance = window.isOrganizedResistance && window.isOrganizedResistance();
+  const trustDesc = hasOrganizedResistance ? 'severely damaged (-0.20)' : 'damaged (-0.10)';
+
+  window.showConfirmDialog(
+    `Force ${policyName} Change`,
+    `<p>Force immediate implementation of this policy change?</p>
+     <p><strong>${policyName}:</strong> ${startValue} → ${target} (instant)</p>
+     <div style="margin-top:8px;padding:8px;background:rgba(255,80,80,0.1);border-radius:4px">
+       <p style="margin:0 0 4px;font-weight:bold;color:var(--danger)">Costs:</p>
+       <p style="margin:0">Legitimacy: <strong>-${legCost}</strong></p>
+       <p style="margin:0">Satisfaction: <strong>-${satCost}</strong></p>
+       <p style="margin:0">Institutional Trust: <strong>${trustDesc}</strong></p>
+       <p style="margin:0">Materials: <strong>-${matCost}</strong></p>
+     </div>`,
+    'Force',
+    'Cancel',
+    () => {
+      window.forcePolicyChange(policy);
+      renderGovernanceOverlay();
+    }
+  );
 }
 
 function renderPolicyBatchControls() {
@@ -557,6 +667,74 @@ function renderPolicyBatchControls() {
     <button class="policy-batch-btn commit-all" onclick="window.commitAllPending(); renderGovernanceOverlay();">Commit All (${pCount})</button>
     <button class="policy-batch-btn discard-all" onclick="window.discardAllPending(); renderGovernanceOverlay();">Discard All</button>
   `;
+}
+
+function showResistanceNegotiationDialog() {
+  const r = window.getResistanceState ? window.getResistanceState() : null;
+  if (!r || !r.faction.active || r.faction.disposition === 'radical') return;
+
+  const content = document.createElement('div');
+  content.innerHTML = `
+    <div style="padding:12px">
+      <h3 style="margin-bottom:10px">Negotiate with "${r.faction.name}"</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Offer concessions to reduce resistance pressure and improve faction disposition.</p>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="detail-btn" style="text-align:left;padding:8px 10px" id="negotiate-resources">
+          🪵 Offer Resources <span style="font-size:11px;color:var(--text-dim)">— 20 materials + 20 food for −10 pressure</span>
+        </button>
+        <button class="detail-btn" style="text-align:left;padding:8px 10px" id="negotiate-influence">
+          🏛️ Grant Formal Influence <span style="font-size:11px;color:var(--text-dim)">— faction gains governance voice, −15 pressure</span>
+        </button>
+        <button class="detail-btn" style="text-align:left;padding:8px 10px" id="negotiate-promise">
+          📜 Make a Promise <span style="font-size:11px;color:var(--text-dim)">— binding 12-turn commitment, −10 pressure</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Use the confirm dialog system to display this
+  const overlay = document.getElementById('confirm-dialog');
+  if (!overlay) return;
+  const box = overlay.querySelector('.confirm-dialog-box') || overlay.querySelector('.confirm-box');
+  if (!box) return;
+
+  box.innerHTML = '';
+  box.appendChild(content);
+
+  // Add close button
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'detail-btn';
+  closeBtn.textContent = 'Cancel';
+  closeBtn.style.cssText = 'margin:8px 12px 12px;';
+  closeBtn.onclick = () => overlay.classList.remove('visible');
+  box.appendChild(closeBtn);
+
+  overlay.classList.add('visible');
+
+  // Wire buttons
+  document.getElementById('negotiate-resources').onclick = () => {
+    const gs = window.gameState;
+    if (gs.resources.food < 20 || gs.resources.materials < 20) {
+      alert('Not enough resources (need 20 food + 20 materials)');
+      return;
+    }
+    window.negotiateResistance({ resourceCost: true });
+    overlay.classList.remove('visible');
+    if (window.renderGovernanceOverlay) window.renderGovernanceOverlay();
+  };
+
+  document.getElementById('negotiate-influence').onclick = () => {
+    window.negotiateResistance({ formalInfluence: true });
+    overlay.classList.remove('visible');
+    if (window.renderGovernanceOverlay) window.renderGovernanceOverlay();
+  };
+
+  document.getElementById('negotiate-promise').onclick = () => {
+    window.negotiateResistance({ promise: { description: 'Address faction concerns', deadline: (window.gameState?.turn || 0) + 12, binding: true } });
+    overlay.classList.remove('visible');
+    if (window.renderGovernanceOverlay) window.renderGovernanceOverlay();
+  };
 }
 
 function renderResistancePanel() {
@@ -586,9 +764,12 @@ function renderResistancePanel() {
     <div class="resistance-meter-mark" style="left:${thresholds.hostile}%" title="Hostile (${thresholds.hostile})"></div>
     <div class="resistance-meter-mark" style="left:${thresholds.radical}%" title="Radical (${thresholds.radical})"></div>
   </div>`;
+  const delta = window.projectResistanceDelta ? window.projectResistanceDelta() : 0;
+  const deltaColor = delta > 0.5 ? '#cc5555' : delta < -0.5 ? '#55aa55' : 'var(--text-dim)';
+  const deltaText = delta > 0 ? '+' + delta.toFixed(1) : delta.toFixed(1);
   html += `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:2px">
     <span>Calm (0)</span>
-    <span>Pressure: ${Math.round(pct)}</span>
+    <span>Pressure: ${Math.round(pct)} <span style="color:${deltaColor};margin-left:4px">(${deltaText}/t)</span></span>
     <span>Crisis (100)</span>
   </div>`;
 
@@ -611,8 +792,31 @@ function renderResistancePanel() {
       <div class="faction-name">"${r.faction.name}"</div>
       <div class="faction-leader">Led by ${r.faction.leader}</div>
       <div class="faction-disposition ${dispCls}">Stance: ${dispLabel}</div>
-      ${r.faction.formalInfluence ? '<div class="faction-influence">🏛️ Has formal influence in governance</div>' : ''}
-      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">
+      ${r.faction.formalInfluence ? '<div class="faction-influence">🏛️ Has formal influence in governance</div>' : ''}`;
+
+    // Faction motivation
+    let motivationText = '';
+    if (r.pressure >= 60) {
+      const lagState2 = window.getPolicyLagState ? window.getPolicyLagState() : null;
+      const trustState = window.getTrustState ? window.getTrustState() : null;
+      if (lagState2?.activeChanges?.length > 0) motivationText += 'Contested policies are fueling discontent. ';
+      if (trustState && trustState.institutional < 0.4) motivationText += 'Institutional trust is low \u2014 the people question authority. ';
+      if (trustState && trustState.interpersonal < 0.4) motivationText += 'Social bonds are fraying \u2014 suspicion runs deep. ';
+    }
+    if (!motivationText && r.faction.active) motivationText = 'General discontent with the direction of governance.';
+    if (motivationText) {
+      html += `<div style="font-size:11px;color:var(--text-dim);font-style:italic;margin-top:6px;padding:4px 6px;background:rgba(0,0,0,0.1);border-radius:3px">${motivationText}</div>`;
+    }
+
+    // Suggested approaches
+    html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px">';
+    if (r.faction.disposition === 'cooperative') html += 'The faction is open to dialogue. Negotiation is most effective now.';
+    else if (r.faction.disposition === 'skeptical') html += 'The faction doubts your intentions. Consider reversing contested policies or making binding promises.';
+    else if (r.faction.disposition === 'hostile') html += 'The faction is hostile. Suppression may be needed, but will increase future resistance. Consider major concessions.';
+    else if (r.faction.disposition === 'radical') html += 'The faction has radicalized. Negotiation is impossible \u2014 only suppression or complete policy reversal will help.';
+    html += '</div>';
+
+    html += `<div style="font-size:11px;color:var(--text-dim);margin-top:6px">
         Suppressions: ${r.suppressionCount} · Recurrence multiplier: ${r.recurrenceMultiplier.toFixed(2)}x
       </div>
     </div>`;
@@ -631,6 +835,51 @@ function renderResistancePanel() {
       }
       html += '</div>';
     }
+
+    // ── Resolution Actions ──
+    html += '<h3 style="margin-top:14px">Response Options</h3>';
+    html += '<div class="resistance-actions" style="display:flex;flex-direction:column;gap:8px;">';
+
+    // Suppress — always available when faction active
+    const matCost = Math.ceil((gameState.population?.total || 20) * 0.15);
+    html += `<button class="detail-btn" style="text-align:left;padding:8px 10px" onclick="window.showConfirmDialog(
+      'Suppress Resistance',
+      'Order a crackdown on the faction. This will reduce pressure by ~30 but increase future resistance and damage trust.\\n\\nCosts: ~${matCost} materials, legitimacy, satisfaction, trust damage.\\nRecurrence multiplier increases permanently (+0.15).',
+      () => { window.suppressResistance(); if(window.renderGovernanceOverlay) window.renderGovernanceOverlay(); }
+    )">
+      🔨 Suppress <span style="font-size:11px;color:var(--text-dim);margin-left:6px">−30 pressure, +recurrence</span>
+    </button>`;
+
+    // Negotiate — only if not radical
+    if (r.faction.disposition !== 'radical') {
+      html += `<button class="detail-btn" style="text-align:left;padding:8px 10px" onclick="window.showResistanceNegotiationDialog()">
+        🤝 Negotiate <span style="font-size:11px;color:var(--text-dim);margin-left:6px">concessions for peace</span>
+      </button>`;
+    } else {
+      html += `<button class="detail-btn" disabled style="text-align:left;padding:8px 10px;opacity:0.4">
+        🤝 Negotiate <span style="font-size:11px;color:var(--text-dim);margin-left:6px">faction too radical</span>
+      </button>`;
+    }
+
+    // Reverse contested policy — show active lag policies as options
+    const lagState = window.getPolicyLagState ? window.getPolicyLagState() : null;
+    if (lagState && lagState.activeChanges && lagState.activeChanges.length > 0) {
+      html += '<div style="margin-top:4px;font-size:12px;color:var(--text-dim)">Reverse a contested policy:</div>';
+      for (const change of lagState.activeChanges) {
+        const legCost = { cooperative: 2, skeptical: 4, hostile: 7, radical: 12 }[r.faction.disposition] || 4;
+        html += `<button class="detail-btn" style="text-align:left;padding:6px 10px;font-size:12px" onclick="window.showConfirmDialog(
+          'Reverse Policy: ${change.policy}',
+          'Abandon this policy change to reduce resistance pressure by ~20.\\n\\nCost: ${legCost} legitimacy.',
+          () => { window.reverseContestedPolicy('${change.policy}'); if(window.renderGovernanceOverlay) window.renderGovernanceOverlay(); }
+        )">
+          ↩️ Reverse: ${change.policy} <span style="font-size:11px;color:var(--text-dim);margin-left:4px">−20 pressure, −${legCost} legitimacy</span>
+        </button>`;
+      }
+    } else {
+      html += '<div style="margin-top:4px;font-size:11px;color:var(--text-dim)">No active policy changes to reverse.</div>';
+    }
+
+    html += '</div>';
   } else {
     if (pct < 25) {
       html += '<p style="color:var(--text-dim);font-size:12px;">No organized opposition exists. Maintain trust to keep it that way.</p>';
@@ -738,7 +987,8 @@ function renderImmigrationPanel() {
   const imm = window.getImmigrationState ? window.getImmigrationState() : null;
   if (!imm) { el.innerHTML = '<p style="color:var(--text-dim)">Immigration system not active.</p>'; return; }
 
-  let html = '<h3>🚶 Immigration</h3>';
+  const totalImmigrants = imm.cohorts[0] + imm.cohorts[1] + imm.cohorts[2] + imm.parallelSociety.population;
+  let html = `<h3>🚶 Immigration${totalImmigrants > 0 ? ` <span style="font-size:13px;font-weight:normal;color:var(--text-dim)">(${totalImmigrants} total)</span>` : ''}</h3>`;
 
   // Pressure & arrivals
   html += `<div style="margin-top:12px;padding:8px;background:rgba(0,0,0,0.15);border-radius:4px;font-size:12px">
@@ -1203,6 +1453,7 @@ function selectGovernanceModel(modelKey) {
 // ---- POPULATION DETAILS ----
 
 let activePopTab = 'summary';
+let pyramidShowImmigrants = true;
 
 function openPopulationDetails() {
   renderPopulationDetails();
@@ -1393,24 +1644,35 @@ function renderPopPyramidTab() {
   const totalFemale = brackets.reduce((s, b) => s + b.female, 0);
   const sexRatio = totalFemale > 0 ? (totalMale / totalFemale * 100).toFixed(0) : '—';
 
-  // Find max bracket count for scaling (largest side)
+  // maxCount is recomputed after toggle below; keep a pre-toggle reference for now
   const maxCount = Math.max(1, ...brackets.map(b =>
+    Math.max(b.male + b.maleImm, b.female + b.femaleImm)
+  ));
+
+  // If toggle is off, zero out immigrant data in brackets
+  if (!pyramidShowImmigrants) {
+    for (const b of brackets) { b.maleImm = 0; b.femaleImm = 0; }
+  }
+
+  // Recompute maxCount after potential zeroing
+  const maxCountFinal = Math.max(1, ...brackets.map(b =>
     Math.max(b.male + b.maleImm, b.female + b.femaleImm)
   ));
 
   // Summary stats at top
   let html = `
     <div class="pyramid-summary">
-      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalPop + totalImmigrants}</div><div class="pyramid-stat-label">Total</div></div>
+      <div class="pyramid-stat"><div class="pyramid-stat-value">${s.totalPop + (pyramidShowImmigrants ? totalImmigrants : 0)}</div><div class="pyramid-stat-label">Total</div></div>
       <div class="pyramid-stat"><div class="pyramid-stat-value" style="color: #6ca0d4;">${totalMale}</div><div class="pyramid-stat-label">\u2642 Male</div></div>
       <div class="pyramid-stat"><div class="pyramid-stat-value" style="color: #d47ca0;">${totalFemale}</div><div class="pyramid-stat-label">\u2640 Female</div></div>
-      <div class="pyramid-stat"><div class="pyramid-stat-value">${sexRatio}</div><div class="pyramid-stat-label">Sex Ratio</div></div>
+      <div class="pyramid-stat" title="Males per 100 females. 100 = equal. Above 100 = more males, below 100 = more females."><div class="pyramid-stat-value">${sexRatio}</div><div class="pyramid-stat-label">♂ per 100 ♀</div></div>
       ${totalImmigrants > 0 ? `<div class="pyramid-stat"><div class="pyramid-stat-value">${totalImmigrants}</div><div class="pyramid-stat-label">Pipeline</div></div>` : ''}
     </div>
-    <div class="pyramid-legend">
+    <div class="pyramid-legend" style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;">
       <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #6ca0d4;"></div> Male</div>
       <div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #d47ca0;"></div> Female</div>
       ${totalImmigrants > 0 ? `<div class="pyramid-legend-item"><div class="pyramid-legend-swatch" style="background: #cc6644;"></div> Immigrants</div>` : ''}
+      ${totalImmigrants > 0 ? `<label class="pyramid-legend-item" style="cursor:pointer;user-select:none;"><input type="checkbox" ${pyramidShowImmigrants ? 'checked' : ''} onchange="window.togglePyramidImmigrants(this.checked)" style="margin-right:4px;">Show immigrants</label>` : ''}
     </div>
     <div class="pyramid-container">`;
 
@@ -1422,8 +1684,8 @@ function renderPopPyramidTab() {
 
     const leftCount = b.male + b.maleImm;
     const rightCount = b.female + b.femaleImm;
-    const leftPct = (leftCount / maxCount) * 100;
-    const rightPct = (rightCount / maxCount) * 100;
+    const leftPct = (leftCount / maxCountFinal) * 100;
+    const rightPct = (rightCount / maxCountFinal) * 100;
 
     // Left bar: male citizens + male immigrants
     let leftStyle;
@@ -1961,8 +2223,8 @@ function renderCohesionOverlay() {
   const minVal = Math.min(...pillarValues);
   const lowestPillar = pillars.find(p => c[p.key] === minVal);
 
-  const fmt = d => d !== 0 ? `<span class="cohesion-delta ${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : ''}${Math.round(d)}</span>` : '';
-  const roundVal = v => Math.round(v);
+  const fmt = d => Math.abs(d) >= 0.005 ? `<span class="cohesion-delta ${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : ''}${d.toFixed(2)}</span>` : '';
+  const fmtVal = v => v.toFixed(2);
 
   let html = `<div class="cohesion-overview">
     <div class="cohesion-total-row">
@@ -1970,20 +2232,20 @@ function renderCohesionOverlay() {
       <span class="cohesion-total-status" style="color:${status.color}">${status.status}</span>
     </div>
     <div class="cohesion-total-desc">Total cohesion is a weighted average of four pillars (70% average, 30% minimum). The lowest pillar exerts extra drag on the whole.</div>
-    ${minVal < 40 ? `<div class="cohesion-warning">⚠️ <strong>${lowestPillar.name}</strong> is your weakest pillar at ${roundVal(minVal)} — it is pulling the whole society down.</div>` : ''}
+    ${minVal < 40 ? `<div class="cohesion-warning">⚠️ <strong>${lowestPillar.name}</strong> is your weakest pillar at ${fmtVal(minVal)} — it is pulling the whole society down.</div>` : ''}
   </div>
   <div class="cohesion-pillars">`;
 
   for (const pillar of pillars) {
     const val = c[pillar.key];
-    const delta = Math.round(projected[pillar.key] ?? 0);
+    const delta = projected[pillar.key] ?? 0;
     const isLowest = pillar.key === lowestPillar.key;
 
     html += `<div class="cohesion-pillar-card${isLowest ? ' lowest' : ''}">
       <div class="cohesion-pillar-header">
         <span class="cohesion-pillar-icon">${pillar.icon}</span>
         <span class="cohesion-pillar-name">${pillar.name}</span>
-        <span class="cohesion-pillar-val">${roundVal(val)}${fmt(delta)}</span>
+        <span class="cohesion-pillar-val">${fmtVal(val)}${fmt(delta)}</span>
       </div>
       <div class="cohesion-pillar-bar-wrap">
         <div class="cohesion-pillar-bar" style="width:${val}%;background:${pillarBarColor(val)}"></div>
@@ -1995,11 +2257,169 @@ function renderCohesionOverlay() {
       html += `<div class="cohesion-driver ${driver.type}">${driver.text}</div>`;
     }
 
-    html += `</div></div>`;
+    html += `</div>`;
+    html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:11px;color:var(--text-dim)">Numeric breakdown</summary>${renderPillarBreakdownInline(pillar.key)}</details>`;
+    html += `</div>`;
   }
 
   html += `</div>`;
   document.getElementById('cohesion-overlay-content').innerHTML = html;
+}
+
+function showPillarBreakdown(pillarKey) {
+  const breakdown = window.getCohesionBreakdown ? window.getCohesionBreakdown(pillarKey) : [];
+  const names = { identity: 'Identity', legitimacy: 'Legitimacy', satisfaction: 'Satisfaction', bonds: 'Bonds' };
+  const icons = { identity: '🧬', legitimacy: '⚖️', satisfaction: '🌻', bonds: '🤝' };
+  const val = gameState.cohesion[pillarKey];
+  const projected = window.previewCohesionDeltas ? window.previewCohesionDeltas() : {};
+  const delta = projected[pillarKey] ?? 0;
+  const fmtDelta = delta.toFixed(2);
+
+  let html = `<div style="text-align:center;margin-bottom:12px">
+    <div style="font-size:24px">${icons[pillarKey]}</div>
+    <div style="font-size:18px;font-weight:bold;color:var(--text-gold)">${names[pillarKey]}: ${val.toFixed(2)}</div>
+    ${Math.abs(delta) >= 0.005 ? `<div style="font-size:13px;color:${delta > 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">Projected: ${delta > 0 ? '+' : ''}${fmtDelta} next turn</div>` : '<div style="font-size:13px;color:var(--text-dim)">No change projected</div>'}
+  </div>`;
+
+  if (breakdown.length === 0) {
+    html += `<div style="color:var(--text-dim);text-align:center">No active influences detected</div>`;
+  } else {
+    html += `<div style="display:flex;flex-direction:column;gap:4px">`;
+    for (const item of breakdown) {
+      const sign = item.value > 0 ? '+' : '';
+      const color = item.value > 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(0,0,0,0.15);border-radius:4px;font-size:12px">
+        <span>${item.label}</span>
+        <strong style="color:${color};min-width:50px;text-align:right">${sign}${item.value.toFixed(2)}</strong>
+      </div>`;
+    }
+    html += `</div>`;
+    const totalDelta = breakdown.reduce((s, i) => s + i.value, 0);
+    html += `<div style="display:flex;justify-content:space-between;padding:6px 8px;margin-top:6px;border-top:1px solid var(--border);font-size:13px;font-weight:bold">
+      <span>Net influence</span>
+      <span style="color:${totalDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}">${totalDelta >= 0 ? '+' : ''}${totalDelta.toFixed(2)}</span>
+    </div>`;
+  }
+
+  html += `<div style="font-size:11px;color:var(--text-dim);margin-top:8px;text-align:center">
+    Note: Some influences (events, traditions firing, crime) are intermittent and may not show here.
+  </div>`;
+
+  if (window.showConfirmDialogNonDestructive) {
+    window.showConfirmDialogNonDestructive(
+      `${names[pillarKey]} Breakdown`,
+      html,
+      'Close',
+      '',
+      () => {}
+    );
+    // Hide the cancel button since this is info-only
+    const cancelBtn = document.getElementById('confirm-cancel');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
+}
+
+function renderPillarBreakdownInline(pillarKey) {
+  const breakdown = window.getCohesionBreakdown ? window.getCohesionBreakdown(pillarKey) : [];
+  if (breakdown.length === 0) return '<div style="font-size:11px;color:var(--text-dim);margin-top:4px">No active influences</div>';
+  let html = '<div style="margin-top:6px;display:flex;flex-direction:column;gap:2px">';
+  for (const item of breakdown) {
+    const sign = item.value > 0 ? '+' : '';
+    const color = item.value > 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+    html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 6px;background:rgba(0,0,0,0.1);border-radius:3px">
+      <span>${item.label}</span>
+      <strong style="color:${color}">${sign}${item.value.toFixed(2)}</strong>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function showResourceBreakdown(type) {
+  const inc = window.calculateIncome ? window.calculateIncome() : null;
+  if (!inc) return;
+
+  const isFood = type === 'food';
+  const title = isFood ? '🌾 Food Breakdown' : '🪵 Materials Breakdown';
+  const current = isFood ? gameState.resources.food : gameState.resources.materials;
+
+  const rows = [];
+
+  const isWinter = window.SEASONS && window.SEASONS[gameState.season] === 'Winter';
+  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
+  const tradCosts = (window.getProjectedTraditionCosts && gameState?.traditions) ? window.getProjectedTraditionCosts() : { food: 0, materials: 0 };
+  const crimeState = window.getCrimeState ? window.getCrimeState() : null;
+
+  if (isFood) {
+    const workerFood = inc.foodIncome - (inc.immigrantFoodYield || 0);
+    if (workerFood > 0)                rows.push({ label: 'Worker production', value: workerFood, pos: true });
+    if (inc.immigrantFoodYield > 0)    rows.push({ label: '🚶 Immigrant labor', value: inc.immigrantFoodYield, pos: true });
+    const bd = inc.foodBreakdown || {};
+    if (bd.adults > 0)        rows.push({ label: `👥 Working adults (×${window.FOOD_PER_POP})`, value: -bd.adults, pos: false });
+    if (bd.workingElders > 0) rows.push({ label: `🧓 Working elders (×${window.FOOD_PER_POP})`, value: -bd.workingElders, pos: false });
+    if (bd.retiredElders > 0) rows.push({ label: `🧓 Retired elders (×${window.FOOD_PER_ELDER || 1})`, value: -bd.retiredElders, pos: false });
+    if (bd.children > 0)      rows.push({ label: '👶 Children', value: -bd.children, pos: false });
+    if (bd.builders > 0)      rows.push({ label: '🔨 Builders (×2)', value: -bd.builders, pos: false });
+    if (bd.training > 0)      rows.push({ label: '⚔️ Units in training (×2)', value: -bd.training, pos: false });
+    if (bd.immigrants > 0)    rows.push({ label: '🚶 Immigrants', value: -bd.immigrants, pos: false });
+    if (bd.units > 0)         rows.push({ label: '🛡️ Unit upkeep', value: -bd.units, pos: false });
+    if (winterCost > 0)       rows.push({ label: '❄️ Winter penalty', value: -winterCost, pos: false });
+    if (tradCosts.food > 0)   rows.push({ label: '🎭 Traditions (due this turn)', value: -tradCosts.food, pos: false });
+    if (crimeState && crimeState.theft > 1) {
+      const projFood = Math.max(0, gameState.resources.food + inc.netFood);
+      let theft = Math.floor(projFood * 0.02 * crimeState.theft);
+      if (crimeState.organizedPredation) theft *= 2;
+      if (theft > 0) rows.push({ label: '🔪 Crime theft', value: -theft, pos: false });
+    }
+  } else {
+    const workerMat = inc.matIncome - (inc.immigrantMatYield || 0);
+    if (workerMat > 0)              rows.push({ label: 'Worker production', value: workerMat, pos: true });
+    if (inc.immigrantMatYield > 0)  rows.push({ label: '🚶 Immigrant labor', value: inc.immigrantMatYield, pos: true });
+    if (inc.matUpkeep > 0)          rows.push({ label: 'Building upkeep', value: -inc.matUpkeep, pos: false });
+    if (tradCosts.materials > 0)    rows.push({ label: '🎭 Traditions (due this turn)', value: -tradCosts.materials, pos: false });
+    if (crimeState && crimeState.theft > 1) {
+      const projMat = Math.max(0, gameState.resources.materials + inc.netMat);
+      let theft = Math.floor(projMat * 0.01 * crimeState.theft);
+      if (crimeState.organizedPredation) theft *= 2;
+      if (theft > 0) rows.push({ label: '🔪 Crime theft', value: -theft, pos: false });
+    }
+    const imm = gameState?.immigration;
+    if (imm?.interventionActive === 'integration' || imm?.interventionActive === 'coercive') {
+      const cost = Math.ceil(gameState.population.total * 0.05);
+      rows.push({ label: '🚶 Integration program', value: -cost, pos: false });
+    }
+  }
+
+  const net = isFood
+    ? inc.netFood - winterCost - (inc.projectedFoodDrains || 0)
+    : inc.netMat - (inc.projectedMatDrains || 0);
+  const netColor = net >= 0 ? 'var(--accent-green)' : 'var(--accent-red)';
+
+  let html = `<div style="text-align:center;margin-bottom:12px">
+    <div style="font-size:18px;font-weight:bold;color:var(--text-gold)">Current stockpile: ${current}</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:4px">`;
+
+  for (const row of rows) {
+    const color = row.pos ? 'var(--accent-green)' : 'var(--accent-red)';
+    const sign = row.value > 0 ? '+' : '';
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:rgba(0,0,0,0.15);border-radius:4px;font-size:12px">
+      <span>${row.label}</span>
+      <strong style="color:${color};min-width:40px;text-align:right">${sign}${row.value}</strong>
+    </div>`;
+  }
+
+  html += `</div>
+  <div style="display:flex;justify-content:space-between;padding:6px 8px;margin-top:6px;border-top:1px solid var(--border);font-size:13px;font-weight:bold">
+    <span>Net per turn</span>
+    <span style="color:${netColor}">${net >= 0 ? '+' : ''}${net}</span>
+  </div>`;
+
+  if (window.showConfirmDialogNonDestructive) {
+    window.showConfirmDialogNonDestructive(title, html, 'Close', '', () => {});
+    const cancelBtn = document.getElementById('confirm-cancel');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
 }
 
 export {
@@ -2015,5 +2435,18 @@ export {
   renderPopulationDetails,
   openGameMenu,
   closeGameMenu,
-  renderCohesionOverlay
+  renderCohesionOverlay,
+  showPillarBreakdown,
+  renderPillarBreakdownInline,
+  showResourceBreakdown,
+  togglePyramidImmigrants,
+  showResistanceNegotiationDialog,
+  confirmCommitPolicy,
+  confirmAbandonPolicy,
+  confirmForcePolicy
 };
+
+function togglePyramidImmigrants(checked) {
+  pyramidShowImmigrants = checked;
+  renderPopPyramidTab();
+}

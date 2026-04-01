@@ -97,7 +97,7 @@
     background: var(--bg-panel); border: 1px solid var(--border-gold);
     border-radius: 8px; padding: 20px 24px; max-width: min(400px, calc(90vw / var(--ui-scale))); width: 90%;
     box-shadow: 0 8px 40px rgba(0,0,0,0.6);
-    /* NOT zoomed — always readable regardless of scale */
+    zoom: var(--ui-scale);
   }
   .settings-box h2 {
     font-family: 'Almendra', serif; font-size: 18px; color: var(--text-gold);
@@ -973,6 +973,13 @@
                  1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9);
     white-space: nowrap; user-select: none;
   }
+  .map-settlement-label {
+    position: absolute; transform: translate(-50%, -50%);
+    font-family: 'Almendra', serif; font-size: 14px; font-weight: bold; color: #ffe8a0;
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.95), -1px -1px 0 rgba(0,0,0,0.95),
+                 1px -1px 0 rgba(0,0,0,0.95), -1px 1px 0 rgba(0,0,0,0.95);
+    white-space: nowrap; user-select: none; letter-spacing: 0.5px;
+  }
   #game-canvas { display: block; width: 100%; height: 100%; }
 
   #minimap {
@@ -1004,7 +1011,8 @@
   #region-toggle-btn.active { color: #f5e8b0; background: rgba(30,26,18,0.95); }
   #region-toggle-btn:hover { border-color: var(--border-gold); color: #f5e8b0; }
 
-  .pillar-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .pillar-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; margin: 0 -6px; border-radius: 4px; transition: background 0.15s ease; }
+  .pillar-row:hover { background: rgba(201,168,76,0.1); }
   .pillar-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .pillar-name { font-size: 13px; color: var(--text-dim); flex: 1; }
   .pillar-value { font-size: 14px; font-weight: 700; width: 60px; text-align: right; flex-shrink: 0; }

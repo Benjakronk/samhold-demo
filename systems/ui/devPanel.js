@@ -10,10 +10,38 @@ let devShowRiverVertices = false;
 let devHighlightRivers = new Set();
 let fogOfWarDisabled = false;
 
+// System toggles for playtesting — all enabled by default
+if (!window.devToggles) {
+  window.devToggles = {
+    // Turn processing systems
+    crime: true, immigration: true, events: true, births: true, aging: true,
+    resistance: true, governanceTurn: true, values: true,
+    classSystem: true, genderFormalization: true,
+    traditions: true, societyBuildings: true,
+    // Cohesion pillar influences
+    cohFoodSecurity: true, cohWorkingAge: true,
+    cohGovernance: true, cohPolicy: true, cohShelter: true,
+    cohDecay: true, cohKnowledge: true,
+    cohTerritoryStrain: true, cohTrustLimiter: true,
+    cohElderBonuses: true, cohHardship: true,
+    cohSatDependency: true, cohTransitionPenalty: true,
+    cohTimeStability: true,
+  };
+}
+
+export function devToggleSystem(sys, enabled) {
+  window.devToggles[sys] = enabled;
+}
+
+let _devPanelListenersRegistered = false;
+
 export function initDevPanel(gameStateRef) {
   gameState = gameStateRef;
 
-  // Wire dev panel button event listeners
+  // Wire dev panel button event listeners — only once, even if initDevPanel is called again on restart
+  if (!_devPanelListenersRegistered) {
+    _devPanelListenersRegistered = true;
+
   const devBtn = document.getElementById('dev-btn');
   const devClose = document.getElementById('dev-close');
   const devOverlay = document.getElementById('dev-overlay');
@@ -25,9 +53,10 @@ export function initDevPanel(gameStateRef) {
   if (devOverlay) devOverlay.addEventListener('click', (e) => {
     if (e.target === devOverlay) closeDevOverlay();
   });
-  if (devApplyLive) devApplyLive.addEventListener('click', () => {
+  if (devApplyLive) devApplyLive.addEventListener('click', (e) => {
+    e.stopPropagation();
     applyDevValues();
-    closeDevOverlay();
+    renderDevTabContent();
   });
   if (devApplyRestart) devApplyRestart.addEventListener('click', () => {
     applyDevValues();
@@ -49,10 +78,11 @@ export function initDevPanel(gameStateRef) {
     window.updateAllUI();
   });
 
-  // Show dev button only in dev mode
-  if (window.DEV_MODE && devBtn) {
-    devBtn.style.display = '';
-  }
+  } // end _devPanelListenersRegistered guard
+
+  // Show dev button only in dev mode (runs every init in case of restart)
+  const devBtn2 = document.getElementById('dev-btn');
+  if (window.DEV_MODE && devBtn2) devBtn2.style.display = '';
 }
 
 export function openDevOverlay() {
@@ -188,11 +218,18 @@ export function renderDevTabContent() {
       </div>
 
       <div class="dev-group">
-        <div class="dev-group-title">⚖️ Consumption Rates (Apply Live)</div>
+        <div class="dev-group-title">⚖️ Consumption Rates (instant)</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
-          ${devRow('Food per pop/turn', 'dev-food-per-pop', window.FOOD_PER_POP)}
+          ${devRow('Food per adult/turn', 'dev-food-per-pop', window.FOOD_PER_POP)}
           ${devRow('Food per child/turn', 'dev-food-per-child', window.FOOD_PER_CHILD)}
+          ${devRow('Food per elder/turn', 'dev-food-per-elder', window.FOOD_PER_ELDER)}
+          ${devRow('Winter food per pop', 'dev-winter-food', window.WINTER_FOOD_PER_POP ?? 0.5)}
         </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Immigrants use the adult rate. Winter cost = ceil(pop × winter rate), applied once per winter turn.</div>
+        <div style="margin-top:4px">
+          ${devRow('Nursing income penalty', 'dev-nursing-penalty', window.NURSING_LABOR_PENALTY ?? 0.5)}
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">0 = no penalty, 0.5 = default. Reduces food/mat income proportional to nursing mothers in workforce.</div>
       </div>
 
       <div class="dev-group">
@@ -205,16 +242,26 @@ export function renderDevTabContent() {
       </div>
 
     </div>`;
+    setTimeout(() => {
+      const pairs = [
+        ['dev-food-per-pop',     v => { window.FOOD_PER_POP   = parseInt(v) || 0; }],
+        ['dev-food-per-child',   v => { window.FOOD_PER_CHILD  = parseInt(v) || 0; }],
+        ['dev-food-per-elder',   v => { window.FOOD_PER_ELDER  = parseInt(v) || 0; }],
+        ['dev-winter-food',      v => { window.WINTER_FOOD_PER_POP  = Math.max(0, parseFloat(v) || 0); }],
+        ['dev-nursing-penalty',  v => { window.NURSING_LABOR_PENALTY = Math.max(0, Math.min(1, parseFloat(v) || 0)); }],
+      ];
+      for (const [id, apply] of pairs) {
+        const el = document.getElementById(id);
+        if (el) el.oninput = () => apply(el.value);
+      }
+    }, 0);
   } else if (devActiveTab === 'population') {
     html = `<div class="dev-grid-2col">
       <div>` +
       devGroup('\u{1F476}', 'Birth & Growth', [
         devRow('Base birth rate', 'dev-birth-rate', window.BASE_BIRTH_RATE || 0.10),
         devRow('Working age', 'dev-working-age', window.WORKING_AGE),
-      ]) + `</div><div>` +
-      devGroup('\u{1F37D}\uFE0F', 'Child Consumption', [
-        devRow('Food per child/turn', 'dev-food-per-child', window.FOOD_PER_CHILD),
-      ]) + `</div></div>
+      ]) + `</div><div></div></div>
       <div class="dev-population-display">
         <h4>Population Editor</h4>
         <div class="dev-pop-section">
@@ -259,6 +306,109 @@ export function renderDevTabContent() {
         birthRateEl.value = (window.BASE_BIRTH_RATE || 0.10).toFixed(2);
       }
     }, 0);
+  } else if (devActiveTab === 'cohesion') {
+    const c = gameState.cohesion;
+    const status = window.getCohesionStatus ? window.getCohesionStatus() : { label: '?', color: '#888' };
+    const strain = window.getTerritoryGovernanceStrain ? window.getTerritoryGovernanceStrain() : { legitimacy: 0, bonds: 0 };
+    const t = window.devToggles || {};
+
+    function cohToggle(key, label) {
+      const on = t[key] !== false;
+      return `<label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer;padding:3px 5px;background:rgba(0,0,0,0.15);border-radius:3px">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="window.devToggleSystem('${key}',this.checked)">
+        <span style="color:${on ? 'var(--text-light)' : 'var(--text-dim)'}">${label}</span>
+      </label>`;
+    }
+
+    html = `<div>
+      <h3 style="color:var(--text-gold);margin:0 0 8px">🏛️ Cohesion Pillars</h3>
+      <div style="font-size:12px;margin-bottom:8px">
+        Status: <strong style="color:${status.color}">${status.label}</strong> (Total: ${c.total})
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        ${['identity','legitimacy','satisfaction','bonds'].map(p => {
+          const val = Math.round(c[p]);
+          const color = val >= 80 ? '#5a8a4a' : val >= 60 ? '#6ca0d4' : val >= 40 ? '#c9a84c' : '#a94442';
+          return `<div style="background:rgba(0,0,0,0.2);padding:6px 8px;border-radius:4px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+              <span>${p.charAt(0).toUpperCase() + p.slice(1)}</span>
+              <strong style="color:${color}">${val}</strong>
+            </div>
+            <div style="height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${val}%;background:${color}"></div>
+            </div>
+            <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+              <button class="dev-btn" onclick="devSetCohesion('${p}',0)" style="font-size:10px;color:var(--accent-red)">0</button>
+              <button class="dev-btn" onclick="devSetCohesion('${p}',25)" style="font-size:10px">25</button>
+              <button class="dev-btn" onclick="devSetCohesion('${p}',50)" style="font-size:10px">50</button>
+              <button class="dev-btn" onclick="devSetCohesion('${p}',75)" style="font-size:10px">75</button>
+              <button class="dev-btn" onclick="devSetCohesion('${p}',100)" style="font-size:10px">100</button>
+              <button class="dev-btn" onclick="devAdjustCohesion('${p}',-5)" style="font-size:10px;color:var(--accent-red)">−5</button>
+              <button class="dev-btn" onclick="devAdjustCohesion('${p}',5)" style="font-size:10px">+5</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="dev-btn" onclick="devMaxCohesion(); renderDevTabContent();" style="font-size:11px">💎 Max All (100)</button>
+        <button class="dev-btn" onclick="devMinCohesion(); renderDevTabContent();" style="font-size:11px;color:var(--accent-red)">💀 Min All (1)</button>
+        <button class="dev-btn" onclick="devSetAllCohesion(50); renderDevTabContent();" style="font-size:11px">⚖️ Balanced (50)</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);padding:4px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:12px">
+        Territory governance strain: Legitimacy −${strain.legitimacy.toFixed(2)}/t, Bonds −${strain.bonds.toFixed(2)}/t
+      </div>
+
+      <h4 style="color:var(--text-light);margin:0 0 6px;font-size:13px">🔧 System Toggles</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:12px">
+        ${cohToggle('crime','Crime')}
+        ${cohToggle('immigration','Immigration')}
+        ${cohToggle('events','Random Events')}
+        ${cohToggle('resistance','Resistance')}
+        ${cohToggle('governanceTurn','Gov. Turn Effects')}
+        ${cohToggle('values','Values')}
+        ${cohToggle('traditions','Traditions')}
+        ${cohToggle('societyBuildings','Society Buildings')}
+        ${cohToggle('classSystem','Class System')}
+        ${cohToggle('genderFormalization','Gender Formal.')}
+        ${cohToggle('births','Births')}
+        ${cohToggle('aging','Aging')}
+      </div>
+
+      <h4 style="color:var(--text-light);margin:0 0 6px;font-size:13px">📊 Pillar Influence Toggles</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:12px">
+        ${cohToggle('cohFoodSecurity','Food Security → Sat')}
+        ${cohToggle('cohWorkingAge','Working Age → Sat/Know')}
+        ${cohToggle('cohGovernance','Gov. Model Effects')}
+        ${cohToggle('cohPolicy','Policy Effects')}
+        ${cohToggle('cohShelter','Shelter → Sat')}
+        ${cohToggle('cohDecay','Baseline Decay (all)')}
+        ${cohToggle('cohKnowledge','Knowledge → Identity')}
+        ${cohToggle('cohTerritoryStrain','Territory Strain')}
+        ${cohToggle('cohTrustLimiter','Trust Rate Limiter')}
+        ${cohToggle('cohElderBonuses','Elder Bonuses')}
+        ${cohToggle('cohHardship','Shared Hardship → Bonds')}
+        ${cohToggle('cohSatDependency','Sat. Dependency → Legit')}
+        ${cohToggle('cohTransitionPenalty','Gov. Transition Penalty')}
+        ${cohToggle('cohTimeStability','Time Stability → Legit')}
+      </div>
+      <div style="display:flex;gap:4px;margin-bottom:12px">
+        <button class="dev-btn" style="font-size:11px" onclick="Object.keys(window.devToggles).forEach(k=>{window.devToggles[k]=true}); renderDevTabContent();">✅ Enable All</button>
+        <button class="dev-btn" style="font-size:11px;color:var(--accent-red)" onclick="Object.keys(window.devToggles).forEach(k=>{window.devToggles[k]=false}); renderDevTabContent();">⛔ Disable All</button>
+        <button class="dev-btn" style="font-size:11px" onclick="Object.keys(window.devToggles).filter(k=>k.startsWith('coh')).forEach(k=>{window.devToggles[k]=false}); renderDevTabContent();">🔇 Freeze Pillars</button>
+      </div>
+
+      <h4 style="color:var(--text-light);margin:0 0 6px;font-size:13px">⏩ Time Controls</h4>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="dev-btn" onclick="devAdvanceTurns(1)" style="font-size:11px">+1 Turn</button>
+        <button class="dev-btn" onclick="devAdvanceTurns(4)" style="font-size:11px">+4 (1 Year)</button>
+        <button class="dev-btn" onclick="devAdvanceTurns(12)" style="font-size:11px">+12 (3 Years)</button>
+        <button class="dev-btn" onclick="devAdvanceTurns(20)" style="font-size:11px">+20 (5 Years)</button>
+        <button class="dev-btn" onclick="devAdvanceTurns(40)" style="font-size:11px">+40 (10 Years)</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim)">
+        Turn ${gameState.turn} · ${window.SEASONS?.[gameState.turn % 4] || '?'} · Year ${Math.floor(gameState.turn / 4) + 1}
+      </div>
+    </div>`;
   } else if (devActiveTab === 'governance') {
     html = `<div class="dev-grid-2col">
       <div>` +
@@ -266,10 +416,19 @@ export function renderDevTabContent() {
         { label: 'Current Model', content: `<span id="dev-gov-model">${window.GOVERNANCE_MODELS[gameState.governance.model].name}</span>` },
         { label: 'Transition Timer', content: `<span id="dev-gov-timer">${gameState.governance.modelChangeTimer}</span>` }
       ]) +
-      devGroup('\u{1F39B}\uFE0F', 'Policy Values', [
-        devRow('Freedom (0-100)', 'dev-policy-freedom', gameState.governance.policies.freedom),
-        devRow('Mercy (0-100)', 'dev-policy-mercy', gameState.governance.policies.mercy),
-        devRow('Tradition (0-100)', 'dev-policy-tradition', gameState.governance.policies.tradition),
+      devGroup('\u{1F39B}\uFE0F', 'Policies (instant, no consequences)', [
+        ...['freedom','mercy','tradition','isolation','workingAge'].map(p => {
+          const cur = p === 'workingAge' ? (window.WORKING_AGE ?? 10) : (gameState.governance.policies[p] ?? 50);
+          return { label: `${p} (${cur})`, content: `
+            <div style="display:flex;gap:3px;flex-wrap:wrap">
+              ${p === 'workingAge'
+                ? [6,8,10,12,14,16].map(v => `<button class="dev-btn" onclick="devSetPolicy('${p}',${v})" style="font-size:10px${cur===v?';color:var(--text-gold)':''}">${v}</button>`).join('')
+                : [0,20,40,50,60,80,100].map(v => `<button class="dev-btn" onclick="devSetPolicy('${p}',${v})" style="font-size:10px${cur===v?';color:var(--text-gold)':''}">${v}</button>`).join('')
+              }
+              <input type="number" id="dev-policy-${p}" value="${cur}" min="${p==='workingAge'?6:0}" max="${p==='workingAge'?16:100}" style="width:44px;font-size:11px">
+              <button class="dev-btn" onclick="devSetPolicy('${p}',parseInt(document.getElementById('dev-policy-${p}').value))" style="font-size:10px">Set</button>
+            </div>` };
+        })
       ]) + `</div><div>` +
       devGroup('\u{1F3DB}\uFE0F', 'Cohesion Effects', [
         { label: 'Identity', content: `<span id="dev-cohesion-identity">${gameState.cohesion.identity}</span>` },
@@ -289,6 +448,70 @@ export function renderDevTabContent() {
           <button class="dev-btn" onclick="forceGovernanceModel()">Set</button>
         ` }
       ]) + `</div></div>`;
+  } else if (devActiveTab === 'territory') {
+    const territory = gameState.territory;
+    const territorySize = territory ? territory.size : 0;
+    const claimedSize = gameState.claimedHexes ? gameState.claimedHexes.size : 0;
+    const threshold = window.TERRITORY_GOVERNANCE_THRESHOLD || 25;
+    const strain = window.getTerritoryGovernanceStrain ? window.getTerritoryGovernanceStrain() : { legitimacy: 0, bonds: 0 };
+    const expPoints = gameState.expansionPoints || 0;
+    const adminWorkers = window.getAdminHallWorkerCount ? window.getAdminHallWorkerCount() : 0;
+
+    html = `<div>
+      <h3 style="color:var(--text-gold);margin:0 0 8px">🗺️ Territory State</h3>
+      <div style="font-size:12px;margin-bottom:8px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px">
+        <div>Total territory: <strong>${territorySize}</strong> hexes (threshold: ${threshold})</div>
+        <div>Claimed hexes: <strong>${claimedSize}</strong> (non-core)</div>
+        <div>Expansion points: <strong>${expPoints.toFixed(1)}</strong></div>
+        <div>Admin Hall workers: <strong>${adminWorkers}</strong> (${(adminWorkers * 0.5).toFixed(1)} pts/turn)</div>
+        <div>Governance strain: Leg −${strain.legitimacy.toFixed(2)}/t, Bonds −${strain.bonds.toFixed(2)}/t</div>
+      </div>
+
+      <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">🏘️ Settlements</h4>`;
+
+    for (let i = 0; i < gameState.settlements.length; i++) {
+      const s = gameState.settlements[i];
+      const healthPct = Math.round((s.health / s.maxHealth) * 100);
+      const healthColor = healthPct > 70 ? '#5a8a4a' : healthPct > 40 ? '#c9a84c' : '#a94442';
+      html += `
+        <div style="padding:6px 8px;background:rgba(0,0,0,0.2);border-radius:4px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;font-size:13px">
+            <strong>${s.name || '(unnamed)'}</strong>
+            <span>(${s.col}, ${s.row}) · r=${s.coreRadius}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span style="font-size:11px;color:var(--text-dim)">HP:</span>
+            <div style="flex:1;height:8px;background:rgba(0,0,0,0.3);border-radius:4px;overflow:hidden">
+              <div style="height:100%;width:${healthPct}%;background:${healthColor}"></div>
+            </div>
+            <span style="font-size:11px;color:${healthColor}">${s.health}/${s.maxHealth}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:2px">Cultural strength: ${(s.culturalStrength || 0).toFixed(1)}</div>
+          <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+            <button class="dev-btn" onclick="devDamageSettlement(${i},20)" style="font-size:10px;color:var(--accent-red)">−20 HP</button>
+            <button class="dev-btn" onclick="devDamageSettlement(${i},50)" style="font-size:10px;color:var(--accent-red)">−50 HP</button>
+            <button class="dev-btn" onclick="devHealSettlement(${i})" style="font-size:10px">Full Heal</button>
+            <button class="dev-btn" onclick="devSetCulturalStrength(${i},20)" style="font-size:10px">Culture=20</button>
+          </div>
+        </div>`;
+    }
+
+    html += `
+      <h4 style="color:var(--text-light);margin:12px 0 4px;font-size:14px">🔧 Dev Controls</h4>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="dev-btn" onclick="devSetExpansionPoints(50)" style="font-size:11px">Set 50 pts</button>
+        <button class="dev-btn" onclick="devSetExpansionPoints(200)" style="font-size:11px">Set 200 pts</button>
+        <button class="dev-btn" onclick="devAddExpansionPoints(20)" style="font-size:11px">+20 pts</button>
+        <button class="dev-btn" onclick="devClearClaimedHexes()" style="font-size:11px;color:var(--accent-red)">Clear Claimed</button>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        <button class="dev-btn" onclick="devRunCulturalGrowth()" style="font-size:11px">Run Cultural Growth</button>
+        <button class="dev-btn" onclick="devRunExpansionPoints()" style="font-size:11px">Run Expansion Pts</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
+        Territory = settlement cores + claimed hexes. Governance strain starts at ${threshold} hexes.
+      </div>
+    </div>`;
   } else if (devActiveTab === 'buildings') {
     html = `<div class="dev-grid-2col">`;
     for (const [key, b] of Object.entries(window.BUILDINGS)) {
@@ -369,6 +592,100 @@ export function renderDevTabContent() {
         </div>
       </div>
     </div>`;
+  } else if (devActiveTab === 'culture') {
+    const culture = gameState.culture || {};
+    const traditions = window.getActiveTraditions ? window.getActiveTraditions() : [];
+    const stories = culture.stories || [];
+    const storytellers = culture.storytellers || 0;
+    const storyProgress = culture.storyProgress || 0;
+    const storyCapacity = storytellers * 4;
+    const regions = culture.namedRegions || [];
+    const features = culture.namedFeatures || [];
+    const accum = culture.societyBuildingAccumulators || { identity: 0, legitimacy: 0, satisfaction: 0, bonds: 0 };
+    const values = gameState.values || {};
+    const recognizedValues = (values.recognized || []);
+    const emergingValues = (values.emerging || []);
+
+    html = `<div class="dev-grid-2col">
+      <div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">🎭 Traditions</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          Active: <strong>${traditions.length}</strong>
+        </div>`;
+
+    if (traditions.length > 0) {
+      for (const t of traditions) {
+        html += `<div style="padding:3px 6px;background:rgba(0,0,0,0.15);border-radius:3px;margin-bottom:3px;font-size:11px">
+          <strong>${t.customName || t.name}</strong> · ${t.timesPerformed || 0}× · every ${t.customInterval || t.interval}y · ${t.customSeason || t.season}
+        </div>`;
+      }
+    } else {
+      html += `<div style="color:var(--text-dim);font-size:11px;font-style:italic">No traditions</div>`;
+    }
+
+    html += `
+        <div style="display:flex;gap:3px;margin-top:6px;flex-wrap:wrap">
+          <button class="dev-btn" onclick="devEstablishRandomTradition()" style="font-size:11px">Establish Random</button>
+        </div>
+
+        <h3 style="color:var(--text-gold);margin:12px 0 8px">📖 Oral Tradition</h3>
+        <div style="font-size:12px;margin-bottom:8px">
+          <div>Storytellers: <strong>${storytellers}</strong></div>
+          <div>Progress: <strong>${storyProgress.toFixed(2)}</strong></div>
+          <div>Stories: <strong>${stories.length}</strong> / ${storyCapacity} capacity</div>
+        </div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap">
+          <button class="dev-btn" onclick="devAddStoryteller()" style="font-size:11px">+1 Storyteller</button>
+          <button class="dev-btn" onclick="devRemoveStoryteller()" style="font-size:11px">−1 Storyteller</button>
+          <button class="dev-btn" onclick="devForceStory()" style="font-size:11px">Force Story</button>
+        </div>
+
+        <h3 style="color:var(--text-gold);margin:12px 0 8px">💎 Shared Values</h3>
+        <div style="font-size:12px">
+          <div>Recognized: <strong>${recognizedValues.length}</strong></div>`;
+    for (const v of recognizedValues) {
+      html += `<div style="font-size:11px;padding:2px 6px;background:rgba(0,0,0,0.1);border-radius:2px;margin:2px 0">${v.name || v.id} (str: ${(v.strength || 0).toFixed(1)})</div>`;
+    }
+    html += `
+          <div style="margin-top:4px">Emerging: <strong>${emergingValues.length}</strong></div>`;
+    for (const v of emergingValues) {
+      html += `<div style="font-size:11px;padding:2px 6px;background:rgba(0,0,0,0.1);border-radius:2px;margin:2px 0">${v.name || v.id} (prog: ${(v.progress || 0).toFixed(1)})</div>`;
+    }
+    html += `</div>
+      </div>
+      <div>
+        <h3 style="color:var(--text-gold);margin:0 0 8px">🏛️ Society Building Accumulators</h3>
+        <div style="font-size:12px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:4px;margin-bottom:8px">
+          <div>Identity: <strong>${accum.identity.toFixed(3)}</strong></div>
+          <div>Legitimacy: <strong>${accum.legitimacy.toFixed(3)}</strong></div>
+          <div>Satisfaction: <strong>${accum.satisfaction.toFixed(3)}</strong></div>
+          <div>Bonds: <strong>${accum.bonds.toFixed(3)}</strong></div>
+        </div>
+
+        <h3 style="color:var(--text-gold);margin:8px 0 8px">🗺️ Named Features</h3>
+        <div style="font-size:12px;margin-bottom:4px">
+          <div>Regions: <strong>${regions.length}</strong></div>
+          <div>Features (rivers/lakes/terrain): <strong>${features.length}</strong></div>
+        </div>`;
+
+    for (const r of regions) {
+      html += `<div style="font-size:11px;padding:2px 6px;background:rgba(0,0,0,0.1);border-radius:2px;margin:2px 0">${r.name} (${r.hexes.length} hexes)</div>`;
+    }
+
+    html += `
+        <h3 style="color:var(--text-gold);margin:12px 0 8px">⛪ Sacred Places</h3>`;
+    const sacredPlaces = (culture.sacredPlaces || []);
+    if (sacredPlaces.length > 0) {
+      for (const sp of sacredPlaces) {
+        html += `<div style="font-size:11px;padding:2px 6px;background:rgba(0,0,0,0.1);border-radius:2px;margin:2px 0">${sp.name || sp.type} @ (${sp.col},${sp.row})</div>`;
+      }
+    } else {
+      html += `<div style="color:var(--text-dim);font-size:11px;font-style:italic">No sacred places</div>`;
+    }
+
+    html += `
+      </div>
+    </div>`;
   } else if (devActiveTab === 'units') {
     html = `<div class="dev-grid-2col">
       <div>
@@ -388,8 +705,12 @@ export function renderDevTabContent() {
             <div style="font-weight:bold;font-size:13px">${unitType.icon} ${unitType.name}</div>
             <div style="color:var(--text-dim);font-size:11px">${costStr} \u2022 ${unitType.description}</div>
           </div>
-          <button class="dev-btn" onclick="devCreateUnit('${unitKey}')"
-                  style="font-size:11px;padding:3px 12px;min-width:60px;${!canAffordPop || !canAffordMaterials ? 'opacity:0.5;' : ''}">Create</button>
+          <div style="display:flex;gap:3px">
+            <button class="dev-btn" onclick="devCreateUnit('${unitKey}')"
+                    style="font-size:11px;padding:3px 8px;${!canAffordPop || !canAffordMaterials ? 'opacity:0.5;' : ''}">Create</button>
+            <button class="dev-btn" onclick="devCreateUnitFree('${unitKey}')"
+                    style="font-size:11px;padding:3px 8px;color:#6cb66c">Free</button>
+          </div>
         </div>`;
     }
 
@@ -828,16 +1149,24 @@ export function devGroup(icon, name, rows) {
   return `<div class="dev-group"><div class="dev-group-header"><span class="dev-group-icon">${icon}</span><span class="dev-group-name">${name}</span></div><div>${rowsHtml}</div></div>`;
 }
 
+const DEV_ROW_DECIMAL_IDS = {
+  'dev-birth-rate':      { step: '0.01', delta: 0.01, decimals: 2 },
+  'dev-nursing-penalty': { step: '0.05', delta: 0.05, decimals: 2 },
+  'dev-winter-food':     { step: '0.05', delta: 0.05, decimals: 2 },
+};
+
 export function devRow(label, id, value) {
-  const step = id === 'dev-birth-rate' ? '0.01' : '1';
-  const displayValue = id === 'dev-birth-rate' ? parseFloat(value).toFixed(2) : value;
+  const dec = DEV_ROW_DECIMAL_IDS[id];
+  const step = dec ? dec.step : '1';
+  const displayValue = dec ? parseFloat(value).toFixed(dec.decimals) : value;
   return `<div class="dev-row"><span class="dev-label">${label}</span><div class="dev-val"><button class="dev-btn" onclick="devAdjust('${id}',-1)">\u2212</button><input class="dev-input" id="${id}" type="number" value="${displayValue}" min="0" step="${step}"><button class="dev-btn" onclick="devAdjust('${id}',1)">+</button></div></div>`;
 }
 
 export function devAdjust(id, delta) {
   const el = document.getElementById(id);
-  if (id === 'dev-birth-rate') {
-    el.value = Math.max(0, (parseFloat(el.value || 0) + (delta * 0.01)).toFixed(2));
+  const dec = DEV_ROW_DECIMAL_IDS[id];
+  if (dec) {
+    el.value = Math.max(0, (parseFloat(el.value || 0) + (delta * dec.delta)).toFixed(dec.decimals));
   } else {
     el.value = Math.max(0, parseInt(el.value || 0) + delta);
   }
@@ -864,10 +1193,19 @@ function generateCohortControls() {
 }
 
 export function adjustAdults(delta) {
-  const newTotal = Math.max(1, gameState.population.total + delta);
-  gameState.population.total = newTotal;
-  gameState.population.idle = Math.max(0, newTotal - gameState.population.employed);
-  document.getElementById('dev-adults').value = newTotal;
+  if (delta > 0) {
+    if (window.addToAdultCohort) window.addToAdultCohort(25, delta);
+    gameState.population.total += delta;
+    gameState.population.idle += delta;
+  } else if (delta < 0) {
+    const remove = Math.min(Math.abs(delta), gameState.population.total - 1);
+    if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(remove);
+    gameState.population.total = Math.max(1, gameState.population.total - remove);
+    gameState.population.idle = Math.max(0, gameState.population.total - gameState.population.employed);
+  }
+  if (window.recomputeElderCount) window.recomputeElderCount();
+  const el = document.getElementById('dev-adults');
+  if (el) el.value = gameState.population.total;
   window.updateAllUI();
 }
 
@@ -929,6 +1267,12 @@ export function applyDevValues() {
   if (foodEl) { const v = parseInt(foodEl.value); window.FOOD_PER_POP = isNaN(v) ? 2 : v; }
   const foodChildEl = document.getElementById('dev-food-per-child');
   if (foodChildEl) { const v = parseInt(foodChildEl.value); window.FOOD_PER_CHILD = isNaN(v) ? 1 : v; }
+  const foodElderEl = document.getElementById('dev-food-per-elder');
+  if (foodElderEl) { const v = parseInt(foodElderEl.value); window.FOOD_PER_ELDER = isNaN(v) ? 1 : v; }
+  const winterFoodEl = document.getElementById('dev-winter-food');
+  if (winterFoodEl) { const v = parseFloat(winterFoodEl.value); window.WINTER_FOOD_PER_POP = isNaN(v) ? 0.5 : Math.max(0, v); }
+  const nursingPenaltyEl = document.getElementById('dev-nursing-penalty');
+  if (nursingPenaltyEl) { const v = parseFloat(nursingPenaltyEl.value); window.NURSING_LABOR_PENALTY = isNaN(v) ? 0.5 : Math.max(0, Math.min(1, v)); }
 
   const birthRateEl = document.getElementById('dev-birth-rate');
   if (birthRateEl) window.BASE_BIRTH_RATE = parseFloat(birthRateEl.value) || 0.10;
@@ -942,8 +1286,15 @@ export function applyDevValues() {
   const adultsEl = document.getElementById('dev-adults');
   if (adultsEl) {
     const newTotal = Math.max(1, parseInt(adultsEl.value) || 1);
+    const delta = newTotal - gameState.population.total;
+    if (delta > 0) {
+      if (window.addToAdultCohort) window.addToAdultCohort(25, delta);
+    } else if (delta < 0) {
+      if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(Math.abs(delta));
+    }
     gameState.population.total = newTotal;
     gameState.population.idle = Math.max(0, newTotal - gameState.population.employed);
+    if (window.recomputeElderCount) window.recomputeElderCount();
   }
 
   const freedomEl = document.getElementById('dev-policy-freedom');
@@ -1044,9 +1395,10 @@ export function devAddResource(key, amount) {
 
 export function devGiveResources() {
   gameState.resources.materials += 50;
-  gameState.population.idle += 25;
+  if (window.addToAdultCohort) window.addToAdultCohort(25, 25);
   gameState.population.total += 25;
-  if (window.addToAdultCohort) window.addToAdultCohort(20, 25);
+  gameState.population.idle += 25;
+  if (window.recomputeElderCount) window.recomputeElderCount();
 
   console.log('Gave +50 materials and +25 population');
   renderDevTabContent();
@@ -1070,9 +1422,10 @@ export function devSpawnThreat(threatType) {
 
 export function devAddPopulation() {
   if (gameState?.population) {
+    if (window.addToAdultCohort) window.addToAdultCohort(25, 10);
     gameState.population.total += 10;
     gameState.population.idle += 10;
-    if (window.addToAdultCohort) window.addToAdultCohort(20, 10);
+    if (window.recomputeElderCount) window.recomputeElderCount();
     window.updateAllUI();
     console.log('Added +10 population');
   }
@@ -1230,5 +1583,238 @@ export function devRandomizeSeed() {
   const seedInput = document.getElementById('seed-input');
   if (seedInput) {
     seedInput.value = newSeed;
+  }
+}
+
+// ---- Policy dev controls ----
+
+export function devSetPolicy(policy, value) {
+  const v = Math.max(0, Math.min(policy === 'workingAge' ? 16 : 100, parseInt(value) || 0));
+  if (policy === 'workingAge') {
+    window.WORKING_AGE = Math.max(6, v);
+  } else {
+    gameState.governance.policies[policy] = v;
+  }
+  // Clear any in-progress lag for this policy so the value takes effect immediately
+  if (gameState.policyLag) {
+    delete gameState.policyLag[policy];
+    if (gameState.policyLag.pending) delete gameState.policyLag.pending[policy];
+  }
+  window.updateAllUI();
+  renderDevTabContent();
+}
+
+// ---- Cohesion dev controls ----
+
+export function devSetCohesion(pillar, value) {
+  if (gameState?.cohesion) {
+    gameState.cohesion[pillar] = Math.max(0, Math.min(100, value));
+    if (window.calculateCohesion) window.calculateCohesion();
+    window.updateAllUI();
+    renderDevTabContent();
+  }
+}
+
+export function devAdjustCohesion(pillar, delta) {
+  if (gameState?.cohesion) {
+    gameState.cohesion[pillar] = Math.max(0, Math.min(100, gameState.cohesion[pillar] + delta));
+    if (window.calculateCohesion) window.calculateCohesion();
+    window.updateAllUI();
+    renderDevTabContent();
+  }
+}
+
+export function devSetAllCohesion(value) {
+  if (gameState?.cohesion) {
+    gameState.cohesion.identity = value;
+    gameState.cohesion.legitimacy = value;
+    gameState.cohesion.satisfaction = value;
+    gameState.cohesion.bonds = value;
+    if (window.calculateCohesion) window.calculateCohesion();
+    window.updateAllUI();
+  }
+}
+
+// ---- Time controls ----
+
+export function devAdvanceTurns(count) {
+  closeDevOverlay();
+  let i = 0;
+  function step() {
+    if (i >= count) {
+      window.updateAllUI();
+      if (window.setMapDirty) window.setMapDirty(true);
+      if (window.render) window.render();
+      return;
+    }
+    if (window.processTurn) window.processTurn();
+    i++;
+    // Small delay so the UI doesn't freeze for large counts
+    if (count > 4) {
+      setTimeout(step, 10);
+    } else {
+      step();
+    }
+  }
+  step();
+}
+
+// ---- Territory dev controls ----
+
+export function devDamageSettlement(index, damage) {
+  const s = gameState.settlements[index];
+  if (!s) return;
+  if (window.damageSettlement) {
+    window.damageSettlement(s.col, s.row, damage);
+  } else {
+    s.health = Math.max(0, s.health - damage);
+  }
+  window.updateAllUI();
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.render) window.render();
+  renderDevTabContent();
+}
+
+export function devHealSettlement(index) {
+  const s = gameState.settlements[index];
+  if (!s) return;
+  s.health = s.maxHealth;
+  window.updateAllUI();
+  renderDevTabContent();
+}
+
+export function devSetCulturalStrength(index, value) {
+  const s = gameState.settlements[index];
+  if (!s) return;
+  s.culturalStrength = value;
+  renderDevTabContent();
+}
+
+export function devSetExpansionPoints(value) {
+  gameState.expansionPoints = value;
+  window.updateAllUI();
+  renderDevTabContent();
+}
+
+export function devAddExpansionPoints(value) {
+  gameState.expansionPoints = (gameState.expansionPoints || 0) + value;
+  window.updateAllUI();
+  renderDevTabContent();
+}
+
+export function devClearClaimedHexes() {
+  if (gameState.claimedHexes) gameState.claimedHexes.clear();
+  if (window.recalcTerritory) window.recalcTerritory();
+  window.updateAllUI();
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.render) window.render();
+  renderDevTabContent();
+}
+
+export function devRunCulturalGrowth() {
+  if (window.processSettlementCulturalGrowth) {
+    const report = { events: [] };
+    window.processSettlementCulturalGrowth(report);
+    if (window.recalcTerritory) window.recalcTerritory();
+    window.updateAllUI();
+    if (window.setMapDirty) window.setMapDirty(true);
+    if (window.render) window.render();
+    renderDevTabContent();
+    console.log('Ran cultural growth step', report);
+  }
+}
+
+export function devRunExpansionPoints() {
+  if (window.processExpansionPoints) {
+    const report = { events: [] };
+    window.processExpansionPoints(report);
+    window.updateAllUI();
+    renderDevTabContent();
+    console.log('Ran expansion points step', report);
+  }
+}
+
+// ---- Culture dev controls ----
+
+export function devEstablishRandomTradition() {
+  const available = window.getAvailableTraditions ? window.getAvailableTraditions() : [];
+  if (available.length === 0) {
+    console.warn('No traditions available to establish');
+    return;
+  }
+  const pick = available[Math.floor(Math.random() * available.length)];
+  if (window.establishTradition) {
+    window.establishTradition(pick.id);
+    window.updateAllUI();
+    renderDevTabContent();
+    console.log('Established tradition:', pick.name);
+  }
+}
+
+export function devAddStoryteller() {
+  if (window.addStoryteller) {
+    window.addStoryteller();
+    window.updateAllUI();
+    renderDevTabContent();
+  }
+}
+
+export function devRemoveStoryteller() {
+  if (window.removeStoryteller) {
+    window.removeStoryteller();
+    window.updateAllUI();
+    renderDevTabContent();
+  }
+}
+
+export function devCreateUnitFree(unitType) {
+  if (!gameState.settlements[0]) {
+    console.error('No settlement found for unit creation');
+    return;
+  }
+  const settlement = gameState.settlements[0];
+  const uType = window.UNIT_TYPES[unitType];
+  if (!uType) return;
+
+  // Temporarily give enough resources to create
+  const origFood = gameState.resources.food;
+  const origMats = gameState.resources.materials;
+  const origPop = gameState.population.total;
+  const origIdle = gameState.population.idle;
+
+  gameState.resources.materials += uType.cost.materials + 1;
+  gameState.population.total += uType.cost.population + 1;
+  gameState.population.idle += uType.cost.population + 1;
+
+  const unit = window.createUnit(unitType, settlement.col, settlement.row);
+
+  // Restore original resources (createUnit already deducted)
+  gameState.resources.food = origFood;
+  gameState.resources.materials = origMats;
+  gameState.population.total = origPop;
+  gameState.population.idle = origIdle;
+
+  if (unit) {
+    console.log(`Created free ${unitType} at (${settlement.col}, ${settlement.row})`);
+    renderDevTabContent();
+    window.updateAllUI();
+    if (window.render) window.render();
+  }
+}
+
+export function devForceStory() {
+  if (window.processStories) {
+    // Temporarily boost progress to trigger a story
+    const culture = gameState.culture;
+    if (culture) {
+      const oldProgress = culture.storyProgress || 0;
+      culture.storyProgress = 100;
+      const report = { events: [] };
+      window.processStories(report);
+      culture.storyProgress = oldProgress; // restore if it didn't reset
+      window.updateAllUI();
+      renderDevTabContent();
+      console.log('Forced story creation');
+    }
   }
 }

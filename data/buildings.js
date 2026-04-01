@@ -12,7 +12,7 @@ export const BUILDINGS = {
     foodBonus: 0,
     materialBonus: 0,
     maxWorkers: 0,
-    autoFood: 3, // settlement auto-produces food without workers
+    autoFood: 0,
     description: 'A center of population. Extends your territory.',
     onlyStart: true
   },

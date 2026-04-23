@@ -8,6 +8,26 @@
 </head>
 <body>
 
+<!-- Main Menu — shown on launch, hidden during gameplay -->
+<div id="main-menu">
+  <div class="main-menu-content">
+    <h1 class="main-menu-title">SAMHOLD</h1>
+    <p class="main-menu-subtitle">A Society-Building Strategy Game</p>
+    <div class="main-menu-buttons">
+      <button class="main-menu-btn" id="mm-new-game" onclick="window.startNewGame()">New Game</button>
+      <button class="main-menu-btn" id="mm-continue" onclick="window.continueGame()" style="display:none">Continue</button>
+      <button class="main-menu-btn" id="mm-load" onclick="window.loadFromMainMenu()" style="display:none">Load Game</button>
+      <button class="main-menu-btn main-menu-btn-dim" id="mm-settings" onclick="window.openMainMenuSettings()">Settings</button>
+    </div>
+    <div class="main-menu-seed">
+      <label for="mm-seed-input">Map Seed</label>
+      <input type="number" id="mm-seed-input" value="7743" min="1" max="999999">
+      <button class="main-menu-seed-random" onclick="document.getElementById('mm-seed-input').value = Math.floor(Math.random()*999999)+1" title="Random seed">🎲</button>
+    </div>
+  </div>
+</div>
+
+<div id="game-ui" style="display:none">
 <div id="top-bar">
   <div class="game-title" onclick="openGameMenu()">SAMHOLD</div>
   <div class="divider"></div>
@@ -72,6 +92,8 @@
 
     <div id="trust-climate" style="margin-top:10px;"></div>
 
+    <div id="advisor-widget"></div>
+
     <div class="policy-summary" style="margin-top:12px; padding:8px; background:rgba(120,120,120,0.1); border-radius:4px; font-size:11px;">
       <div style="font-weight:bold; margin-bottom:4px; color:var(--text-primary);">Current Policies</div>
       <div style="display:flex; justify-content:space-between; margin-bottom:2px;">
@@ -120,38 +142,6 @@
   </div>
 </div>
 
-<div id="settings-overlay">
-  <div class="settings-box">
-    <h2>⚙️ Settings</h2>
-    <div class="settings-content">
-      <div class="settings-section">
-        <h3>Interface</h3>
-        <div class="setting-control">
-          <span class="setting-label">UI Scale</span>
-          <div class="setting-input">
-            <button class="scale-btn" id="scale-down">−</button>
-            <input type="range" class="settings-slider" id="ui-scale-slider" min="80" max="160" value="115" step="5">
-            <button class="scale-btn" id="scale-up">+</button>
-            <span class="setting-value" id="ui-scale-val">115%</span>
-          </div>
-        </div>
-
-        <div class="setting-control">
-          <span class="setting-label">Tutorial Hints</span>
-          <div class="setting-input">
-            <label class="toggle-switch">
-              <input type="checkbox" id="hints-toggle" checked>
-              <span class="toggle-slider"></span>
-            </label>
-            <span class="setting-description">Show helpful hints for new players</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <button class="wf-close" id="settings-close">Done</button>
-  </div>
-</div>
-
 <div id="bottom-bar">
   <span id="coords-display">—</span>
   <span id="zoom-display">Zoom: 100%</span>
@@ -170,7 +160,7 @@
     <div class="game-menu-buttons">
       <button class="menu-btn" onclick="openSaveLoadPanel('save')">💾 Save/Load Game</button>
       <button class="menu-btn" onclick="openSettings()">⚙️ Settings</button>
-      <button class="menu-btn" onclick="returnToMainMenu()" disabled>🏠 Main Menu</button>
+      <button class="menu-btn" onclick="returnToMainMenu()">🏠 Main Menu</button>
     </div>
     <button class="wf-close" id="game-menu-close">Resume Game</button>
   </div>
@@ -230,26 +220,6 @@
   </div>
 </div>
 
-<!-- Save/Load Panel -->
-<div id="saveload-overlay">
-  <div class="saveload-box">
-    <h2>💾 Game Files</h2>
-    <div class="save-input-section">
-      <label for="save-name-input">Save Name:</label>
-      <input type="text" id="save-name-input" placeholder="Enter save name..." maxlength="30">
-      <div class="save-btn-row">
-        <button class="save-btn" onclick="performSave()">Save</button>
-        <button class="save-btn" onclick="performLoad()">Load</button>
-      </div>
-    </div>
-    <div class="saves-list-section">
-      <h3>Saved Games</h3>
-      <div id="saves-list" class="saves-list"></div>
-    </div>
-    <button class="wf-close" id="saveload-close">Cancel</button>
-  </div>
-</div>
-
 <!-- Turn summary overlay -->
 <div id="turn-summary">
   <div class="summary-box">
@@ -259,13 +229,20 @@
   </div>
 </div>
 
-<div id="confirm-dialog">
-  <div class="confirm-box">
-    <h3 id="confirm-title">Confirm</h3>
-    <div class="confirm-body" id="confirm-body"></div>
-    <div class="confirm-buttons">
-      <button class="confirm-btn cancel" id="confirm-cancel">Keep</button>
-      <button class="confirm-btn danger" id="confirm-ok">Demolish</button>
+<div id="policy-wizard-overlay">
+  <div class="event-box policy-wizard-box">
+    <div class="wizard-progress">
+      <span id="wizard-step-indicator">1 / 4</span>
+    </div>
+    <h2 id="wizard-title">The First Decision</h2>
+    <div class="wizard-scroll">
+      <div id="wizard-narrative" style="font-size:14px;line-height:1.6;color:var(--text-light);margin-bottom:24px;text-align:left;"></div>
+      <div id="wizard-choices" class="event-choices"></div>
+      <div id="wizard-flavor" class="wizard-flavor" style="display:none"></div>
+    </div>
+    <div class="wizard-footer">
+      <button class="wizard-continue-btn" id="wizard-continue" style="display:none" onclick="window.advanceWizard()">Continue</button>
+      <button class="wizard-skip-btn" id="wizard-skip" onclick="window.skipPolicyWizard()">Use Defaults</button>
     </div>
   </div>
 </div>
@@ -624,6 +601,71 @@
     </div>
 
     <button class="wf-close" id="chronicle-close">Done</button>
+  </div>
+</div>
+
+</div><!-- end #game-ui -->
+
+<!-- Global overlays — outside #game-ui so they work from both main menu and in-game -->
+<div id="confirm-dialog">
+  <div class="confirm-box">
+    <h3 id="confirm-title">Confirm</h3>
+    <div class="confirm-body" id="confirm-body"></div>
+    <div class="confirm-buttons">
+      <button class="confirm-btn cancel" id="confirm-cancel">Keep</button>
+      <button class="confirm-btn danger" id="confirm-ok">Demolish</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings-overlay">
+  <div class="settings-box">
+    <h2>⚙️ Settings</h2>
+    <div class="settings-content">
+      <div class="settings-section">
+        <h3>Interface</h3>
+        <div class="setting-control">
+          <span class="setting-label">UI Scale</span>
+          <div class="setting-input">
+            <button class="scale-btn" id="scale-down">−</button>
+            <input type="range" class="settings-slider" id="ui-scale-slider" min="80" max="160" value="115" step="5">
+            <button class="scale-btn" id="scale-up">+</button>
+            <span class="setting-value" id="ui-scale-val">115%</span>
+          </div>
+        </div>
+
+        <div class="setting-control">
+          <span class="setting-label">Advisor Hints</span>
+          <div class="setting-input">
+            <label class="toggle-switch">
+              <input type="checkbox" id="hints-toggle" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="setting-description">Show context-sensitive guidance in sidebar and turn summaries</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="wf-close" id="settings-close">Done</button>
+  </div>
+</div>
+
+<div id="saveload-overlay">
+  <div class="saveload-box">
+    <h2>💾 Game Files</h2>
+    <div class="save-input-section" id="save-input-section">
+      <label for="save-name-input">Save Name:</label>
+      <input type="text" id="save-name-input" placeholder="Enter save name..." maxlength="30">
+      <div class="save-btn-row">
+        <button class="save-btn" onclick="performSave()">Save</button>
+        <button class="save-btn" onclick="performLoad()">Load</button>
+      </div>
+    </div>
+    <div class="saves-list-section">
+      <h3>Saved Games</h3>
+      <div id="saves-list" class="saves-list"></div>
+    </div>
+    <button class="wf-close" id="saveload-close">Cancel</button>
   </div>
 </div>
 

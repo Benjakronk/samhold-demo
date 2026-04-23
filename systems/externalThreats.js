@@ -1,5 +1,8 @@
 // ---- EXTERNAL THREATS SYSTEM ----
 // Manages spawning, movement, and behavior of external threats like raiders, bandits, and warbands
+// Also manages bandit camps — persistent hostile structures that spawn in the wilderness
+
+// ---- THREAT SPAWNING ----
 
 export function spawnThreat(threatType, col, row) {
   if (!window.THREAT_TYPES[threatType]) {
@@ -23,6 +26,58 @@ export function spawnThreat(threatType, col, row) {
   window.gameState.externalThreats.push(threat);
   if (window.setMapDirty) window.setMapDirty(true);
   return threat;
+}
+
+/**
+ * Find a spawn location for threats.
+ * Prefers fog-of-war (vis 0) or revealed (vis 1) hexes near territory.
+ * Falls back to map edge if no suitable hex is found.
+ */
+export function findSpawnLocation() {
+  const gs = window.gameState;
+  const visMap = gs.visibilityMap;
+  const candidates = [];
+
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gs.map[r][c];
+      if (hex.terrain === 'ocean' || hex.terrain === 'lake') continue;
+      // Must not be actively visible (player can't see the hex)
+      const vis = visMap?.[r]?.[c] ?? 0;
+      if (vis >= 2) continue;
+      // Must not be in territory
+      if (gs.territory.has(`${c},${r}`)) continue;
+      // Must not have a building, settlement, unit, or existing threat/camp on it
+      if (hex.building) continue;
+      if (gs.externalThreats.some(t => t.col === c && t.row === r)) continue;
+      if (gs.banditCamps.some(bc => bc.col === c && bc.row === r)) continue;
+
+      // Score: prefer hexes near territory (3-8 hex distance from nearest settlement)
+      let minDist = Infinity;
+      for (const s of gs.settlements) {
+        const d = window.cubeDistance(
+          window.offsetToCube(c, r),
+          window.offsetToCube(s.col, s.row)
+        );
+        if (d < minDist) minDist = d;
+      }
+
+      // Sweet spot: 3-8 hexes from settlement. Too close is unfair, too far is boring.
+      if (minDist >= 3 && minDist <= 8) {
+        candidates.push({ col: c, row: r, dist: minDist, vis });
+      }
+    }
+  }
+
+  if (candidates.length > 0) {
+    // Prefer fog-of-war (vis 0) over revealed (vis 1)
+    const fogCandidates = candidates.filter(c => c.vis === 0);
+    const pool = fogCandidates.length > 0 ? fogCandidates : candidates;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  // Fallback: map edge (original behavior)
+  return findRandomMapEdge();
 }
 
 export function findRandomMapEdge() {
@@ -52,6 +107,8 @@ export function findRandomMapEdge() {
   }
   return { col: 0, row: 0 };
 }
+
+// ---- THREAT MOVEMENT & COMBAT ----
 
 export function findNearestSettlement(threat) {
   if (window.gameState.settlements.length === 0) return null;
@@ -140,8 +197,8 @@ export function moveThreatTowardTarget(threat) {
 
     const neighborHex = window.gameState.map[neighbor.row][neighbor.col];
 
-    // Threats can't enter ocean
-    if (neighborHex.terrain === 'ocean') continue;
+    // Threats can't enter ocean or lake
+    if (neighborHex.terrain === 'ocean' || neighborHex.terrain === 'lake') continue;
 
     // Check if edge is blocked by fortification (enemies can't pass walls/palisades)
     if (window.isEdgeBlocked && window.isEdgeBlocked(threat.col, threat.row, direction, false)) {
@@ -300,6 +357,8 @@ export function applyRaidDamage(damage, report) {
   }
 }
 
+// ---- THREAT SPAWNING LOGIC ----
+
 export function shouldSpawnThreat() {
   // Simple spawning logic - chance increases with time and prosperity
   if (window.gameState.turn < 15) return false; // Extended early game safety for better tutorial experience
@@ -321,19 +380,280 @@ export function shouldSpawnThreat() {
 
 export function checkThreatSpawning(report) {
   if (shouldSpawnThreat()) {
-    const edgePos = findRandomMapEdge();
+    // Use new spawn location system (fog/revealed near territory) instead of map edge only
+    const spawnPos = findSpawnLocation();
 
     // Choose threat type based on turn number
     let threatType = 'raiders'; // default
     if (window.gameState.turn > 30 && Math.random() < 0.3) threatType = 'bandits';
     if (window.gameState.turn > 50 && Math.random() < 0.2) threatType = 'warband';
 
-    const threat = spawnThreat(threatType, edgePos.col, edgePos.row);
+    const threat = spawnThreat(threatType, spawnPos.col, spawnPos.row);
 
     if (threat) {
       const threatTypeData = window.THREAT_TYPES[threatType];
-      report.events.push(`⚠️ ${threatTypeData.name} ${threatTypeData.icon} spotted on the horizon! They appear hostile.`);
+      // Only report if player can see the spawn hex
+      const vis = window.gameState.visibilityMap?.[spawnPos.row]?.[spawnPos.col] ?? 0;
+      if (vis >= 1) {
+        report.events.push(`⚠️ ${threatTypeData.name} ${threatTypeData.icon} spotted in the wilderness! They appear hostile.`);
+      }
       if (window.addChronicleEntry) window.addChronicleEntry(`${threatTypeData.name} were spotted approaching from the wilderness. The people brace for conflict.`, 'military');
     }
   }
+
+  // Process bandit camp spawning and threat generation
+  checkBanditCampSpawning(report);
+  processBanditCamps(report);
+}
+
+// ---- BANDIT CAMPS ----
+
+const BANDIT_CAMP_HEALTH = 150;
+const BANDIT_CAMP_SPAWN_INTERVAL = 3; // spawn a threat every N turns
+const BANDIT_CAMP_LOOT_FOOD = 40;
+const BANDIT_CAMP_LOOT_MATERIALS = 20;
+
+export function spawnBanditCamp(col, row) {
+  const camp = {
+    id: `camp_${window.gameState.nextUnitId++}`,
+    col,
+    row,
+    health: BANDIT_CAMP_HEALTH,
+    maxHealth: BANDIT_CAMP_HEALTH,
+    turnSpawned: window.gameState.turn,
+    lastSpawnTurn: window.gameState.turn, // when it last spawned a threat
+    threatsSpawned: 0
+  };
+
+  window.gameState.banditCamps.push(camp);
+  if (window.setMapDirty) window.setMapDirty(true);
+  return camp;
+}
+
+/**
+ * Find a valid location for a bandit camp.
+ * Must be on land, outside player vision, outside territory, minimum 5 hexes from settlement.
+ */
+function findBanditCampLocation() {
+  const gs = window.gameState;
+  const visMap = gs.visibilityMap;
+  const candidates = [];
+
+  for (let r = 0; r < window.MAP_ROWS; r++) {
+    for (let c = 0; c < window.MAP_COLS; c++) {
+      const hex = gs.map[r][c];
+      if (hex.terrain === 'ocean' || hex.terrain === 'lake' || hex.terrain === 'mountain') continue;
+      const vis = visMap?.[r]?.[c] ?? 0;
+      if (vis >= 2) continue; // must not be actively visible
+      if (gs.territory.has(`${c},${r}`)) continue;
+      if (hex.building) continue;
+      if (gs.externalThreats.some(t => t.col === c && t.row === r)) continue;
+      if (gs.banditCamps.some(bc => bc.col === c && bc.row === r)) continue;
+
+      // Minimum distance 5 from any settlement
+      let minDist = Infinity;
+      for (const s of gs.settlements) {
+        const d = window.cubeDistance(
+          window.offsetToCube(c, r),
+          window.offsetToCube(s.col, s.row)
+        );
+        if (d < minDist) minDist = d;
+      }
+      if (minDist < 5) continue;
+
+      // Preferred range: 5-10 hexes from a settlement
+      if (minDist <= 10) {
+        candidates.push({ col: c, row: r, dist: minDist, vis });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Prefer fog-of-war hexes
+  const fogCandidates = candidates.filter(c => c.vis === 0);
+  const pool = fogCandidates.length > 0 ? fogCandidates : candidates;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export function checkBanditCampSpawning(report) {
+  const gs = window.gameState;
+  if (gs.turn < 20) return; // no camps before turn 20
+
+  // Max camps: 1 per 30 population, minimum 1
+  const maxCamps = Math.max(1, Math.floor((gs.population.total + getTotalChildrenForThreats()) / 30));
+  if (gs.banditCamps.length >= maxCamps) return;
+
+  // Spawn chance: 3% base, increasing slightly over time
+  let chance = 0.03 + (gs.turn - 20) * 0.001;
+  // Reduce chance if there are already camps
+  chance -= gs.banditCamps.length * 0.02;
+  if (Math.random() >= chance) return;
+
+  const loc = findBanditCampLocation();
+  if (!loc) return;
+
+  const camp = spawnBanditCamp(loc.col, loc.row);
+  if (camp) {
+    // Only report if the hex is revealed (player saw this area before)
+    const vis = gs.visibilityMap?.[loc.row]?.[loc.col] ?? 0;
+    if (vis >= 1) {
+      report.events.push(`🏕️ Reports suggest a bandit camp has been established in the wilderness!`);
+    }
+    if (window.addChronicleEntry) {
+      window.addChronicleEntry('Rumors spread of bandits establishing a camp in the surrounding wilderness. They may pose a growing threat.', 'military');
+    }
+  }
+}
+
+function getTotalChildrenForThreats() {
+  return window.getTotalChildren ? window.getTotalChildren() : 0;
+}
+
+export function processBanditCamps(report) {
+  const gs = window.gameState;
+
+  for (const camp of gs.banditCamps) {
+    // Each camp spawns a threat every BANDIT_CAMP_SPAWN_INTERVAL turns
+    if (gs.turn - camp.lastSpawnTurn >= BANDIT_CAMP_SPAWN_INTERVAL) {
+      // Spawn a raider or bandit near the camp
+      const spawnHex = findCampSpawnHex(camp);
+      if (spawnHex) {
+        const threatType = Math.random() < 0.6 ? 'raiders' : 'bandits';
+        const threat = spawnThreat(threatType, spawnHex.col, spawnHex.row);
+        if (threat) {
+          camp.lastSpawnTurn = gs.turn;
+          camp.threatsSpawned++;
+          const vis = gs.visibilityMap?.[spawnHex.row]?.[spawnHex.col] ?? 0;
+          if (vis >= 2) {
+            const threatTypeData = window.THREAT_TYPES[threatType];
+            report.events.push(`⚠️ ${threatTypeData.name} ${threatTypeData.icon} emerged from a bandit camp!`);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Find a hex adjacent to a bandit camp to spawn a threat on.
+ */
+function findCampSpawnHex(camp) {
+  const options = [];
+  for (let dir = 0; dir < 6; dir++) {
+    const nb = window.hexNeighbor(camp.col, camp.row, dir);
+    if (nb.col < 0 || nb.col >= window.MAP_COLS || nb.row < 0 || nb.row >= window.MAP_ROWS) continue;
+    const hex = window.gameState.map[nb.row][nb.col];
+    if (hex.terrain === 'ocean' || hex.terrain === 'lake') continue;
+    // Don't stack threats
+    if (window.gameState.externalThreats.some(t => t.col === nb.col && t.row === nb.row)) continue;
+    options.push(nb);
+  }
+  if (options.length === 0) return null;
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+// ---- BANDIT CAMP COMBAT ----
+
+/**
+ * Check if a warrior unit can attack a bandit camp (adjacent).
+ */
+export function canAttackBanditCamp(unit, camp) {
+  if (!unit || !camp) return false;
+  const unitType = window.UNIT_TYPES[unit.type];
+  if (!unitType.combat || unitType.combat <= 0) return false;
+  if (unit.health <= 0) return false;
+  const dist = window.cubeDistance(
+    window.offsetToCube(unit.col, unit.row),
+    window.offsetToCube(camp.col, camp.row)
+  );
+  return dist <= 1;
+}
+
+/**
+ * Attack a bandit camp with a warrior unit.
+ * Returns a result object similar to combat results.
+ */
+export function attackBanditCamp(unit, camp) {
+  if (!canAttackBanditCamp(unit, camp)) return null;
+
+  const unitType = window.UNIT_TYPES[unit.type];
+  let unitCombat = unitType.combat * (unit.health / 100);
+
+  // Military rule combat bonuses
+  const milBonuses = window.getMilitaryCombatBonuses ? window.getMilitaryCombatBonuses() : null;
+  if (milBonuses) unitCombat *= (1 + milBonuses.attackBonus);
+
+  // Randomness ±25%
+  unitCombat *= (0.75 + Math.random() * 0.5);
+
+  // Camp fights back (combat 2, like raiders)
+  const campCombat = 2 * (camp.health / camp.maxHealth) * (0.75 + Math.random() * 0.5);
+
+  const damageTocamp = Math.max(5, Math.floor(unitCombat * 15));
+  const damageToUnit = Math.max(3, Math.floor(campCombat * 10));
+
+  camp.health = Math.max(0, camp.health - damageTocamp);
+  unit.health = Math.max(0, unit.health - damageToUnit);
+  unit.lastDamage = damageToUnit;
+
+  if (window.setMapDirty) window.setMapDirty(true);
+
+  if (camp.health <= 0) {
+    return { result: 'camp_destroyed', damageTocamp, damageToUnit, unitHealth: unit.health };
+  } else if (unit.health <= 0) {
+    return { result: 'unit_defeated', damageTocamp, damageToUnit, unitHealth: unit.health };
+  } else {
+    return { result: 'ongoing', damageTocamp, damageToUnit, unitHealth: unit.health, campHealth: camp.health };
+  }
+}
+
+/**
+ * Handle camp destruction: remove camp, grant loot and cohesion.
+ */
+export function destroyBanditCamp(camp, attackingUnit) {
+  const gs = window.gameState;
+  const index = gs.banditCamps.indexOf(camp);
+  if (index < 0) return;
+
+  gs.banditCamps.splice(index, 1);
+
+  // Loot
+  gs.resources.food += BANDIT_CAMP_LOOT_FOOD;
+  gs.resources.materials += BANDIT_CAMP_LOOT_MATERIALS;
+
+  // Cohesion rewards
+  gs.cohesion.legitimacy = Math.min(100, gs.cohesion.legitimacy + 8);
+  gs.cohesion.satisfaction = Math.min(100, gs.cohesion.satisfaction + 5);
+  gs.cohesion.bonds = Math.min(100, gs.cohesion.bonds + 3);
+
+  // Track battle for sacred site
+  if (gs.culture) gs.culture.battleOccurred = true;
+
+  // Notify governance system of combat victory
+  if (window.onCombatVictory) window.onCombatVictory();
+
+  if (window.addChronicleEntry) {
+    window.addChronicleEntry(
+      `Our warriors destroyed a bandit camp in the wilderness! The people celebrated, and supplies were recovered from the ruins.`,
+      'military'
+    );
+  }
+
+  if (window.showNotification) {
+    window.showNotification(
+      `Bandit camp destroyed! +${BANDIT_CAMP_LOOT_FOOD} food, +${BANDIT_CAMP_LOOT_MATERIALS} materials`,
+      'success'
+    );
+  }
+
+  if (window.setMapDirty) window.setMapDirty(true);
+  if (window.updateAllUI) window.updateAllUI();
+}
+
+/**
+ * Get bandit camp at a given hex, if any.
+ */
+export function getBanditCampAt(col, row) {
+  return window.gameState.banditCamps.find(c => c.col === col && c.row === row) || null;
 }

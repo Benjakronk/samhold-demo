@@ -220,6 +220,10 @@ function loadGameFromSlot(slotName) {
       }
     }
 
+    // Migrate policy locks/pressures for older saves
+    if (!loadedGameState.policyLocks) loadedGameState.policyLocks = [];
+    if (!loadedGameState.policyPressures) loadedGameState.policyPressures = [];
+
     // Migrate gender formalization for older saves
     if (!loadedGameState.genderFormalization) {
       loadedGameState.genderFormalization = {
@@ -312,6 +316,12 @@ function loadGameFromSlot(slotName) {
       }
     }
 
+    // Migrate event cooldowns and pending events for older saves
+    if (!loadedGameState.eventCooldowns) loadedGameState.eventCooldowns = {};
+    if (!Array.isArray(loadedGameState.pendingEvents)) loadedGameState.pendingEvents = [];
+    // Migrate bandit camps for older saves
+    if (!Array.isArray(loadedGameState.banditCamps)) loadedGameState.banditCamps = [];
+
     if (!loadedGameState.culture) loadedGameState.culture = {};
     const cultureDef = {
       deathsOccurred: false, battleOccurred: false, spiritualEventFired: false,
@@ -354,6 +364,14 @@ function loadGameFromSlot(slotName) {
     document.getElementById('saveload-overlay').classList.remove('visible');
     document.getElementById('game-menu-overlay').classList.remove('visible');
 
+    // If loading from main menu, need to show game UI and initialize systems
+    const mainMenu = document.getElementById('main-menu');
+    const fromMainMenu = mainMenu && !mainMenu.classList.contains('hidden');
+    if (fromMainMenu) {
+      if (window.hideMainMenu) window.hideMainMenu();
+      _initAllSystems();
+    }
+
     // Update UI to reflect loaded state
     window.updateAllUI();
     if (window.setMapDirty) window.setMapDirty(true);
@@ -365,6 +383,49 @@ function loadGameFromSlot(slotName) {
   }
 }
 
+// Initialize all game systems — used when loading from main menu
+function _initAllSystems() {
+  window.resizeCanvas();
+  const canvas = document.getElementById('game-canvas');
+  const minimapCanvas = document.getElementById('minimap');
+  const container = document.getElementById('canvas-container');
+
+  if (window.initTerritory) window.initTerritory(gameState);
+  if (window.initUnitManagement) window.initUnitManagement(gameState);
+  if (window.initBuildingActions) window.initBuildingActions(gameState);
+  if (window.initTurnProcessing) window.initTurnProcessing(gameState);
+  if (window.initInput) {
+    const canvasRect = canvas.getBoundingClientRect();
+    window.initInput(gameState, canvasRect, minimapCanvas, container, window.MM_W, window.MM_H, window.canvasW, window.canvasH);
+  }
+  if (window.initRendering) {
+    window.initRendering(gameState, canvas, window.mapCanvas, minimapCanvas, window.canvasW, window.canvasH, container.getBoundingClientRect());
+  }
+  if (window.initSidePanel) window.initSidePanel(gameState);
+  if (window.initOverlayManager) window.initOverlayManager(gameState);
+  if (window.initDialogSystem) window.initDialogSystem(gameState);
+  if (window.initDevPanel) window.initDevPanel(gameState);
+  if (window.initUIUpdates) window.initUIUpdates(gameState);
+  if (window.initOverlayRenderers) window.initOverlayRenderers(gameState);
+  if (window.initVictoryDefeat) window.initVictoryDefeat(gameState);
+  if (window.initAdvisor) window.initAdvisor(gameState);
+  if (window.initPolicyWizard) window.initPolicyWizard(gameState);
+  if (window.initChronicle) window.initChronicle(gameState);
+  if (window.initCulture) window.initCulture(gameState);
+  if (window.initValues) window.initValues(gameState);
+  if (window.initTrust) window.initTrust(gameState);
+  if (window.initPolicyLag) window.initPolicyLag(gameState);
+  if (window.initResistance) window.initResistance(gameState);
+  if (window.initCrime) window.initCrime(gameState);
+  if (window.initImmigration) window.initImmigration(gameState);
+  if (window.initClassSystem) window.initClassSystem(gameState);
+  if (window.initGenderFormalization) window.initGenderFormalization(gameState);
+  if (window.initFortifications) window.initFortifications(gameState);
+  if (window.initSettings) window.initSettings();
+  if (window.updateTurnDisplay) window.updateTurnDisplay();
+  if (window.updateDevBadge) window.updateDevBadge();
+}
+
 // ---- UI MANAGEMENT FUNCTIONS ----
 
 function openSaveLoadPanel() {
@@ -372,7 +433,12 @@ function openSaveLoadPanel() {
   showSaveLoadPanel();
 }
 
-function showSaveLoadPanel() {
+let _loadOnlyMode = false;
+
+function showSaveLoadPanel(options) {
+  _loadOnlyMode = !!(options && options.loadOnly);
+  const saveSection = document.getElementById('save-input-section');
+  if (saveSection) saveSection.style.display = _loadOnlyMode ? 'none' : '';
   document.getElementById('saveload-overlay').classList.add('visible');
   document.getElementById('game-menu-overlay').classList.remove('visible');
   refreshSavesList();
@@ -460,15 +526,20 @@ function refreshSavesList() {
     const turn = data.gameState.turn || 0;
     const season = ['🌱 Spring', '☀️ Summer', '🍂 Autumn', '❄️ Winter'][data.gameState.season || 0];
 
+    const escapedName = name.replace(/'/g, "\\'");
+    const clickAction = _loadOnlyMode
+      ? `window.confirmLoadGame('${escapedName}')`
+      : `window.populateSaveName('${escapedName}')`;
+
     item.innerHTML = `
-      <div class="save-item-content" onclick="window.populateSaveName('${name.replace(/'/g, "\\'")}')">
+      <div class="save-item-content" onclick="${clickAction}">
         <div class="save-item-name">${name}</div>
         <div class="save-item-info">
           <span>Turn ${turn} (${season})</span>
           <span>${date} ${time}</span>
         </div>
       </div>
-      <button class="save-delete-btn" onclick="event.stopPropagation(); window.deleteSave('${name.replace(/'/g, "\\'")}')" title="Delete save">Delete</button>
+      <button class="save-delete-btn" onclick="event.stopPropagation(); window.deleteSave('${escapedName}')" title="Delete save">Delete</button>
     `;
 
     savesList.appendChild(item);

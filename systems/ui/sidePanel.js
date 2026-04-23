@@ -275,6 +275,22 @@ export function updateSidePanel(hex) {
         }
     }
 
+    // Show bandit camp on this hex
+    const campHere = window.getBanditCampAt ? window.getBanditCampAt(hex.col, hex.row) : null;
+    if (campHere) {
+        const healthPercent = Math.round(campHere.health / campHere.maxHealth * 100);
+        const healthColor = healthPercent > 50 ? '#8B6914' : healthPercent > 25 ? '#d4800a' : '#a94442';
+        html += `<div class="building-display" style="border-color:#8B6914">
+            <div class="bd-name">🏕️ Bandit Camp</div>
+            <div class="bd-detail">A hostile encampment in the wilderness. Send warriors to destroy it.</div>
+            <div class="bd-detail">HP: <span style="color:${healthColor}">${campHere.health}/${campHere.maxHealth}</span></div>
+            <div class="building-progress-bar">
+                <div class="progress-fill" style="width:${healthPercent}%;background:${healthColor}"></div>
+            </div>
+            <div class="bd-detail" style="font-size:11px;color:var(--text-dim)">Spawns raiders every few turns. Destroying it yields food, materials, and a morale boost.</div>
+        </div>`;
+    }
+
     // Show units on this hex
     const unitsHere = getUnitsAt(hex.col, hex.row);
     if (unitsHere.length > 0) {

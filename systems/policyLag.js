@@ -235,7 +235,51 @@ export function setPendingPolicy(policy, value) {
   } else {
     value = Math.max(6, Math.min(16, value));
   }
+  // Enforce active policy locks
+  value = applyPolicyLockConstraints(policy, value);
   gameState.policyLag.pending[policy] = value;
+}
+
+/**
+ * Clamp a value to respect active policy locks.
+ */
+function applyPolicyLockConstraints(policy, value) {
+  const locks = getActivePolicyLocks(policy);
+  for (const lock of locks) {
+    if (lock.value !== undefined) {
+      value = lock.value; // absolute lock — value is fixed
+    }
+    if (lock.floor !== undefined) {
+      value = Math.max(lock.floor, value);
+    }
+    if (lock.ceiling !== undefined) {
+      value = Math.min(lock.ceiling, value);
+    }
+  }
+  return value;
+}
+
+/**
+ * Get all active (non-expired) locks for a given policy.
+ */
+export function getActivePolicyLocks(policy) {
+  if (!gameState?.policyLocks) return [];
+  return gameState.policyLocks.filter(l => l.policy === policy && l.expiresOnTurn > gameState.turn);
+}
+
+/**
+ * Check if a policy is locked (any active lock exists).
+ */
+export function isPolicyLocked(policy) {
+  return getActivePolicyLocks(policy).length > 0;
+}
+
+/**
+ * Get all active pressures for a given policy.
+ */
+export function getActivePolicyPressures(policy) {
+  if (!gameState?.policyPressures) return [];
+  return gameState.policyPressures.filter(p => p.policy === policy && p.expiresOnTurn > gameState.turn);
 }
 
 /**
@@ -442,6 +486,12 @@ export function processPolicyLag(report) {
 
   // Enforce governance model constraints on effective values
   enforceModelConstraints();
+
+  // Process policy pressures — apply per-turn costs if policy deviates from target
+  processPolicyPressures(report);
+
+  // Clean up expired locks and pressures
+  cleanupExpiredPolicyEffects(report);
 }
 
 function updateEffectiveValue(policy, lag) {
@@ -533,6 +583,44 @@ function enforceModelConstraints() {
   if (model === 'democracy') {
     if (gameState.governance.policies.freedom < 40) {
       gameState.governance.policies.freedom = 40;
+    }
+  }
+}
+
+// ---- POLICY PRESSURE PROCESSING ----
+
+function processPolicyPressures(report) {
+  if (!gameState?.policyPressures) return;
+  const active = gameState.policyPressures.filter(p => p.expiresOnTurn > gameState.turn);
+  for (const pressure of active) {
+    const current = gameState.governance.policies[pressure.policy];
+    if (current === undefined) continue;
+    const distance = Math.abs(current - pressure.target);
+    if (distance <= 10) continue; // within tolerance — no cost
+    // Scale cost by how far from target (proportional to distance)
+    const scale = Math.min(distance / 50, 1.0); // max at 50+ distance
+    for (const [pillar, baseCost] of Object.entries(pressure.costPerTurn)) {
+      if (gameState.cohesion[pillar] !== undefined) {
+        const cost = baseCost * scale;
+        gameState.cohesion[pillar] = Math.max(0, Math.min(100, gameState.cohesion[pillar] + cost));
+      }
+    }
+  }
+}
+
+function cleanupExpiredPolicyEffects(report) {
+  if (gameState.policyLocks) {
+    const before = gameState.policyLocks.length;
+    gameState.policyLocks = gameState.policyLocks.filter(l => l.expiresOnTurn > gameState.turn);
+    if (gameState.policyLocks.length < before && report) {
+      report.events.push('🔓 A policy restriction has expired.');
+    }
+  }
+  if (gameState.policyPressures) {
+    const before = gameState.policyPressures.length;
+    gameState.policyPressures = gameState.policyPressures.filter(p => p.expiresOnTurn > gameState.turn);
+    if (gameState.policyPressures.length < before && report) {
+      report.events.push('⚡ Societal pressure on a policy has subsided.');
     }
   }
 }

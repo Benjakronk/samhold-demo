@@ -6,6 +6,7 @@ export function createGameState() {
     turn: 1,
     year: 1,
     season: 0,
+    winterSeverity: 0.7 + Math.random() * 0.6,
     resources: {
       food: 250,
       materials: 75,
@@ -129,6 +130,8 @@ export function createGameState() {
       hostileCrossed: false,     // track if 80 threshold was crossed (one-time shift)
       lastWarningTurn: 0         // cooldown for advisor warnings
     },
+    policyLocks: [],      // [{ policy, value?, direction?, floor?, ceiling?, expiresOnTurn, source }]
+    policyPressures: [],  // [{ policy, target, expiresOnTurn, costPerTurn: {pillar: amount}, source }]
     policyLag: {
       freedom: null,
       mercy: null,
@@ -209,11 +212,20 @@ export function createGameState() {
       lineageFamilies: 0,       // for lineage basis: fixed count at activation
       pendingDifferentials: {},  // dimension -> { target, turnsRemaining, startTurn }
     },
+    advisor: {
+      shownHints: {},       // hintId → turn last shown
+      dismissedHints: {},   // hintId → true (one-time or manually dismissed)
+      activeAdvisories: [], // current active hint IDs
+      enabled: true         // master toggle
+    },
     chronicle: [], // narrative history log of the civilization
+    eventCooldowns: {}, // event id -> turn last fired
+    pendingEvents: [], // delayed event effects waiting to fire
     lastTurnReport: null,
     units: [], // array of unit objects
     unitsInTraining: [], // array of units being trained: {type, col, row, trainingProgress, trainingNeeded}
     externalThreats: [], // array of threat objects approaching the settlement
+    banditCamps: [], // array of bandit camp objects spawned in the wilderness
     fortifications: {}, // edge key -> { type, health, buildProgress, buildTurns }
     visibilityMap: [], // 2D array: 0=unexplored, 1=revealed, 2=visible
     nextUnitId: 1 // for unique unit IDs

@@ -8,8 +8,100 @@ function openSettings() {
 }
 
 function returnToMainMenu() {
-  // Placeholder for future implementation
   window.closeGameMenu();
+  window.showConfirmDialog(
+    'Return to Main Menu?',
+    'Any unsaved progress will be lost.',
+    'Main Menu',
+    'Cancel',
+    () => {
+      window.closeAllOverlays();
+      showMainMenu();
+    }
+  );
+}
+
+function showMainMenu() {
+  document.getElementById('main-menu').classList.remove('hidden');
+  document.getElementById('game-ui').style.display = 'none';
+  refreshMainMenuButtons();
+}
+
+function hideMainMenu() {
+  document.getElementById('main-menu').classList.add('hidden');
+  document.getElementById('game-ui').style.display = '';
+}
+
+function refreshMainMenuButtons() {
+  try {
+    const saves = JSON.parse(localStorage.getItem('samhold_saves') || '{}');
+    const entries = Object.entries(saves).sort((a, b) => b[1].timestamp - a[1].timestamp);
+    const continueBtn = document.getElementById('mm-continue');
+    const loadBtn = document.getElementById('mm-load');
+    if (entries.length > 0) {
+      continueBtn.style.display = '';
+      loadBtn.style.display = '';
+      const latest = entries[0];
+      const turn = latest[1].gameState.turn || 0;
+      const season = ['Spring', 'Summer', 'Autumn', 'Winter'][latest[1].gameState.season || 0];
+      continueBtn.textContent = `Continue — ${latest[0]} (Turn ${turn}, ${season})`;
+      continueBtn.dataset.saveName = latest[0];
+    } else {
+      continueBtn.style.display = 'none';
+      loadBtn.style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+function startNewGame() {
+  const seedInput = document.getElementById('mm-seed-input');
+  const seed = parseInt(seedInput.value) || Math.floor(Math.random() * 999999) + 1;
+  // Detach rendering state so stray render() calls during transition don't paint old game
+  if (window.clearRenderingState) window.clearRenderingState();
+  hideMainMenu();
+  // Small delay to let game-ui become visible before canvas sizing
+  setTimeout(() => {
+    window.gameState = window.initGameCore(seed);
+    console.log('🎯 New game started with seed:', seed);
+  }, 50);
+}
+
+function continueGame() {
+  const btn = document.getElementById('mm-continue');
+  const saveName = btn.dataset.saveName;
+  if (!saveName) return;
+  // Main menu will be hidden by loadGameFromSlot after successful load
+  if (!window.gameState) {
+    window.gameState = window.createGameState();
+  }
+  if (window.initSaveLoad) {
+    window.initSaveLoad(
+      window.gameState,
+      () => window.getCurrentSeed ? window.getCurrentSeed() : 7743,
+      (newSeed) => { if (window.setCurrentSeed) window.setCurrentSeed(newSeed); }
+    );
+  }
+  window.loadGameFromSlot(saveName);
+}
+
+function loadFromMainMenu() {
+  // Don't hide main menu yet — it stays visible behind the save/load panel
+  // Main menu will be hidden by loadGameFromSlot after successful load
+  if (!window.gameState) {
+    window.gameState = window.createGameState();
+  }
+  if (window.initSaveLoad) {
+    window.initSaveLoad(
+      window.gameState,
+      () => window.getCurrentSeed ? window.getCurrentSeed() : 7743,
+      (newSeed) => { if (window.setCurrentSeed) window.setCurrentSeed(newSeed); }
+    );
+  }
+  window.showSaveLoadPanel({ loadOnly: true });
+}
+
+function openMainMenuSettings() {
+  document.getElementById('settings-overlay').classList.add('visible');
 }
 
 // ---- NOTIFICATION SYSTEM ----
@@ -61,6 +153,11 @@ function getMaxUIScale() {
 
 function clampTopBar(uiScale) {
   const bar = document.getElementById('top-bar');
+  if (!bar || !bar.offsetParent) {
+    // Bar not visible yet (e.g. on main menu) — just store the scale
+    document.documentElement.style.setProperty('--topbar-scale', uiScale);
+    return uiScale;
+  }
   let tbScale = uiScale;
   bar.style.zoom = tbScale;
   while (bar.scrollWidth > bar.clientWidth + 2 && tbScale > 0.8) {
@@ -88,7 +185,11 @@ function applyUIScale(percent) {
 }
 
 // Inject CSS animations for notifications
+let _settingsInitialized = false;
 function initSettings() {
+  if (_settingsInitialized) return;
+  _settingsInitialized = true;
+
   const style = document.createElement('style');
   style.textContent = `
     @keyframes slideInFromRight {
@@ -102,17 +203,23 @@ function initSettings() {
   `;
   document.head.appendChild(style);
 
-  // Settings close button
-  document.getElementById('settings-close').addEventListener('click', () => {
+  // Settings close button — return to game menu or main menu depending on context
+  const closeSettings = () => {
     document.getElementById('settings-overlay').classList.remove('visible');
-    document.getElementById('game-menu-overlay').classList.add('visible');
-  });
+    const mainMenu = document.getElementById('main-menu');
+    if (mainMenu && !mainMenu.classList.contains('hidden')) {
+      // Came from main menu — do nothing, main menu is still visible behind
+    } else {
+      document.getElementById('game-menu-overlay').classList.add('visible');
+    }
+  };
+
+  document.getElementById('settings-close').addEventListener('click', closeSettings);
 
   // Settings overlay background click
   document.getElementById('settings-overlay').addEventListener('click', (e) => {
     if (e.target === document.getElementById('settings-overlay')) {
-      document.getElementById('settings-overlay').classList.remove('visible');
-      document.getElementById('game-menu-overlay').classList.add('visible');
+      closeSettings();
     }
   });
 
@@ -155,15 +262,18 @@ function initSettings() {
     if (saved) applyUIScale(parseInt(saved));
   } catch(e) {}
 
-  // Hint toggle state
+  // Advisor hint toggle state
   try {
-    const hintsDisabled = localStorage.getItem('samhold_tutorial_disabled') === 'true';
+    const hintsDisabled = localStorage.getItem('samhold_advisor_disabled') === 'true';
     document.getElementById('hints-toggle').checked = !hintsDisabled;
+    if (window.setAdvisorEnabled) window.setAdvisorEnabled(!hintsDisabled);
   } catch(e) {}
 
   document.getElementById('hints-toggle').addEventListener('change', (e) => {
     try {
-      localStorage.setItem('samhold_tutorial_disabled', e.target.checked ? 'false' : 'true');
+      localStorage.setItem('samhold_advisor_disabled', e.target.checked ? 'false' : 'true');
+      if (window.setAdvisorEnabled) window.setAdvisorEnabled(e.target.checked);
+      if (window.updateAllUI) window.updateAllUI();
     } catch(err) {}
   });
 }
@@ -172,6 +282,13 @@ export {
   initSettings,
   openSettings,
   returnToMainMenu,
+  showMainMenu,
+  hideMainMenu,
+  refreshMainMenuButtons,
+  startNewGame,
+  continueGame,
+  loadFromMainMenu,
+  openMainMenuSettings,
   showNotification,
   applyUIScale,
   getMaxUIScale,

@@ -12,7 +12,8 @@ function updateAllUI() {
   const inc = window.calculateIncome();
 
   const isWinter = window.SEASONS[gameState.season] === 'Winter';
-  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
+  const severity = gameState.winterSeverity ?? 1.0;
+  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5) * severity) : 0;
   const effectiveNetFood = inc.netFood - winterCost - (inc.projectedFoodDrains || 0);
 
   document.getElementById('res-food').textContent = gameState.resources.food;
@@ -49,7 +50,7 @@ function updateAllUI() {
     : '';
   const nextIsWinter = window.SEASONS[(gameState.season + 1) % 4] === 'Winter';
   const winterWarning = nextIsWinter
-    ? `<div class="hex-info-row"><span class="label">\u26A0\uFE0F Winter next</span><span class="value" style="color:#6699cc">\u2212${Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5))} food</span></div>`
+    ? `<div class="hex-info-row"><span class="label">\u26A0\uFE0F Winter next</span><span class="value" style="color:#6699cc">\u2212~${Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5))} food</span></div>`
     : '';
   const constructionRow = inc.constructionWorkers > 0
     ? `<div class="hex-info-row"><span class="label">\u{1F528} Builder rations (\u00D72)</span><span class="value" style="color:#cc8844">\u2212${inc.constructionWorkers * window.FOOD_PER_POP} extra</span></div>`
@@ -149,7 +150,40 @@ function updateAllUI() {
 
   updateCohesionDisplay();
   updateValuesDisplay();
+  updateAdvisorWidget();
   window.updatePolicySummary();
+}
+
+function updateAdvisorWidget() {
+  const el = document.getElementById('advisor-widget');
+  if (!el) return;
+  const advisories = window.getActiveAdvisories ? window.getActiveAdvisories() : [];
+  const nonModal = advisories.filter(h => !h.modal);
+
+  if (nonModal.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+
+  // Show top 2 advisories as compact cards
+  const top = nonModal.slice(0, 2);
+  let html = '<div class="advisor-widget-box">';
+  for (const hint of top) {
+    const catClass = `advisor-${hint.category}`;
+    html += `<div class="advisor-card ${catClass}">`;
+    html += `<div class="advisor-card-header">`;
+    html += `<span class="advisor-icon">${hint.icon || '💡'}</span>`;
+    html += `<span class="advisor-title">${hint.title}</span>`;
+    html += `<button class="advisor-dismiss" onclick="dismissAdvisory('${hint.id}');updateAllUI()" title="Dismiss">&times;</button>`;
+    html += `</div>`;
+    html += `<div class="advisor-card-body">${hint.content}</div>`;
+    html += `</div>`;
+  }
+  if (nonModal.length > 2) {
+    html += `<div class="advisor-more">${nonModal.length - 2} more hint${nonModal.length - 2 > 1 ? 's' : ''}…</div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
 }
 
 function updateCohesionDisplay() {
@@ -328,7 +362,18 @@ function showTurnSummary(report, seasonName, year) {
   const el = document.getElementById('turn-summary');
   document.getElementById('summary-title').textContent = `End of ${seasonName}, Year ${year}`;
 
-  let html = `
+  // Advisor summary header
+  const advisorSummary = window.getAdvisorSummary ? window.getAdvisorSummary() : [];
+  let html = '';
+  if (advisorSummary.length > 0) {
+    html += '<div class="advisor-summary-header">';
+    for (const hint of advisorSummary) {
+      html += `<div class="advisor-summary-line">${hint.icon || '📋'} ${hint.summaryLine}</div>`;
+    }
+    html += '</div>';
+  }
+
+  html += `
     <div class="summary-row"><span class="s-label">\u{1F33E} Food harvested</span><span class="s-val delta-pos">+${report.foodIncome}</span></div>
     <div class="summary-row"><span class="s-label">\u{1F37D}\uFE0F Food consumed</span><span class="s-val delta-neg">-${report.foodConsumed}</span></div>
     ${report.foodBreakdown ? (() => {
@@ -340,7 +385,8 @@ function showTurnSummary(report, seasonName, year) {
       if (bd.adults > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F465} Working adults \u00D7 ${window.FOOD_PER_POP}</span><span class="s-val delta-neg">-${bd.adults}</span></div>`;
       if (workingElders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F9D3} Working elders \u00D7 ${window.FOOD_PER_POP}</span><span class="s-val delta-neg">-${workingElders}</span></div>`;
       if (retiredElders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F9D3} Retired elders \u00D7 ${window.FOOD_PER_ELDER || 1}</span><span class="s-val delta-neg">-${retiredElders}</span></div>`;
-      if (bd.children > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F476} Children \u00D7 ${window.FOOD_PER_CHILD}</span><span class="s-val delta-neg">-${bd.children}</span></div>`;
+      if (bd.youngChildrenFood > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F476} Young children (${bd.youngChildren}) \u00D7 ${window.FOOD_PER_CHILD}</span><span class="s-val delta-neg">-${bd.youngChildrenFood}</span></div>`;
+      if (bd.adolescentFood > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F9D2} Adolescents (${bd.adolescents}) \u00D7 ${window.FOOD_PER_POP}</span><span class="s-val delta-neg">-${bd.adolescentFood}</span></div>`;
       if (bd.builders > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F528} Builders (\u00D72)</span><span class="s-val delta-neg">-${bd.builders}</span></div>`;
       if (bd.training > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u2694\uFE0F Training (\u00D72)</span><span class="s-val delta-neg">-${bd.training}</span></div>`;
       if (bd.immigrants > 0) rows += `<div class="summary-row" style="margin-left:16px;font-size:0.9em;"><span class="s-label">\u{1F6B6} Immigrants</span><span class="s-val delta-neg">-${bd.immigrants}</span></div>`;
@@ -395,6 +441,7 @@ function showTurnSummary(report, seasonName, year) {
 export {
   initUIUpdates,
   updateAllUI,
+  updateAdvisorWidget,
   updateCohesionDisplay,
   updateValuesDisplay,
   updateTurnDisplay,

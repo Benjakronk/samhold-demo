@@ -22,7 +22,8 @@ export const CULTURAL_GROWTH_DECAY = 0.3; // culturalStrength lost per turn with
 export const CULTURAL_GROWTH_REGION_BONUS = 1.5; // scoring multiplier for hexes in a named cultural region
 
 export const FOOD_PER_POP = 2; // food consumed per adult per turn
-export const FOOD_PER_CHILD = 1; // food consumed per child per turn
+export const FOOD_PER_CHILD = 1; // food consumed per young child per turn
+export const PUBERTY_AGE = 12; // age at which children consume full adult rations
 export const BASE_BIRTH_RATE = 0.12; // slightly increased for better population growth dynamics
 
 // Working age policy

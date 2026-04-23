@@ -43,6 +43,12 @@ function initRendering(gameStateRef, canvasElement, mapCanvasElement, minimapCan
   canvasH = canvasHeight;
 }
 
+// Detach gameState so stray render() calls during game transitions are no-ops
+function clearRenderingState() {
+  gameState = null;
+  mapDirty = true;
+}
+
 // Function to update canvasRect when canvas is resized
 function updateCanvasRect(canvasRectRef) {
   if (canvasRectRef) {
@@ -942,7 +948,13 @@ function drawFeatureLabels() {
 function render() {
   if (!gameState || !gameState.map || !gameState.map.length) return;
   if (mapDirty) renderMapToCache();
-  ctx.fillStyle = '#0e0c0a'; ctx.fillRect(0, 0, canvasW, canvasH);
+  // Clear entire canvas buffer in device pixels to prevent GPU compositing artifacts
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0e0c0a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const cam = gameState.camera;
   const so = window.worldToScreen(-CONSTANTS.MAP_PAD, -CONSTANTS.MAP_PAD);
   ctx.drawImage(mapCanvas, 0, 0, mapCanvas.width, mapCanvas.height, so.x, so.y, mapCanvas.width * cam.zoom, mapCanvas.height * cam.zoom);
@@ -964,6 +976,9 @@ function drawOverlays() {
 
   // Draw units in training
   drawUnitsInTraining();
+
+  // Draw bandit camps
+  drawBanditCamps();
 
   // Draw external threats
   drawThreats();
@@ -1086,6 +1101,9 @@ function drawMovementRange() {
     if (unitType.combat > 0) {
       canAttackFromHere = gameState.externalThreats.some(threat => {
         const distance = cubeDistance(offsetToCube(target.col, target.row), offsetToCube(threat.col, threat.row));
+        return distance <= 1;
+      }) || (gameState.banditCamps || []).some(camp => {
+        const distance = cubeDistance(offsetToCube(target.col, target.row), offsetToCube(camp.col, camp.row));
         return distance <= 1;
       });
     }
@@ -1386,6 +1404,59 @@ function drawThreats() {
   }
 }
 
+function drawBanditCamps() {
+  for (const camp of (gameState.banditCamps || [])) {
+    const hex = gameState.map[camp.row]?.[camp.col];
+    if (!hex) continue;
+    // Only draw on revealed or visible hexes
+    const vis = gameState.visibilityMap?.[camp.row]?.[camp.col];
+    if (vis != null ? vis < 1 : !hex.revealed) continue;
+
+    const wp = hexToPixel(camp.col, camp.row, CONSTANTS.HEX_SIZE);
+    const sp = window.worldToScreen(wp.x, wp.y);
+    const scale = gameState.camera.zoom;
+
+    // Camp background — dark, fortified look
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 22 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = vis >= 2 ? 'rgba(100, 50, 20, 0.85)' : 'rgba(80, 40, 15, 0.5)';
+    ctx.fill();
+
+    // Palisade ring (5 segments of 6, leaving a "gate" gap)
+    ctx.strokeStyle = vis >= 2 ? '#8B6914' : 'rgba(139, 105, 20, 0.5)';
+    ctx.lineWidth = 3 * scale;
+    for (let i = 0; i < 5; i++) {
+      const startAngle = (i * Math.PI * 2 / 6) - Math.PI / 2;
+      const endAngle = ((i + 1) * Math.PI * 2 / 6) - Math.PI / 2;
+      ctx.beginPath();
+      ctx.arc(sp.x, sp.y, 22 * scale, startAngle, endAngle);
+      ctx.stroke();
+    }
+
+    // Camp icon
+    ctx.fillStyle = vis >= 2 ? '#ffffff' : 'rgba(255,255,255,0.5)';
+    ctx.font = `${24 * scale}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🏕️', sp.x, sp.y);
+
+    // Health bar (always show for camps since they're structures)
+    if (vis >= 2) {
+      const healthWidth = 32 * scale;
+      const healthHeight = 4 * scale;
+      const healthX = sp.x - healthWidth / 2;
+      const healthY = sp.y + 28 * scale;
+
+      ctx.fillStyle = 'rgba(64, 0, 0, 0.9)';
+      ctx.fillRect(healthX, healthY, healthWidth, healthHeight);
+
+      const healthPercent = camp.health / camp.maxHealth;
+      ctx.fillStyle = healthPercent > 0.5 ? '#8B6914' : '#5a3a0a';
+      ctx.fillRect(healthX, healthY, healthWidth * healthPercent, healthHeight);
+    }
+  }
+}
+
 // ---- MINIMAP ----
 const MM_W = 180, MM_H = 135;
 
@@ -1484,12 +1555,14 @@ export {
   drawUnits,
   drawUnitsInTraining,
   drawThreats,
+  drawBanditCamps,
   drawMinimap,
   minimapToCamera,
   setDevRenderingFlags,
   updateCanvasRect,
   setMapDirty,
-  invalidateFeatureLabelCache
+  invalidateFeatureLabelCache,
+  clearRenderingState
 };
 
 // For browser compatibility, attach to window if available
@@ -1512,6 +1585,7 @@ if (typeof window !== 'undefined') {
     setDevRenderingFlags,
     updateCanvasRect,
     setMapDirty,
-    invalidateFeatureLabelCache
+    invalidateFeatureLabelCache,
+    clearRenderingState
   };
 }

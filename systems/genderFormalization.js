@@ -28,7 +28,7 @@ function createDefaultState() {
 
 // ---- ACTIVATION & MOVEMENT ----
 
-export function moveGenderDimension(dimension, direction) {
+export function moveGenderDimension(dimension, direction, options = {}) {
   const gf = gameState.genderFormalization;
   const dim = gf.dimensions[dimension];
   if (!dim) return { success: false, reason: 'Invalid dimension.' };
@@ -62,8 +62,8 @@ export function moveGenderDimension(dimension, direction) {
     }
   }
 
-  // First activation turn check
-  if (isFirstMove) {
+  // First activation turn check (skipped when triggered by events)
+  if (isFirstMove && !options.skipCosts) {
     const MIN_TURNS = window.GENDER_MIN_TURNS || 8;
     if (gameState.turn < MIN_TURNS) {
       return { success: false, reason: `Settlement must exist for at least ${MIN_TURNS} turns.` };
@@ -84,15 +84,17 @@ export function moveGenderDimension(dimension, direction) {
 
   const adjustedCosts = getAdjustedCosts(baseCosts, dimension, direction);
 
-  // Apply costs
-  if (adjustedCosts.legitimacy) {
-    gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy + adjustedCosts.legitimacy);
-  }
-  if (adjustedCosts.satisfaction) {
-    gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction + adjustedCosts.satisfaction);
-  }
-  if (adjustedCosts.resistance && window.addResistancePressure) {
-    window.addResistancePressure(adjustedCosts.resistance);
+  // Apply costs (skipped when triggered by events — costs are in event consequences)
+  if (!options.skipCosts) {
+    if (adjustedCosts.legitimacy) {
+      gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy + adjustedCosts.legitimacy);
+    }
+    if (adjustedCosts.satisfaction) {
+      gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction + adjustedCosts.satisfaction);
+    }
+    if (adjustedCosts.resistance && window.addResistancePressure) {
+      window.addResistancePressure(adjustedCosts.resistance);
+    }
   }
 
   // Activate system on first move

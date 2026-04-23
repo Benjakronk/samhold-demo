@@ -25,7 +25,8 @@ export function isAnyOverlayOpen() {
         'values-overlay',
         'cohesion-overlay',
         'event-dialog',
-        'confirm-dialog'
+        'confirm-dialog',
+        'policy-wizard-overlay'
     ];
 
     return overlaysToCheck.some(id => {
@@ -63,7 +64,8 @@ export function closeAllOverlays() {
         'values-overlay',
         'cohesion-overlay',
         'event-dialog',
-        'confirm-dialog'
+        'confirm-dialog',
+        'policy-wizard-overlay'
     ];
 
     overlayIds.forEach(id => closeOverlay(id));

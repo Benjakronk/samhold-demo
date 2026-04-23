@@ -21,7 +21,7 @@ export const EVENT_LIBRARY = {
         text: 'Mandate food stockpiling',
         description: 'Force all families to save extra food for the harsh months ahead',
         consequences: {
-          immediate: { satisfaction: -8, legitimacy: -3, trustEffects: { institutional: -0.05 } },
+          immediate: { satisfaction: -8, legitimacy: -3, trustEffects: { institutional: -0.05 }, policyEffects: { shifts: { freedom: -8, mercy: -5 } } },
           winter: { winterFoodReduction: 0.3 }
         }
       },
@@ -39,7 +39,7 @@ export const EVENT_LIBRARY = {
         text: 'Trust in our resilience',
         description: 'Have faith that we will endure as we always have',
         consequences: {
-          immediate: { identity: 5, bonds: 3, legitimacy: 2, trustEffects: { interpersonal: 0.05 } },
+          immediate: { identity: 5, bonds: 3, legitimacy: 2, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { tradition: 5 } } },
           winter: { starvationMultiplier: 1.3 }
         }
       }
@@ -67,7 +67,7 @@ export const EVENT_LIBRARY = {
         text: 'Enforce orthodox practices',
         description: 'Firmly establish which beliefs are correct',
         consequences: {
-          immediate: { legitimacy: 6, identity: -4, satisfaction: -5, trustEffects: { interpersonal: -0.08 } },
+          immediate: { legitimacy: 6, identity: -4, satisfaction: -5, trustEffects: { interpersonal: -0.08 }, policyEffects: { shifts: { tradition: 8, freedom: -6 }, locks: [{ policy: 'tradition', direction: 'min', floor: 'current', turns: 4 }] } },
           effects: { traditionBonus: 3 }
         }
       },
@@ -76,7 +76,7 @@ export const EVENT_LIBRARY = {
         text: 'Allow diverse interpretations',
         description: 'Let people practice as they see fit',
         consequences: {
-          immediate: { satisfaction: 4, identity: -2, bonds: -3, trustEffects: { interpersonal: -0.05 } },
+          immediate: { satisfaction: 4, identity: -2, bonds: -3, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { freedom: 6, tradition: -5 } } },
           effects: { freedomBonus: 2 }
         }
       },
@@ -87,7 +87,8 @@ export const EVENT_LIBRARY = {
         consequences: {
           immediate: { legitimacy: 2, bonds: 4, trustEffects: { interpersonal: 0.05 } },
           requirements: { governance: 'tribalCouncil' },
-          delay: 2
+          delay: 2,
+          delayedEffects: { identity: 3, satisfaction: 2, bonds: 3, knowledge: 2 }
         }
       }
     ]
@@ -112,7 +113,7 @@ export const EVENT_LIBRARY = {
         text: 'Welcome them warmly',
         description: 'Offer food, shelter, and full membership in our society',
         consequences: {
-          immediate: { population: 4, food: -30, satisfaction: 3, bonds: 5, trustEffects: { interpersonal: 0.05 } },
+          immediate: { population: 4, food: -30, satisfaction: 3, bonds: 5, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { isolation: -8 } } },
           effects: { identityDilution: true }
         }
       },
@@ -121,7 +122,7 @@ export const EVENT_LIBRARY = {
         text: 'Accept with conditions',
         description: 'Allow them to stay but they must prove their worth',
         consequences: {
-          immediate: { population: 2, food: -15, legitimacy: 2, trustEffects: { institutional: 0.03 } },
+          immediate: { population: 2, food: -15, legitimacy: 2, trustEffects: { institutional: 0.03 }, policyEffects: { shifts: { isolation: -3 } } },
           delay: 4,
           followUp: 'refugeeIntegration'
         }
@@ -131,7 +132,7 @@ export const EVENT_LIBRARY = {
         text: 'Turn them away',
         description: 'We cannot afford to feed more mouths',
         consequences: {
-          immediate: { identity: -6, satisfaction: -8, legitimacy: -4, trustEffects: { interpersonal: -0.10, institutional: -0.05 } },
+          immediate: { identity: -6, satisfaction: -8, legitimacy: -4, trustEffects: { interpersonal: -0.10, institutional: -0.05 }, policyEffects: { shifts: { isolation: 8 } } },
           effects: { isolationBonus: 2 }
         }
       }
@@ -157,7 +158,7 @@ export const EVENT_LIBRARY = {
         text: 'Accept the trade',
         description: 'Exchange materials for exotic goods and knowledge',
         consequences: {
-          immediate: { materials: -40, satisfaction: 6, knowledge: 8 }
+          immediate: { materials: -40, satisfaction: 6, knowledge: 8, policyEffects: { shifts: { isolation: -5 } } }
         }
       },
       {
@@ -174,7 +175,7 @@ export const EVENT_LIBRARY = {
         text: 'Politely decline',
         description: 'Keep our resources but miss the opportunity',
         consequences: {
-          immediate: { identity: 3, satisfaction: -2 }
+          immediate: { identity: 3, satisfaction: -2, policyEffects: { shifts: { isolation: 5 } } }
         }
       }
     ]
@@ -200,7 +201,7 @@ export const EVENT_LIBRARY = {
         text: 'Confront them directly',
         description: 'Challenge their claims in a public forum',
         consequences: {
-          immediate: { legitimacy: 8, satisfaction: -4, bonds: -5, trustEffects: { institutional: -0.10 } },
+          immediate: { legitimacy: 8, satisfaction: -4, bonds: -5, trustEffects: { institutional: -0.10 }, policyEffects: { shifts: { freedom: -8 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 4 }] } },
           requirements: { governance: 'autocracy' }
         }
       },
@@ -209,7 +210,7 @@ export const EVENT_LIBRARY = {
         text: 'Seek compromise',
         description: 'Offer to share power and incorporate their ideas',
         consequences: {
-          immediate: { legitimacy: 3, satisfaction: 5, bonds: 2, identity: -2, trustEffects: { institutional: 0.05 } },
+          immediate: { legitimacy: 3, satisfaction: 5, bonds: 2, identity: -2, trustEffects: { institutional: 0.05 }, policyEffects: { shifts: { freedom: 5 } } },
           effects: { sharedPower: true }
         }
       },
@@ -218,7 +219,7 @@ export const EVENT_LIBRARY = {
         text: 'Consider stepping aside',
         description: 'Perhaps new leadership is what the people need',
         consequences: {
-          immediate: { legitimacy: -10, satisfaction: 3, bonds: 6, identity: 4, trustEffects: { institutional: -0.15, interpersonal: 0.05 } },
+          immediate: { legitimacy: -10, satisfaction: 3, bonds: 6, identity: 4, trustEffects: { institutional: -0.15, interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 12 } } },
           effects: { leadershipChange: true }
         }
       }
@@ -245,7 +246,7 @@ export const EVENT_LIBRARY = {
         text: 'Enforce strict quarantine',
         description: 'Isolate the sick to prevent further spread',
         consequences: {
-          immediate: { satisfaction: -6, bonds: -4, legitimacy: 3, trustEffects: { interpersonal: -0.08 } },
+          immediate: { satisfaction: -6, bonds: -4, legitimacy: 3, trustEffects: { interpersonal: -0.08 }, policyEffects: { shifts: { freedom: -6, mercy: -5 } } },
           effects: { diseaseContained: true }
         }
       },
@@ -263,7 +264,7 @@ export const EVENT_LIBRARY = {
         text: 'Perform healing rituals',
         description: 'Call upon spiritual forces for aid',
         consequences: {
-          immediate: { identity: 6, satisfaction: 3, legitimacy: 2, trustEffects: { interpersonal: 0.05 } },
+          immediate: { identity: 6, satisfaction: 3, legitimacy: 2, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { tradition: 5 } } },
           effects: { spiritualHealing: true }
         }
       }
@@ -289,7 +290,7 @@ export const EVENT_LIBRARY = {
         text: 'Hold a great feast',
         description: 'Celebrate our good fortune with the entire community',
         consequences: {
-          immediate: { food: -30, satisfaction: 8, bonds: 6, identity: 4, trustEffects: { interpersonal: 0.05 } }
+          immediate: { food: -30, satisfaction: 8, bonds: 6, identity: 4, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { mercy: 5 } } }
         }
       },
       {
@@ -341,7 +342,7 @@ export const EVENT_LIBRARY = {
         text: 'Establish trade contact',
         description: 'Focus on building relationships with distant settlements',
         consequences: {
-          immediate: { materials: 20, satisfaction: 3, bonds: -2 },
+          immediate: { materials: 20, satisfaction: 3, bonds: -2, policyEffects: { shifts: { isolation: -5 } } },
           effects: { tradeRoute: true }
         }
       },
@@ -350,7 +351,7 @@ export const EVENT_LIBRARY = {
         text: 'Focus on home',
         description: 'The outside world is interesting, but we have work here',
         consequences: {
-          immediate: { identity: 4, legitimacy: 2, satisfaction: -1 }
+          immediate: { identity: 4, legitimacy: 2, satisfaction: -1, policyEffects: { shifts: { isolation: 3 } } }
         }
       }
     ]
@@ -376,7 +377,7 @@ export const EVENT_LIBRARY = {
         text: 'Share knowledge freely',
         description: 'Teach everyone the new methods immediately',
         consequences: {
-          immediate: { satisfaction: 6, bonds: 4, materials: 10, legitimacy: 2, trustEffects: { interpersonal: 0.05 } }
+          immediate: { satisfaction: 6, bonds: 4, materials: 10, legitimacy: 2, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 5 } } }
         }
       },
       {
@@ -393,7 +394,7 @@ export const EVENT_LIBRARY = {
         text: 'Keep it restricted',
         description: 'Only trusted leaders should control this knowledge',
         consequences: {
-          immediate: { legitimacy: 6, satisfaction: -8, bonds: -6, identity: -3, trustEffects: { institutional: 0.05, interpersonal: -0.10 } },
+          immediate: { legitimacy: 6, satisfaction: -8, bonds: -6, identity: -3, trustEffects: { institutional: 0.05, interpersonal: -0.10 }, policyEffects: { shifts: { freedom: -8 } } },
           effects: { secretKnowledge: true }
         }
       }
@@ -422,7 +423,7 @@ export const EVENT_LIBRARY = {
         text: 'Honor the tradition',
         description: 'Spend the food. Our customs define us more than full bellies.',
         consequences: {
-          immediate: { food: -20, identity: 6, bonds: 4, satisfaction: -3, trustEffects: { interpersonal: 0.05 } }
+          immediate: { food: -20, identity: 6, bonds: 4, satisfaction: -3, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { tradition: 5 } } }
         }
       },
       {
@@ -430,7 +431,7 @@ export const EVENT_LIBRARY = {
         text: 'Skip it this time',
         description: 'The ancestors would understand. We must eat to survive.',
         consequences: {
-          immediate: { food: 10, identity: -5, bonds: -3, legitimacy: -2, trustEffects: { interpersonal: -0.05 } }
+          immediate: { food: 10, identity: -5, bonds: -3, legitimacy: -2, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { tradition: -5 } } }
         }
       },
       {
@@ -464,7 +465,7 @@ export const EVENT_LIBRARY = {
         text: 'Enforce respect for tradition',
         description: 'The young must learn that traditions carry the wisdom of generations.',
         consequences: {
-          immediate: { identity: 4, satisfaction: -6, legitimacy: 3, bonds: -3, trustEffects: { institutional: 0.03, interpersonal: -0.08 } }
+          immediate: { identity: 4, satisfaction: -6, legitimacy: 3, bonds: -3, trustEffects: { institutional: 0.03, interpersonal: -0.08 }, policyEffects: { shifts: { tradition: 8, freedom: -5 }, locks: [{ policy: 'tradition', direction: 'min', floor: 'current', turns: 4 }] } }
         }
       },
       {
@@ -472,7 +473,7 @@ export const EVENT_LIBRARY = {
         text: 'Let traditions evolve',
         description: 'Allow the youth to reshape old practices with new meaning.',
         consequences: {
-          immediate: { identity: -2, satisfaction: 5, bonds: 2, knowledge: 3, trustEffects: { interpersonal: 0.03 } }
+          immediate: { identity: -2, satisfaction: 5, bonds: 2, knowledge: 3, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { tradition: -8 } } }
         }
       },
       {
@@ -509,7 +510,7 @@ export const EVENT_LIBRARY = {
         text: 'Invest in the arts',
         description: 'Dedicate resources and labor to support this cultural flowering.',
         consequences: {
-          immediate: { materials: -15, food: -10, identity: 8, satisfaction: 6, bonds: 4, trustEffects: { interpersonal: 0.08 } }
+          immediate: { materials: -15, food: -10, identity: 8, satisfaction: 6, bonds: 4, trustEffects: { interpersonal: 0.08 }, policyEffects: { shifts: { tradition: 5 } } }
         }
       },
       {
@@ -517,7 +518,7 @@ export const EVENT_LIBRARY = {
         text: 'Redirect energy to production',
         description: 'Art is lovely but we need workers in the fields.',
         consequences: {
-          immediate: { materials: 10, food: 10, identity: -4, satisfaction: -5, trustEffects: { interpersonal: -0.05 } }
+          immediate: { materials: 10, food: 10, identity: -4, satisfaction: -5, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { tradition: -4 } } }
         }
       },
       {
@@ -525,7 +526,7 @@ export const EVENT_LIBRARY = {
         text: 'Celebrate but stay practical',
         description: 'Enjoy the moment without committing extra resources.',
         consequences: {
-          immediate: { identity: 3, satisfaction: 3, bonds: 2 }
+          immediate: { identity: 3, satisfaction: 3, bonds: 2, policyEffects: { shifts: { tradition: 2 } } }
         }
       }
     ]
@@ -638,7 +639,7 @@ export const EVENT_LIBRARY = {
         text: 'Support the eldest claimant',
         description: 'Tradition demands the eldest take the throne. Stability through precedent.',
         consequences: {
-          immediate: { legitimacy: 4, identity: 3, satisfaction: -2, bonds: -3, trustEffects: { institutional: 0.05 } },
+          immediate: { legitimacy: 4, identity: 3, satisfaction: -2, bonds: -3, trustEffects: { institutional: 0.05 }, policyEffects: { shifts: { tradition: 6 }, locks: [{ policy: 'tradition', direction: 'min', floor: 'current', turns: 4 }] } },
           effects: { monarchSuccession: 'eldest' }
         }
       },
@@ -647,7 +648,7 @@ export const EVENT_LIBRARY = {
         text: 'Choose the most capable',
         description: 'The realm needs strength, not bloodline. Pick the best leader.',
         consequences: {
-          immediate: { legitimacy: -3, satisfaction: 4, identity: -2, knowledge: 3, trustEffects: { institutional: -0.05 } },
+          immediate: { legitimacy: -3, satisfaction: 4, identity: -2, knowledge: 3, trustEffects: { institutional: -0.05 }, policyEffects: { shifts: { tradition: -5, freedom: 4 } } },
           effects: { monarchSuccession: 'capable' }
         }
       },
@@ -656,7 +657,7 @@ export const EVENT_LIBRARY = {
         text: 'Let the people choose',
         description: 'Open the decision to a broader council. Unprecedented, but democratic.',
         consequences: {
-          immediate: { legitimacy: -5, satisfaction: 6, bonds: 5, identity: -4, trustEffects: { institutional: -0.10, interpersonal: 0.05 } },
+          immediate: { legitimacy: -5, satisfaction: 6, bonds: 5, identity: -4, trustEffects: { institutional: -0.10, interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 10, tradition: -8 } } },
           effects: { monarchSuccession: 'council' }
         }
       }
@@ -683,7 +684,7 @@ export const EVENT_LIBRARY = {
         text: 'Punish them publicly',
         description: 'Make an example. No one is above the community\'s laws.',
         consequences: {
-          immediate: { legitimacy: 6, satisfaction: 4, food: 15, materials: 10, bonds: -2, trustEffects: { institutional: 0.08, interpersonal: -0.05 } }
+          immediate: { legitimacy: 6, satisfaction: 4, food: 15, materials: 10, bonds: -2, trustEffects: { institutional: 0.08, interpersonal: -0.05 }, policyEffects: { shifts: { mercy: -5 } } }
         }
       },
       {
@@ -691,7 +692,7 @@ export const EVENT_LIBRARY = {
         text: 'Show mercy and redistribute',
         description: 'Take back the goods but forgive the person. Everyone makes mistakes.',
         consequences: {
-          immediate: { food: 15, materials: 10, satisfaction: -3, bonds: 3, legitimacy: -2, trustEffects: { institutional: -0.05, interpersonal: 0.05 } }
+          immediate: { food: 15, materials: 10, satisfaction: -3, bonds: 3, legitimacy: -2, trustEffects: { institutional: -0.05, interpersonal: 0.05 }, policyEffects: { shifts: { mercy: 5 } } }
         }
       },
       {
@@ -726,7 +727,7 @@ export const EVENT_LIBRARY = {
         text: 'Accept military rule',
         description: 'Perhaps strong hands are what we need right now.',
         consequences: {
-          immediate: { legitimacy: -8, satisfaction: -5, identity: 3, trustEffects: { institutional: -0.20 } },
+          immediate: { legitimacy: -8, satisfaction: -5, identity: 3, trustEffects: { institutional: -0.20 }, policyEffects: { shifts: { freedom: -15, mercy: -8 }, locks: [{ policy: 'freedom', value: 20, turns: 8 }] } },
           effects: { militaryCoup: true }
         }
       },
@@ -735,7 +736,7 @@ export const EVENT_LIBRARY = {
         text: 'Rally the people to resist',
         description: 'The people must stand against those who would rule by force.',
         consequences: {
-          immediate: { bonds: 6, legitimacy: 4, satisfaction: -3, population: -2, trustEffects: { institutional: 0.05, interpersonal: 0.08 } },
+          immediate: { bonds: 6, legitimacy: 4, satisfaction: -3, population: -2, trustEffects: { institutional: 0.05, interpersonal: 0.08 }, policyEffects: { shifts: { freedom: 8 } } },
           effects: { coupResisted: true }
         }
       },
@@ -744,7 +745,7 @@ export const EVENT_LIBRARY = {
         text: 'Negotiate shared power',
         description: 'Give the military a role in governance without full control.',
         consequences: {
-          immediate: { legitimacy: -2, satisfaction: 2, bonds: -2, identity: -1, trustEffects: { institutional: -0.10 } }
+          immediate: { legitimacy: -2, satisfaction: 2, bonds: -2, identity: -1, trustEffects: { institutional: -0.10 }, policyEffects: { shifts: { freedom: -5 }, pressure: [{ policy: 'freedom', target: 30, turns: 6, costPerTurn: { satisfaction: -0.5 } }] } }
         }
       }
     ]
@@ -771,7 +772,7 @@ export const EVENT_LIBRARY = {
         text: 'Embrace democratic reform',
         description: 'The people are ready to govern themselves. Begin the transition.',
         consequences: {
-          immediate: { legitimacy: -6, satisfaction: 8, bonds: 4, knowledge: 5, trustEffects: { institutional: -0.10, interpersonal: 0.05 } },
+          immediate: { legitimacy: -6, satisfaction: 8, bonds: 4, knowledge: 5, trustEffects: { institutional: -0.10, interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 15 }, locks: [{ policy: 'freedom', direction: 'min', floor: 40, turns: 6 }] } },
           effects: { democraticReform: true }
         }
       },
@@ -788,7 +789,7 @@ export const EVENT_LIBRARY = {
         text: 'Suppress the movement',
         description: 'This is dangerous talk that threatens stability.',
         consequences: {
-          immediate: { legitimacy: 4, satisfaction: -8, bonds: -5, identity: 2, trustEffects: { institutional: 0.05, interpersonal: -0.10 } }
+          immediate: { legitimacy: 4, satisfaction: -8, bonds: -5, identity: 2, trustEffects: { institutional: 0.05, interpersonal: -0.10 }, policyEffects: { shifts: { freedom: -10 }, pressure: [{ policy: 'freedom', target: 60, turns: 8, costPerTurn: { satisfaction: -0.8, legitimacy: -0.3 } }] } }
         }
       }
     ]
@@ -874,7 +875,7 @@ export const EVENT_LIBRARY = {
         text: 'Perform rituals to appease the river',
         description: 'The river has a spirit. Perhaps offerings will calm it.',
         consequences: {
-          immediate: { food: -40, identity: 5, bonds: 3, satisfaction: -3, trustEffects: { interpersonal: 0.03 } },
+          immediate: { food: -40, identity: 5, bonds: 3, satisfaction: -3, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { tradition: 5 } } },
           effects: { spiritualFlood: true }
         }
       }
@@ -901,7 +902,7 @@ export const EVENT_LIBRARY = {
         text: 'Welcome them all',
         description: 'Open your arms. They are people in need, just as we once were.',
         consequences: {
-          immediate: { population: 8, food: -50, identity: -6, bonds: -4, satisfaction: 3, knowledge: 5, trustEffects: { interpersonal: -0.10, institutional: 0.03 } }
+          immediate: { population: 8, food: -50, identity: -6, bonds: -4, satisfaction: 3, knowledge: 5, trustEffects: { interpersonal: -0.10, institutional: 0.03 }, policyEffects: { shifts: { isolation: -10, culturalOpenness: 5 } } }
         }
       },
       {
@@ -909,7 +910,7 @@ export const EVENT_LIBRARY = {
         text: 'Accept skilled workers only',
         description: 'We can absorb some, but not all. Take those who can contribute immediately.',
         consequences: {
-          immediate: { population: 3, food: -15, identity: -2, knowledge: 4, legitimacy: -3, trustEffects: { interpersonal: -0.08, institutional: -0.05 } }
+          immediate: { population: 3, food: -15, identity: -2, knowledge: 4, legitimacy: -3, trustEffects: { interpersonal: -0.08, institutional: -0.05 }, policyEffects: { shifts: { isolation: -3 } } }
         }
       },
       {
@@ -917,7 +918,7 @@ export const EVENT_LIBRARY = {
         text: 'Turn them away',
         description: 'We cannot risk our own stability. They must find another home.',
         consequences: {
-          immediate: { identity: 4, satisfaction: -5, bonds: -3, legitimacy: -2, trustEffects: { interpersonal: -0.05 } }
+          immediate: { identity: 4, satisfaction: -5, bonds: -3, legitimacy: -2, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { isolation: 8 } } }
         }
       }
     ]
@@ -942,7 +943,7 @@ export const EVENT_LIBRARY = {
         text: 'Enforce strict quarantine',
         description: 'Separate the sick from the healthy. Harsh, but it may save lives.',
         consequences: {
-          immediate: { population: -3, satisfaction: -6, bonds: -5, legitimacy: 4, trustEffects: { institutional: 0.05, interpersonal: -0.12 } }
+          immediate: { population: -3, satisfaction: -6, bonds: -5, legitimacy: 4, trustEffects: { institutional: 0.05, interpersonal: -0.12 }, policyEffects: { shifts: { freedom: -8, mercy: -6 } } }
         }
       },
       {
@@ -950,7 +951,7 @@ export const EVENT_LIBRARY = {
         text: 'Care for everyone together',
         description: 'We will not abandon our sick. Nurse them as a community.',
         consequences: {
-          immediate: { population: -5, bonds: 6, identity: 4, satisfaction: 2, trustEffects: { interpersonal: 0.08 } }
+          immediate: { population: -5, bonds: 6, identity: 4, satisfaction: 2, trustEffects: { interpersonal: 0.08 }, policyEffects: { shifts: { mercy: 6 } } }
         }
       },
       {
@@ -986,7 +987,7 @@ export const EVENT_LIBRARY = {
         text: 'Hear their demands',
         description: 'Open a dialogue. You may have to make concessions, but stability might be preserved.',
         consequences: {
-          immediate: { legitimacy: -3, satisfaction: 2, resistanceEffects: { pressureChange: -12, dispositionShift: -1 }, trustEffects: { institutional: 0.03 } }
+          immediate: { legitimacy: -3, satisfaction: 2, resistanceEffects: { pressureChange: -12, dispositionShift: -1 }, trustEffects: { institutional: 0.03 }, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
@@ -994,7 +995,7 @@ export const EVENT_LIBRARY = {
         text: 'Silence the troublemakers',
         description: 'Use force to disperse the opposition. Quick, but carries lasting consequences.',
         consequences: {
-          immediate: { legitimacy: -8, satisfaction: -5, bonds: -3, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.12, interpersonal: -0.08 } }
+          immediate: { legitimacy: -8, satisfaction: -5, bonds: -3, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.12, interpersonal: -0.08 }, policyEffects: { shifts: { freedom: -8, mercy: -8 } } }
         }
       },
       {
@@ -1026,7 +1027,7 @@ export const EVENT_LIBRARY = {
         text: 'Make a public concession',
         description: 'Announce that you will reverse a recent policy. Humiliating, but effective.',
         consequences: {
-          immediate: { legitimacy: -6, satisfaction: 4, resistanceEffects: { pressureChange: -20, dispositionShift: -1 }, trustEffects: { institutional: 0.05 } }
+          immediate: { legitimacy: -6, satisfaction: 4, resistanceEffects: { pressureChange: -20, dispositionShift: -1 }, trustEffects: { institutional: 0.05 }, policyEffects: { shifts: { freedom: 5 } } }
         }
       },
       {
@@ -1034,7 +1035,7 @@ export const EVENT_LIBRARY = {
         text: 'Crack down on the organizers',
         description: 'Arrest the leaders and disperse their followers. This will not be forgotten.',
         consequences: {
-          immediate: { legitimacy: -5, satisfaction: -8, bonds: -5, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.15, interpersonal: -0.10 } }
+          immediate: { legitimacy: -5, satisfaction: -8, bonds: -5, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.15, interpersonal: -0.10 }, policyEffects: { shifts: { freedom: -10, mercy: -10 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 6 }] } }
         }
       },
       {
@@ -1042,7 +1043,7 @@ export const EVENT_LIBRARY = {
         text: 'Promise reforms',
         description: 'Bind yourself to specific changes within a year. Breaking this promise would be devastating.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: 3, resistanceEffects: { pressureChange: -15, promise: { description: 'Promised reforms to the people', turns: 16, binding: true } }, trustEffects: { institutional: 0.05, interpersonal: 0.03 } }
+          immediate: { legitimacy: 2, satisfaction: 3, resistanceEffects: { pressureChange: -15, promise: { description: 'Promised reforms to the people', turns: 16, binding: true } }, trustEffects: { institutional: 0.05, interpersonal: 0.03 }, policyEffects: { pressure: [{ policy: 'freedom', target: 55, turns: 8, costPerTurn: { legitimacy: -0.5 } }] } }
         }
       }
     ]
@@ -1066,7 +1067,7 @@ export const EVENT_LIBRARY = {
         text: 'Give them everything they want',
         description: 'Reverse all contested policies, grant formal influence, and beg for peace.',
         consequences: {
-          immediate: { legitimacy: -15, satisfaction: 8, identity: -3, resistanceEffects: { pressureChange: -40, dispositionShift: -2, formalInfluence: true }, trustEffects: { institutional: -0.10, interpersonal: 0.08 } }
+          immediate: { legitimacy: -15, satisfaction: 8, identity: -3, resistanceEffects: { pressureChange: -40, dispositionShift: -2, formalInfluence: true }, trustEffects: { institutional: -0.10, interpersonal: 0.08 }, policyEffects: { shifts: { freedom: 15 }, locks: [{ policy: 'freedom', direction: 'min', floor: 50, turns: 8 }] } }
         }
       },
       {
@@ -1074,7 +1075,7 @@ export const EVENT_LIBRARY = {
         text: 'Crush the uprising',
         description: 'Commit all available force to end this once and for all. The cost will be enormous.',
         consequences: {
-          immediate: { legitimacy: -12, satisfaction: -12, bonds: -8, materials: -20, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.20, interpersonal: -0.15 } }
+          immediate: { legitimacy: -12, satisfaction: -12, bonds: -8, materials: -20, resistanceEffects: { suppress: true }, trustEffects: { institutional: -0.20, interpersonal: -0.15 }, policyEffects: { shifts: { freedom: -15, mercy: -15 }, locks: [{ policy: 'freedom', value: 15, turns: 6 }, { policy: 'mercy', direction: 'max', ceiling: 25, turns: 6 }] } }
         }
       },
       {
@@ -1082,7 +1083,7 @@ export const EVENT_LIBRARY = {
         text: 'Step down from power',
         description: 'Offer to change governance entirely. A fresh start — at the cost of everything you built.',
         consequences: {
-          immediate: { legitimacy: -20, satisfaction: 5, identity: -5, bonds: 5, resistanceEffects: { pressureChange: -50 }, trustEffects: { institutional: -0.15, interpersonal: 0.10 } }
+          immediate: { legitimacy: -20, satisfaction: 5, identity: -5, bonds: 5, resistanceEffects: { pressureChange: -50 }, trustEffects: { institutional: -0.15, interpersonal: 0.10 }, policyEffects: { shifts: { freedom: 20 } } }
         }
       }
     ]
@@ -1141,7 +1142,7 @@ export const EVENT_LIBRARY = {
         text: 'Order a crackdown',
         description: 'Use force to restore order. Effective, but heavy-handed.',
         consequences: {
-          immediate: { satisfaction: -5, legitimacy: 2, trustEffects: { interpersonal: -0.03 }, crimeEffects: { severityReduction: 3 } }
+          immediate: { satisfaction: -5, legitimacy: 2, trustEffects: { interpersonal: -0.03 }, crimeEffects: { severityReduction: 3 }, policyEffects: { shifts: { mercy: -6, freedom: -5 } } }
         }
       },
       {
@@ -1149,7 +1150,7 @@ export const EVENT_LIBRARY = {
         text: 'Organize community watches',
         description: 'Empower people to look after one another.',
         consequences: {
-          immediate: { bonds: 3, identity: 1, trustEffects: { interpersonal: 0.03 }, crimeEffects: { severityReduction: 1.5 } }
+          immediate: { bonds: 3, identity: 1, trustEffects: { interpersonal: 0.03 }, crimeEffects: { severityReduction: 1.5 }, policyEffects: { shifts: { mercy: 3 } } }
         }
       },
       {
@@ -1181,7 +1182,7 @@ export const EVENT_LIBRARY = {
         text: 'Pay the tribute',
         description: 'Buying peace with materials. It sets a dangerous precedent.',
         consequences: {
-          immediate: { materials: -15, legitimacy: -5, satisfaction: 1, crimeEffects: { severityReduction: 4 } }
+          immediate: { materials: -15, legitimacy: -5, satisfaction: 1, crimeEffects: { severityReduction: 4 }, policyEffects: { pressure: [{ policy: 'mercy', target: 60, turns: 6, costPerTurn: { legitimacy: -0.3 } }] } }
         }
       },
       {
@@ -1189,7 +1190,7 @@ export const EVENT_LIBRARY = {
         text: 'Refuse and fight back',
         description: 'Rally your people against the criminals. There will be casualties.',
         consequences: {
-          immediate: { satisfaction: -3, bonds: 2, identity: 3, trustEffects: { interpersonal: -0.02 }, crimeEffects: { severityReduction: 6 } }
+          immediate: { satisfaction: -3, bonds: 2, identity: 3, trustEffects: { interpersonal: -0.02 }, crimeEffects: { severityReduction: 6 }, policyEffects: { shifts: { mercy: -5 } } }
         }
       },
       {
@@ -1197,7 +1198,7 @@ export const EVENT_LIBRARY = {
         text: 'Negotiate terms',
         description: 'Find a compromise — perhaps they can be brought into legitimate roles.',
         consequences: {
-          immediate: { legitimacy: -2, bonds: 1, trustEffects: { institutional: -0.03 }, crimeEffects: { severityReduction: 3 } }
+          immediate: { legitimacy: -2, bonds: 1, trustEffects: { institutional: -0.03 }, crimeEffects: { severityReduction: 3 }, policyEffects: { shifts: { mercy: 4 } } }
         }
       }
     ]
@@ -1222,7 +1223,7 @@ export const EVENT_LIBRARY = {
         text: 'Show mercy — release them with a warning',
         description: 'Compassion matters more than rules. But others may see weakness.',
         consequences: {
-          immediate: { bonds: 3, legitimacy: -3, satisfaction: 1, crimeEffects: { severityReduction: -0.5 } }
+          immediate: { bonds: 3, legitimacy: -3, satisfaction: 1, crimeEffects: { severityReduction: -0.5 }, policyEffects: { shifts: { mercy: 8 } } }
         }
       },
       {
@@ -1230,7 +1231,7 @@ export const EVENT_LIBRARY = {
         text: 'Apply the full punishment',
         description: 'The law must be upheld or it means nothing.',
         consequences: {
-          immediate: { legitimacy: 3, bonds: -2, satisfaction: -2, crimeEffects: { severityReduction: 2 } }
+          immediate: { legitimacy: 3, bonds: -2, satisfaction: -2, crimeEffects: { severityReduction: 2 }, policyEffects: { shifts: { mercy: -8 } } }
         }
       },
       {
@@ -1238,7 +1239,7 @@ export const EVENT_LIBRARY = {
         text: 'Address the root cause — provide food aid',
         description: 'The crime reveals a failure of the community, not just the individual.',
         consequences: {
-          immediate: { food: -20, identity: 2, bonds: 2, satisfaction: 2, crimeEffects: { severityReduction: 1 } }
+          immediate: { food: -20, identity: 2, bonds: 2, satisfaction: 2, crimeEffects: { severityReduction: 1 }, policyEffects: { shifts: { mercy: 5 } } }
         }
       }
     ]
@@ -1265,7 +1266,7 @@ export const EVENT_LIBRARY = {
         text: 'Open the border temporarily',
         description: 'Let them in. They need help, and we need hands.',
         consequences: {
-          immediate: { bonds: 2, satisfaction: 1, legitimacy: -2, immigrationEffects: { addArrivals: 5 } }
+          immediate: { bonds: 2, satisfaction: 1, legitimacy: -2, immigrationEffects: { addArrivals: 5 }, policyEffects: { shifts: { isolation: -6 } } }
         }
       },
       {
@@ -1273,7 +1274,7 @@ export const EVENT_LIBRARY = {
         text: 'Turn them away',
         description: 'We cannot afford to take on more people right now.',
         consequences: {
-          immediate: { legitimacy: 1, bonds: -3, identity: 1, trustEffects: { interpersonal: -0.03 } }
+          immediate: { legitimacy: 1, bonds: -3, identity: 1, trustEffects: { interpersonal: -0.03 }, policyEffects: { shifts: { isolation: 5 } } }
         }
       },
       {
@@ -1281,7 +1282,7 @@ export const EVENT_LIBRARY = {
         text: 'Admit the skilled workers only',
         description: 'Take those who can contribute immediately. The others must find another way.',
         consequences: {
-          immediate: { satisfaction: -2, legitimacy: -1, immigrationEffects: { addArrivals: 2 } }
+          immediate: { satisfaction: -2, legitimacy: -1, immigrationEffects: { addArrivals: 2 }, policyEffects: { shifts: { isolation: -2 } } }
         }
       }
     ]
@@ -1305,7 +1306,7 @@ export const EVENT_LIBRARY = {
         text: 'Celebrate the shared culture',
         description: 'This is what integration looks like. Encourage it.',
         consequences: {
-          immediate: { identity: 3, bonds: 3, satisfaction: 2, trustEffects: { interpersonal: 0.05 } }
+          immediate: { identity: 3, bonds: 3, satisfaction: 2, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { isolation: -5, tradition: -3 } } }
         }
       },
       {
@@ -1313,7 +1314,7 @@ export const EVENT_LIBRARY = {
         text: 'Acknowledge but maintain boundaries',
         description: 'Integration is welcome, but traditions must be preserved.',
         consequences: {
-          immediate: { identity: 1, legitimacy: 2 }
+          immediate: { identity: 1, legitimacy: 2, policyEffects: { shifts: { tradition: 3 } } }
         }
       }
     ]
@@ -1337,7 +1338,7 @@ export const EVENT_LIBRARY = {
         text: 'Demand participation from all residents',
         description: 'Everyone who eats our food must share our burden.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: -4, bonds: -3, trustEffects: { interpersonal: -0.05 } }
+          immediate: { legitimacy: 2, satisfaction: -4, bonds: -3, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { freedom: -5 }, locks: [{ policy: 'isolation', direction: 'min', floor: 'current', turns: 4 }] } }
         }
       },
       {
@@ -1345,7 +1346,7 @@ export const EVENT_LIBRARY = {
         text: 'Accept the reality and work with those who respond',
         description: 'Forcing participation would create worse problems than the flood itself.',
         consequences: {
-          immediate: { bonds: -2, satisfaction: -1, identity: -2 }
+          immediate: { bonds: -2, satisfaction: -1, identity: -2, policyEffects: { shifts: { isolation: -3 } } }
         }
       },
       {
@@ -1353,7 +1354,7 @@ export const EVENT_LIBRARY = {
         text: 'Send community leaders to ask — not demand — for help',
         description: 'Build the bridge one conversation at a time.',
         consequences: {
-          immediate: { bonds: 1, legitimacy: -1, trustEffects: { interpersonal: 0.03 } }
+          immediate: { bonds: 1, legitimacy: -1, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { isolation: -2 } } }
         }
       }
     ]
@@ -1377,7 +1378,7 @@ export const EVENT_LIBRARY = {
         text: 'Escalate enforcement',
         description: 'The law is the law. Exemptions breed contempt.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: -6, bonds: -4, trustEffects: { interpersonal: -0.08 } }
+          immediate: { legitimacy: 2, satisfaction: -6, bonds: -4, trustEffects: { interpersonal: -0.08 }, policyEffects: { shifts: { freedom: -8, mercy: -5 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 30, turns: 4 }] } }
         }
       },
       {
@@ -1385,7 +1386,7 @@ export const EVENT_LIBRARY = {
         text: 'Allow partial exemptions',
         description: 'Meet them halfway. Enforcement everywhere else.',
         consequences: {
-          immediate: { legitimacy: -2, satisfaction: -1, bonds: 1 }
+          immediate: { legitimacy: -2, satisfaction: -1, bonds: 1, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
@@ -1393,7 +1394,7 @@ export const EVENT_LIBRARY = {
         text: 'Abandon coercive assimilation',
         description: 'This approach is tearing us apart. Find another way.',
         consequences: {
-          immediate: { satisfaction: 3, bonds: 2, legitimacy: -3, immigrationEffects: { cancelIntervention: true } }
+          immediate: { satisfaction: 3, bonds: 2, legitimacy: -3, immigrationEffects: { cancelIntervention: true }, policyEffects: { shifts: { freedom: 5, mercy: 4 } } }
         }
       }
     ]
@@ -1417,7 +1418,7 @@ export const EVENT_LIBRARY = {
         text: 'Reaffirm the welcome',
         description: 'We were all strangers once. Growth requires sacrifice.',
         consequences: {
-          immediate: { bonds: 2, satisfaction: -2, identity: -1, trustEffects: { interpersonal: 0.02 } }
+          immediate: { bonds: 2, satisfaction: -2, identity: -1, trustEffects: { interpersonal: 0.02 }, policyEffects: { shifts: { isolation: -4 } } }
         }
       },
       {
@@ -1425,7 +1426,300 @@ export const EVENT_LIBRARY = {
         text: 'Slow the intake — we need time to absorb',
         description: 'Close the border until the pipeline clears.',
         consequences: {
-          immediate: { satisfaction: 2, identity: 2, bonds: -1, legitimacy: -1 }
+          immediate: { satisfaction: 2, identity: 2, bonds: -1, legitimacy: -1, policyEffects: { shifts: { isolation: 6 } } }
+        }
+      }
+    ]
+  },
+
+  // ---- CLASS/GENDER ACTIVATION EVENTS ----
+
+  wealthDivide: {
+    id: 'wealthDivide',
+    title: 'The Haves and the Have-Nots',
+    category: 'governance',
+    triggers: {
+      minTurn: 10,
+      probability: 0.15,
+      conditions: [
+        { type: 'custom', check: 'classSystemInactive' },
+        { type: 'population', operator: '>=', value: 25 },
+        { type: 'resource', resource: 'materials', operator: '>', value: 60 }
+      ]
+    },
+    description: 'As material wealth grows, it has not grown equally. Some families live in sturdy homes with full stores while others scrape by. No one planned this — but a pattern has emerged, and people have noticed. The question is whether this pattern becomes a system.',
+    choices: [
+      {
+        id: 'formalize_property',
+        text: 'Those who built their wealth should keep it — recognize property rights',
+        description: 'Formalizes a class system based on property ownership. The industrious are rewarded, but a line is drawn.',
+        consequences: {
+          immediate: { legitimacy: -8, satisfaction: -6, identity: 3, resistance: 12, trustEffects: { institutional: -0.05, interpersonal: -0.06 }, policyEffects: { shifts: { freedom: -4 } }, classEffects: { activate: 'property', initialDifferentials: { economic: 1 } } }
+        }
+      },
+      {
+        id: 'redistribute',
+        text: 'Redistribute — no one should have more while others have less',
+        description: 'Take from the wealthy and spread it thin. Equality now, resentment from some.',
+        consequences: {
+          immediate: { satisfaction: 4, bonds: 3, legitimacy: -3, materials: -20, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { mercy: 5, freedom: 3 } } }
+        }
+      },
+      {
+        id: 'ignore_divide',
+        text: 'Let the pattern continue — it is not our place to interfere',
+        description: 'The divide deepens quietly. No cost now, but the question will return.',
+        consequences: {
+          immediate: { legitimacy: -2, satisfaction: -2, trustEffects: { interpersonal: -0.03 } }
+        }
+      }
+    ]
+  },
+
+  elderLineage: {
+    id: 'elderLineage',
+    title: 'Blood and Standing',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.12,
+      conditions: [
+        { type: 'custom', check: 'classSystemInactive' },
+        { type: 'population', operator: '>=', value: 30 }
+      ]
+    },
+    description: 'The founding families — those who survived the earliest winters — have begun to carry themselves differently. Their children expect deference. Others grumble, but the founders did sacrifice more. Does shared hardship create a permanent claim to status?',
+    choices: [
+      {
+        id: 'formalize_lineage',
+        text: 'Honor the founding families — their sacrifice earned this standing',
+        description: 'Formalizes a class system based on lineage. A permanent aristocracy is born.',
+        consequences: {
+          immediate: { identity: 5, legitimacy: -8, satisfaction: -6, resistance: 15, trustEffects: { interpersonal: -0.08 }, policyEffects: { shifts: { tradition: 6, freedom: -5 } }, classEffects: { activate: 'lineage', initialDifferentials: { social: 1 } } }
+        }
+      },
+      {
+        id: 'reject_lineage',
+        text: 'We are all equal here — no family stands above another',
+        description: 'Reject the claim. The founding families are displeased, but the commons breathe easier.',
+        consequences: {
+          immediate: { satisfaction: 4, bonds: 3, identity: -2, legitimacy: -2, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { freedom: 5 } } }
+        }
+      },
+      {
+        id: 'honor_informally',
+        text: 'Respect the founders, but give them no formal power',
+        description: 'A middle path. The founders keep social prestige without governance authority.',
+        consequences: {
+          immediate: { identity: 2, satisfaction: 1, bonds: -1, policyEffects: { shifts: { tradition: 3 } } }
+        }
+      }
+    ]
+  },
+
+  priestlyAuthority: {
+    id: 'priestlyAuthority',
+    title: 'Keepers of the Sacred',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.12,
+      conditions: [
+        { type: 'custom', check: 'classSystemInactive' },
+        { type: 'resource', resource: 'knowledge', operator: '>=', value: 20 },
+        { type: 'buildings', building: 'shrine', operator: '>=', value: 1 }
+      ]
+    },
+    description: 'Those who tend the shrines and interpret the old stories have begun to speak with authority beyond their station. Some see wisdom; others see ambition. If their knowledge gives them power, should that power be formalized?',
+    choices: [
+      {
+        id: 'formalize_religious',
+        text: 'The keepers of knowledge deserve a higher standing',
+        description: 'Formalizes a class system based on religious authority. The learned few lead the many.',
+        consequences: {
+          immediate: { identity: 4, legitimacy: -8, satisfaction: -5, resistance: 12, trustEffects: { institutional: -0.04 }, policyEffects: { shifts: { tradition: 6, freedom: -4 } }, classEffects: { activate: 'religious', initialDifferentials: { political: 1 } } }
+        }
+      },
+      {
+        id: 'knowledge_for_all',
+        text: 'Knowledge should be shared, not hoarded by a priestly class',
+        description: 'Push back against the emerging hierarchy. Knowledge remains common property.',
+        consequences: {
+          immediate: { knowledge: 3, satisfaction: 3, identity: -2, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { tradition: -4, freedom: 4 } } }
+        }
+      },
+      {
+        id: 'defer',
+        text: 'The question can wait — we have more pressing concerns',
+        description: 'Sidestep the issue for now. The tension remains unresolved.',
+        consequences: {
+          immediate: { legitimacy: -1, trustEffects: { institutional: -0.02 } }
+        }
+      }
+    ]
+  },
+
+  warriorPrestige: {
+    id: 'warriorPrestige',
+    title: 'The Shield Bearers',
+    category: 'governance',
+    triggers: {
+      minTurn: 12,
+      probability: 0.15,
+      conditions: [
+        { type: 'custom', check: 'classSystemInactive' },
+        { type: 'warriors', operator: '>=', value: 3 },
+        { type: 'threats_active', operator: '>=', value: 1 }
+      ]
+    },
+    description: 'After another battle, the warriors return to cheering crowds. They risked their lives while others hid. Some warriors now expect preferential rations and housing. "Those who bleed for the village should eat before those who did not." The logic is hard to argue with — but where does it end?',
+    choices: [
+      {
+        id: 'formalize_military',
+        text: 'Warriors have earned a higher standing — formalize it',
+        description: 'Formalizes a class system based on military service. Those who fight, rule.',
+        consequences: {
+          immediate: { identity: 3, legitimacy: -8, satisfaction: -5, resistance: 12, trustEffects: { institutional: -0.04, interpersonal: -0.05 }, policyEffects: { shifts: { freedom: -6, mercy: -4 } }, classEffects: { activate: 'military', initialDifferentials: { legal: 1 } } }
+        }
+      },
+      {
+        id: 'equal_sacrifice',
+        text: 'Every contribution matters equally — the farmer feeds the warrior',
+        description: 'Reject military privilege. The warriors are unhappy but the commons are relieved.',
+        consequences: {
+          immediate: { satisfaction: 3, bonds: 2, identity: -1, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { freedom: 4, mercy: 3 } } }
+        }
+      },
+      {
+        id: 'extra_rations',
+        text: 'Give warriors extra rations, but no formal standing',
+        description: 'A practical compromise. The warriors get fed, but no class line is drawn.',
+        consequences: {
+          immediate: { food: -15, satisfaction: 1, policyEffects: { shifts: { mercy: -2 } } }
+        }
+      }
+    ]
+  },
+
+  laborDivision: {
+    id: 'laborDivision',
+    title: 'Who Does What',
+    category: 'social',
+    triggers: {
+      minTurn: 10,
+      probability: 0.12,
+      conditions: [
+        { type: 'custom', check: 'genderSystemInactive' },
+        { type: 'population', operator: '>=', value: 20 }
+      ]
+    },
+    description: 'An argument at the quarry: a woman was told she should not haul stone "in her condition." She was not pregnant — just a woman. The quarry foreman says heavy labor is men\'s work. She says ability should decide, not anatomy. Both have a point, and the whole village is taking sides.',
+    choices: [
+      {
+        id: 'restrict_labor',
+        text: 'The foreman is right — some work suits some bodies better',
+        description: 'Formalizes gender roles in labor: women are directed away from heavy work. Efficient for reproduction, limiting for the workforce.',
+        consequences: {
+          immediate: { identity: 3, legitimacy: -3, satisfaction: -4, resistance: 8, bonds: -2, trustEffects: { interpersonal: -0.05 }, policyEffects: { shifts: { tradition: 5, freedom: -5 } }, genderEffects: { moves: [{ dimension: 'labor', direction: -1 }] } }
+        }
+      },
+      {
+        id: 'open_labor',
+        text: 'She is right — let ability decide, not sex',
+        description: 'Formalizes open labor roles. Anyone can do any work. Builds bonds but requires governance effort to maintain.',
+        consequences: {
+          immediate: { bonds: 3, satisfaction: 2, identity: -1, legitimacy: -3, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { freedom: 5, tradition: -3 } }, genderEffects: { moves: [{ dimension: 'labor', direction: 1 }] } }
+        }
+      },
+      {
+        id: 'no_ruling',
+        text: 'This is not a matter for governance — people will sort it out',
+        description: 'Refuse to formalize anything. The argument continues, unresolved.',
+        consequences: {
+          immediate: { satisfaction: -1, legitimacy: -1, trustEffects: { institutional: -0.02 } }
+        }
+      }
+    ]
+  },
+
+  mothersSacrifice: {
+    id: 'mothersSacrifice',
+    title: 'The Cost of Protection',
+    category: 'social',
+    triggers: {
+      minTurn: 14,
+      probability: 0.10,
+      conditions: [
+        { type: 'custom', check: 'genderSystemInactive' },
+        { type: 'warriors', operator: '>=', value: 2 },
+        { type: 'population', operator: '>=', value: 25 }
+      ]
+    },
+    description: 'After a raid, two mothers were among the dead — warriors who fought to protect the village. Their children are orphaned. The village mourns, and a hard question surfaces: should mothers be shielded from combat? The answer will shape your society for generations.',
+    choices: [
+      {
+        id: 'shield_mothers',
+        text: 'Mothers should not serve — our children need their mothers alive',
+        description: 'Formalizes a restriction on women in military roles. Protects families but halves your potential fighting force.',
+        consequences: {
+          immediate: { identity: 3, satisfaction: -3, bonds: -2, legitimacy: -4, resistance: 8, trustEffects: { interpersonal: -0.04, institutional: -0.03 }, policyEffects: { shifts: { tradition: 4, freedom: -5 } }, genderEffects: { moves: [{ dimension: 'military', direction: -1 }] } }
+        }
+      },
+      {
+        id: 'honor_their_choice',
+        text: 'They chose to fight — honor their sacrifice and keep the way open',
+        description: 'Formalizes equal military access. Every adult can serve. The demographic cost is real but so is the strength.',
+        consequences: {
+          immediate: { bonds: 4, identity: 2, satisfaction: 1, legitimacy: -2, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 5 } }, genderEffects: { moves: [{ dimension: 'military', direction: 1 }] } }
+        }
+      },
+      {
+        id: 'mourn_only',
+        text: 'Mourn the dead and leave the question for another day',
+        description: 'Grief is enough for now. No formal decision is made.',
+        consequences: {
+          immediate: { bonds: 1, satisfaction: -1 }
+        }
+      }
+    ]
+  },
+
+  civicVoice: {
+    id: 'civicVoice',
+    title: 'Who Gets a Voice?',
+    category: 'governance',
+    triggers: {
+      minTurn: 14,
+      probability: 0.10,
+      conditions: [
+        { type: 'custom', check: 'genderSystemInactive' },
+        { type: 'population', operator: '>=', value: 30 }
+      ]
+    },
+    description: 'At the council meeting, a woman rose to speak on water management — she oversees the irrigation — and was told to sit down. "The council recognizes heads of families." She is a head of family, since her husband died in winter. The council fell silent. Who speaks at council is a question about who your society believes holds authority.',
+    choices: [
+      {
+        id: 'tradition_rules',
+        text: 'Council roles belong to those tradition designates',
+        description: 'Formalizes restricted civic authority. Half the population is excluded from public voice.',
+        consequences: {
+          immediate: { identity: 4, legitimacy: 2, satisfaction: -5, bonds: -3, resistance: 10, trustEffects: { institutional: -0.05, interpersonal: -0.05 }, policyEffects: { shifts: { tradition: 6, freedom: -6 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 4 }] }, genderEffects: { moves: [{ dimension: 'civic', direction: -1 }] } }
+        }
+      },
+      {
+        id: 'open_council',
+        text: 'Anyone who manages part of this village should have a voice in it',
+        description: 'Formalizes open civic authority. All adults may speak at council.',
+        consequences: {
+          immediate: { bonds: 3, satisfaction: 3, identity: -2, legitimacy: -3, trustEffects: { interpersonal: 0.05 }, policyEffects: { shifts: { freedom: 6, tradition: -4 } }, genderEffects: { moves: [{ dimension: 'civic', direction: 1 }] } }
+        }
+      },
+      {
+        id: 'exception',
+        text: 'Let her speak — but make no general ruling',
+        description: 'A personal exception, not a policy. The underlying tension remains.',
+        consequences: {
+          immediate: { satisfaction: 1, bonds: 1, trustEffects: { interpersonal: 0.02 } }
         }
       }
     ]
@@ -1451,21 +1745,21 @@ export const EVENT_LIBRARY = {
         text: 'The privileged earned their position — maintain the order',
         description: 'Reaffirm the class structure. The privileged are satisfied; the commons seethe.',
         consequences: {
-          immediate: { legitimacy: 3, satisfaction: -5, bonds: -2 }
+          immediate: { legitimacy: 3, satisfaction: -5, bonds: -2, policyEffects: { shifts: { freedom: -4 }, pressure: [{ policy: 'freedom', target: 35, turns: 6, costPerTurn: { satisfaction: -0.4 } }] } }
         }
       },
       {
         text: 'Organize public works to show the system benefits everyone',
         description: 'Spend materials on a visible project for the commons.',
         consequences: {
-          immediate: { satisfaction: 3, materials: -30, bonds: 2, legitimacy: -1 }
+          immediate: { satisfaction: 3, materials: -30, bonds: 2, legitimacy: -1, policyEffects: { shifts: { mercy: 3 } } }
         }
       },
       {
         text: 'Acknowledge the tension publicly and promise review',
         description: 'Legitimacy takes a small hit now, but satisfaction recovers.',
         consequences: {
-          immediate: { legitimacy: -3, satisfaction: 4, identity: -1, bonds: 1 }
+          immediate: { legitimacy: -3, satisfaction: 4, identity: -1, bonds: 1, policyEffects: { shifts: { freedom: 3 } } }
         }
       }
     ]
@@ -1489,21 +1783,21 @@ export const EVENT_LIBRARY = {
         text: 'Restore their privileges — we cannot afford this fight',
         description: 'Capitulate. The privileged class is appeased but the commons lose faith.',
         consequences: {
-          immediate: { legitimacy: -5, satisfaction: -3, bonds: -2 }
+          immediate: { legitimacy: -5, satisfaction: -3, bonds: -2, policyEffects: { shifts: { freedom: -5 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 4 }] } }
         }
       },
       {
         text: 'Hold firm — the changes stand',
         description: 'The privileged class grows resentful. Resistance pressure increases.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: 2, resistance: 10 }
+          immediate: { legitimacy: 2, satisfaction: 2, resistance: 10, policyEffects: { shifts: { freedom: 5 } } }
         }
       },
       {
         text: 'Negotiate a compromise — partial restoration',
         description: 'Nobody is fully satisfied but the crisis passes.',
         consequences: {
-          immediate: { legitimacy: -2, satisfaction: 1, bonds: -1, resistance: 3 }
+          immediate: { legitimacy: -2, satisfaction: 1, bonds: -1, resistance: 3, policyEffects: { shifts: { freedom: -2 } } }
         }
       }
     ]
@@ -1527,21 +1821,21 @@ export const EVENT_LIBRARY = {
         text: 'Birth is destiny — the lineage system is sacred',
         description: 'Identity strengthens for the privileged but bonds between classes wither.',
         consequences: {
-          immediate: { identity: 2, bonds: -4, satisfaction: -3 }
+          immediate: { identity: 2, bonds: -4, satisfaction: -3, policyEffects: { shifts: { tradition: 5, freedom: -4 } } }
         }
       },
       {
         text: 'Allow exceptional commoners to earn privileged status',
         description: 'A small opening. The privileged class is uneasy; the commons have hope.',
         consequences: {
-          immediate: { satisfaction: 5, legitimacy: -3, bonds: 2, identity: -1 }
+          immediate: { satisfaction: 5, legitimacy: -3, bonds: 2, identity: -1, policyEffects: { shifts: { freedom: 5 } } }
         }
       },
       {
         text: 'Perhaps it is time to reconsider the basis of our class system',
         description: 'Opens the conversation about changing the stratification basis.',
         consequences: {
-          immediate: { legitimacy: -2, satisfaction: 3, resistance: -5 }
+          immediate: { legitimacy: -2, satisfaction: 3, resistance: -5, policyEffects: { shifts: { tradition: -5, freedom: 4 } } }
         }
       }
     ]
@@ -1566,21 +1860,21 @@ export const EVENT_LIBRARY = {
         text: 'Faith needs no proof — the priesthood stands',
         description: 'Legitimacy from the religious class holds, but dissent grows.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: -4, identity: 1 }
+          immediate: { legitimacy: 2, satisfaction: -4, identity: 1, policyEffects: { shifts: { tradition: 5 }, pressure: [{ policy: 'tradition', target: 65, turns: 6, costPerTurn: { satisfaction: -0.3 } }] } }
         }
       },
       {
         text: 'Invest in knowledge recovery — our priests must lead by wisdom',
         description: 'Costly but rebuilds the foundation of religious authority.',
         consequences: {
-          immediate: { materials: -25, knowledge: 5, legitimacy: -1, satisfaction: 2 }
+          immediate: { materials: -25, knowledge: 5, legitimacy: -1, satisfaction: 2, policyEffects: { shifts: { tradition: -3 } } }
         }
       },
       {
         text: 'Reduce the number of priests to match our knowledge',
         description: 'Some priests lose status. The remainder are stronger.',
         consequences: {
-          immediate: { legitimacy: -4, satisfaction: 3, identity: -2, resistance: 8 }
+          immediate: { legitimacy: -4, satisfaction: 3, identity: -2, resistance: 8, policyEffects: { shifts: { tradition: -5, freedom: 3 } } }
         }
       }
     ]
@@ -1605,21 +1899,21 @@ export const EVENT_LIBRARY = {
         text: 'Maintain the standing force — threats could return at any time',
         description: 'The warriors keep their status. The commons bear the cost.',
         consequences: {
-          immediate: { satisfaction: -4, legitimacy: 1, bonds: -2 }
+          immediate: { satisfaction: -4, legitimacy: 1, bonds: -2, policyEffects: { shifts: { freedom: -3 }, pressure: [{ policy: 'mercy', target: 40, turns: 6, costPerTurn: { satisfaction: -0.3 } }] } }
         }
       },
       {
         text: 'Put the warriors to work on public projects',
         description: 'Military prestige drops, but material conditions improve.',
         consequences: {
-          immediate: { satisfaction: 3, materials: 20, identity: -2, legitimacy: -2 }
+          immediate: { satisfaction: 3, materials: 20, identity: -2, legitimacy: -2, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
         text: 'Disband some units — we do not need a military class in peace',
         description: 'Reduces the privileged class size. Former warriors rejoin the commons.',
         consequences: {
-          immediate: { satisfaction: 4, legitimacy: -5, resistance: 10 }
+          immediate: { satisfaction: 4, legitimacy: -5, resistance: 10, policyEffects: { shifts: { freedom: 6 } } }
         }
       }
     ]
@@ -1646,21 +1940,21 @@ export const EVENT_LIBRARY = {
         text: 'Let customs remain customs — people can work where they choose',
         description: 'Informal patterns continue without governance sanction.',
         consequences: {
-          immediate: { satisfaction: 2, bonds: 1, trustEffects: { interpersonal: 0.02 } }
+          immediate: { satisfaction: 2, bonds: 1, trustEffects: { interpersonal: 0.02 }, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
         text: 'Recognize these roles formally — our people have found what works',
         description: 'Codifying the pattern gives it governance weight and a modest efficiency bonus.',
         consequences: {
-          immediate: { legitimacy: -3, satisfaction: -2, identity: 3, resistance: 5, trustEffects: { institutional: -0.03 } }
+          immediate: { legitimacy: -3, satisfaction: -2, identity: 3, resistance: 5, trustEffects: { institutional: -0.03 }, policyEffects: { shifts: { tradition: 5, freedom: -4 } } }
         }
       },
       {
         text: 'Declare that all work is open to all — no role belongs to one sex',
         description: 'A formal commitment to equality. This requires governance effort to maintain.',
         consequences: {
-          immediate: { legitimacy: -3, satisfaction: 1, bonds: 2, identity: -1, trustEffects: { interpersonal: 0.03 } }
+          immediate: { legitimacy: -3, satisfaction: 1, bonds: 2, identity: -1, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { freedom: 5, tradition: -3 } } }
         }
       }
     ]
@@ -1685,21 +1979,21 @@ export const EVENT_LIBRARY = {
         text: 'Keep things as they are — let people choose their own path',
         description: 'No formal policy. The tension between military service and reproduction remains an individual choice.',
         consequences: {
-          immediate: { satisfaction: 1, trustEffects: { interpersonal: 0.01 } }
+          immediate: { satisfaction: 1, trustEffects: { interpersonal: 0.01 }, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
         text: 'Women should not risk themselves in battle — their work is here',
         description: 'Formally discourage female military service. Reduces the demographic cost but limits recruitment.',
         consequences: {
-          immediate: { legitimacy: -4, satisfaction: -3, identity: 2, resistance: 8, trustEffects: { institutional: -0.04, interpersonal: -0.03 } }
+          immediate: { legitimacy: -4, satisfaction: -3, identity: 2, resistance: 8, trustEffects: { institutional: -0.04, interpersonal: -0.03 }, policyEffects: { shifts: { tradition: 5, freedom: -6 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 4 }] } }
         }
       },
       {
         text: 'Every adult who can hold a weapon should train — we need all hands',
         description: 'Open service formally. Builds bonds through shared sacrifice but carries a demographic cost.',
         consequences: {
-          immediate: { bonds: 4, identity: 1, satisfaction: -1, trustEffects: { interpersonal: 0.04 } }
+          immediate: { bonds: 4, identity: 1, satisfaction: -1, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { freedom: 5, tradition: -3 } } }
         }
       }
     ]
@@ -1723,21 +2017,21 @@ export const EVENT_LIBRARY = {
         text: 'The son inherits — this is the natural way of our people',
         description: 'Establishes male preference in inheritance. The privileged class will gradually shift male-heavy.',
         consequences: {
-          immediate: { legitimacy: 2, satisfaction: -3, identity: 1, resistance: 6, trustEffects: { interpersonal: -0.03 } }
+          immediate: { legitimacy: 2, satisfaction: -3, identity: 1, resistance: 6, trustEffects: { interpersonal: -0.03 }, policyEffects: { shifts: { tradition: 5, freedom: -3 } } }
         }
       },
       {
         text: 'Both inherit equally — standing belongs to the family, not the sex',
         description: 'Bilateral inheritance. The privileged class maintains its sex balance.',
         consequences: {
-          immediate: { satisfaction: 1, bonds: 2, trustEffects: { interpersonal: 0.02 } }
+          immediate: { satisfaction: 1, bonds: 2, trustEffects: { interpersonal: 0.02 }, policyEffects: { shifts: { freedom: 3 } } }
         }
       },
       {
         text: 'The daughter inherits — she stayed and tended the household while he left to trade',
         description: 'Establishes female preference. A distinctive but contentious choice.',
         consequences: {
-          immediate: { identity: 3, satisfaction: -2, legitimacy: -1, resistance: 6, trustEffects: { interpersonal: -0.02 } }
+          immediate: { identity: 3, satisfaction: -2, legitimacy: -1, resistance: 6, trustEffects: { interpersonal: -0.02 }, policyEffects: { shifts: { tradition: -3 } } }
         }
       }
     ]
@@ -1762,21 +2056,21 @@ export const EVENT_LIBRARY = {
         text: 'The sacred roles belong to those tradition designates — this is how it has always been',
         description: 'Formalize restricted civic authority. Strong identity and legitimacy, but half the population is excluded from leadership.',
         consequences: {
-          immediate: { identity: 4, legitimacy: 2, satisfaction: -5, bonds: -2, resistance: 10, trustEffects: { institutional: -0.05, interpersonal: -0.04 } }
+          immediate: { identity: 4, legitimacy: 2, satisfaction: -5, bonds: -2, resistance: 10, trustEffects: { institutional: -0.05, interpersonal: -0.04 }, policyEffects: { shifts: { tradition: 6, freedom: -6 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 'current', turns: 6 }] } }
         }
       },
       {
         text: 'Let ability determine who speaks, not what body they were born into',
         description: 'Open authority. Builds trust and bonds at the cost of some traditional identity.',
         consequences: {
-          immediate: { bonds: 3, satisfaction: 2, identity: -2, trustEffects: { interpersonal: 0.04 } }
+          immediate: { bonds: 3, satisfaction: 2, identity: -2, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { freedom: 6, tradition: -4 } } }
         }
       },
       {
         text: 'We need not decide this now — leave it to custom',
         description: 'Defer the question. Informal patterns continue.',
         consequences: {
-          immediate: { satisfaction: 1, trustEffects: { institutional: 0.01 } }
+          immediate: { satisfaction: 1, trustEffects: { institutional: 0.01 }, policyEffects: { shifts: { freedom: 2 } } }
         }
       }
     ]
@@ -1799,21 +2093,21 @@ export const EVENT_LIBRARY = {
         text: 'Suppress these gatherings — the law is the law',
         description: 'Resistance drops temporarily but resentment deepens.',
         consequences: {
-          immediate: { resistance: -8, satisfaction: -5, bonds: -3, trustEffects: { institutional: -0.06, interpersonal: -0.05 } }
+          immediate: { resistance: -8, satisfaction: -5, bonds: -3, trustEffects: { institutional: -0.06, interpersonal: -0.05 }, policyEffects: { shifts: { freedom: -6, mercy: -4 } } }
         }
       },
       {
         text: 'Hear their grievances and ease the restrictions one step',
         description: 'A measured response. Costs legitimacy from those who benefit from restriction, but reduces pressure.',
         consequences: {
-          immediate: { resistance: -15, legitimacy: -4, satisfaction: 3, bonds: 2, trustEffects: { interpersonal: 0.04 } }
+          immediate: { resistance: -15, legitimacy: -4, satisfaction: 3, bonds: 2, trustEffects: { interpersonal: 0.04 }, policyEffects: { shifts: { freedom: 5, tradition: -3 } } }
         }
       },
       {
         text: 'Hold firm — our traditions give us strength',
         description: 'The restrictions stand. Identity holds among the included, but resistance grows.',
         consequences: {
-          immediate: { resistance: 8, identity: 2, satisfaction: -3, trustEffects: { interpersonal: -0.04 } }
+          immediate: { resistance: 8, identity: 2, satisfaction: -3, trustEffects: { interpersonal: -0.04 }, policyEffects: { shifts: { tradition: 4, freedom: -4 }, pressure: [{ policy: 'freedom', target: 25, turns: 8, costPerTurn: { satisfaction: -0.5 } }] } }
         }
       }
     ]
@@ -1836,21 +2130,125 @@ export const EVENT_LIBRARY = {
         text: 'Invest governance resources to enforce our equality laws',
         description: 'Costs legitimacy and materials, but stabilizes egalitarian policies against drift.',
         consequences: {
-          immediate: { legitimacy: 5, satisfaction: -2, materials: -15, trustEffects: { institutional: 0.04 } }
+          immediate: { legitimacy: 5, satisfaction: -2, materials: -15, trustEffects: { institutional: 0.04 }, policyEffects: { shifts: { freedom: 4 }, locks: [{ policy: 'freedom', direction: 'min', floor: 'current', turns: 6 }] } }
         }
       },
       {
         text: 'Accept the drift — we cannot afford to fight nature and enemies at once',
         description: 'Egalitarian formalization continues to erode. Informal patterns take over.',
         consequences: {
-          immediate: { satisfaction: 2, identity: -2, trustEffects: { interpersonal: -0.02 } }
+          immediate: { satisfaction: 2, identity: -2, trustEffects: { interpersonal: -0.02 }, policyEffects: { shifts: { tradition: 4, freedom: -3 } } }
         }
       },
       {
         text: 'Perhaps the old ways had a wisdom we did not appreciate — formalize them',
         description: 'Reverse course toward restrictive formalization. Efficient but divisive.',
         consequences: {
-          immediate: { identity: 2, legitimacy: -3, satisfaction: -4, resistance: 10, bonds: -2, trustEffects: { institutional: -0.04, interpersonal: -0.05 } }
+          immediate: { identity: 2, legitimacy: -3, satisfaction: -4, resistance: 10, bonds: -2, trustEffects: { institutional: -0.04, interpersonal: -0.05 }, policyEffects: { shifts: { tradition: 8, freedom: -8 }, locks: [{ policy: 'freedom', direction: 'max', ceiling: 30, turns: 6 }] } }
+        }
+      }
+    ]
+  },
+
+  // ---- FOLLOW-UP EVENTS (triggered by delayed consequences) ----
+
+  refugeeIntegration: {
+    id: 'refugeeIntegration',
+    title: 'Refugee Integration Update',
+    category: 'social',
+    triggers: { manual: true }, // only triggered as follow-up
+    description: 'The refugees you accepted conditionally have been living among you for some time. Their probation period is ending, and the community must decide their fate.',
+    choices: [
+      {
+        id: 'full_membership',
+        text: 'Grant full membership',
+        description: 'They have proven themselves — welcome them as equals.',
+        consequences: {
+          immediate: { population: 2, bonds: 6, satisfaction: 3, identity: -2, trustEffects: { interpersonal: 0.06 } }
+        }
+      },
+      {
+        id: 'extend_probation',
+        text: 'Extend the probation',
+        description: 'They need more time to demonstrate their commitment.',
+        consequences: {
+          immediate: { legitimacy: 2, satisfaction: -3, bonds: -2, trustEffects: { institutional: 0.02, interpersonal: -0.04 } }
+        }
+      },
+      {
+        id: 'expel',
+        text: 'Ask them to leave',
+        description: 'They have not met our conditions. It is time for them to go.',
+        consequences: {
+          immediate: { population: -2, identity: 3, satisfaction: -6, bonds: -4, legitimacy: -3, trustEffects: { interpersonal: -0.10 } }
+        }
+      }
+    ]
+  },
+
+  explorationResult: {
+    id: 'explorationResult',
+    title: 'Exploration Party Returns',
+    category: 'exploration',
+    triggers: { manual: true }, // only triggered as follow-up
+    description: 'The party you sent to investigate distant lands has returned. They bring news of what they found.',
+    choices: [
+      {
+        id: 'settlement_site',
+        text: 'They found a promising site',
+        description: 'A fertile valley with fresh water — perfect for a new settlement.',
+        consequences: {
+          immediate: { population: 2, knowledge: 8, satisfaction: 5, bonds: 3, trustEffects: { interpersonal: 0.04 } }
+        }
+      },
+      {
+        id: 'resources',
+        text: 'They brought back resources',
+        description: 'The expedition discovered valuable resources along the way.',
+        consequences: {
+          immediate: { food: 30, materials: 25, knowledge: 4, satisfaction: 3 }
+        }
+      },
+      {
+        id: 'warning',
+        text: 'They bring a warning',
+        description: 'They encountered hostile forces gathering in the region.',
+        consequences: {
+          immediate: { knowledge: 10, satisfaction: -4, legitimacy: 3, bonds: 4, trustEffects: { institutional: 0.03 } }
+        }
+      }
+    ]
+  },
+
+  youthDebateOutcome: {
+    id: 'youthDebateOutcome',
+    title: 'The Debate Concludes',
+    category: 'cultural',
+    triggers: { manual: true }, // only triggered as follow-up
+    description: 'The public debate between the generations has run its course. The community has heard both sides, and a consensus is forming.',
+    choices: [
+      {
+        id: 'compromise',
+        text: 'A compromise emerges',
+        description: 'Both sides agree to preserve the spirit of traditions while allowing some adaptation.',
+        consequences: {
+          immediate: { identity: 3, satisfaction: 4, bonds: 5, legitimacy: 3, knowledge: 2, trustEffects: { interpersonal: 0.06 } }
+        }
+      },
+      {
+        id: 'youth_win',
+        text: 'The youth convince many',
+        description: 'The younger generation\'s arguments resonate. Change feels inevitable.',
+        consequences: {
+          immediate: { identity: -3, satisfaction: 6, knowledge: 5, bonds: -2, trustEffects: { interpersonal: 0.03 }, policyEffects: { shifts: { tradition: -10 } } }
+        }
+      },
+      {
+        id: 'elders_hold',
+        text: 'The elders hold firm',
+        description: 'Tradition prevails — but the youth remember the debate.',
+        consequences: {
+          immediate: { identity: 5, legitimacy: 4, satisfaction: -4, bonds: -3, trustEffects: { interpersonal: -0.04 }, policyEffects: { shifts: { tradition: 5 } } }
         }
       }
     ]

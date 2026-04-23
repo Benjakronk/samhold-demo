@@ -294,7 +294,7 @@ function getValidActionTargets(unit) {
   const targets = [];
   if (!unit) return targets;
 
-  // Warriors can attack adjacent threats without moving
+  // Warriors can attack adjacent threats and bandit camps without moving
   if (unit.type === 'warrior' && unit.movementLeft > 0) {
     for (const threat of gameState.externalThreats) {
       const dist = window.cubeDistance(
@@ -303,6 +303,17 @@ function getValidActionTargets(unit) {
       );
       if (dist <= 1) {
         targets.push({ col: threat.col, row: threat.row, type: 'attack', threat });
+      }
+    }
+
+    // Bandit camps are attackable structures
+    for (const camp of (gameState.banditCamps || [])) {
+      const dist = window.cubeDistance(
+        window.offsetToCube(unit.col, unit.row),
+        window.offsetToCube(camp.col, camp.row)
+      );
+      if (dist <= 1) {
+        targets.push({ col: camp.col, row: camp.row, type: 'attack_camp', camp });
       }
     }
   }
@@ -338,6 +349,36 @@ function executeUnitAction(unit, col, row) {
         gameState.population.employed -= uType.cost.population;
         gameState.population.total -= uType.cost.population;
         if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(uType.cost.population);
+      }
+    }
+
+    deselectUnit();
+    if (window.setMapDirty) window.setMapDirty(true);
+    return true;
+  }
+
+  if (target.type === 'attack_camp') {
+    const result = window.attackBanditCamp(unit, target.camp);
+    unit.movementLeft = 0;
+
+    if (result?.result === 'camp_destroyed') {
+      window.destroyBanditCamp(target.camp, unit);
+    }
+
+    if (result?.result === 'unit_defeated' || unit.health <= 0) {
+      const idx = gameState.units.indexOf(unit);
+      if (idx >= 0) {
+        const uType = window.UNIT_TYPES[unit.type];
+        gameState.units.splice(idx, 1);
+        gameState.population.employed -= uType.cost.population;
+        gameState.population.total -= uType.cost.population;
+        if (window.removeFromAdultCohorts) window.removeFromAdultCohorts(uType.cost.population);
+        if (window.onCombatDefeat) window.onCombatDefeat();
+        if (window.addChronicleEntry) window.addChronicleEntry(`A warrior was lost assaulting a bandit camp. The settlement mourns.`, 'military');
+      }
+    } else if (result?.result === 'ongoing') {
+      if (window.showNotification) {
+        window.showNotification(`Camp damaged! (${target.camp.health}/${target.camp.maxHealth} HP)`, 'warning');
       }
     }
 

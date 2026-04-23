@@ -215,7 +215,8 @@ export function calculateSatisfactionPillar() {
   // Food satisfaction - based on sustainability, not raw stockpile size
   if (t.cohFoodSecurity !== false) {
     const totalChildren = getTotalChildren();
-    const totalFoodNeed = (window.gameState.population.total * window.FOOD_PER_POP) + (totalChildren * window.FOOD_PER_CHILD);
+    const childFood = window.getChildFoodConsumption ? window.getChildFoodConsumption() : (totalChildren * window.FOOD_PER_CHILD);
+    const totalFoodNeed = (window.gameState.population.total * window.FOOD_PER_POP) + childFood;
     const stockpile = window.gameState.resources.food;
     const netFood = window.calculateIncome ? window.calculateIncome().netFood : 0;
     const turnsOfFood = (netFood >= 0) ? Infinity : stockpile / Math.abs(netFood);
@@ -239,7 +240,8 @@ export function calculateSatisfactionPillar() {
   if (t.cohWorkingAge !== false) {
     const totalChildren = getTotalChildren();
     if (totalChildren > 0) {
-      const totalFoodNeed = (window.gameState.population.total * window.FOOD_PER_POP) + (totalChildren * window.FOOD_PER_CHILD);
+      const childFood = window.getChildFoodConsumption ? window.getChildFoodConsumption() : (totalChildren * window.FOOD_PER_CHILD);
+      const totalFoodNeed = (window.gameState.population.total * window.FOOD_PER_POP) + childFood;
       const isStarving = window.gameState.resources.food < totalFoodNeed;
       if (window.WORKING_AGE < 10) {
         const penalty = Math.abs(10 - window.WORKING_AGE);
@@ -750,7 +752,8 @@ export function getCohesionBreakdown(pillarKey) {
 
     // Food security
     const totalChildren = getTotalChildren();
-    const totalFoodNeed = (gs.population.total * window.FOOD_PER_POP) + (totalChildren * window.FOOD_PER_CHILD);
+    const childFood = window.getChildFoodConsumption ? window.getChildFoodConsumption() : (totalChildren * window.FOOD_PER_CHILD);
+    const totalFoodNeed = (gs.population.total * window.FOOD_PER_POP) + childFood;
     const stockpile = gs.resources.food;
     const netFood = window.calculateIncome ? window.calculateIncome().netFood : 0;
     const turnsOfFood = netFood >= 0 ? Infinity : stockpile / Math.abs(netFood);

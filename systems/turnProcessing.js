@@ -16,10 +16,13 @@ function setupTurnEventListeners() {
   document.getElementById('summary-ok').addEventListener('click', () => {
     document.getElementById('turn-summary').classList.remove('visible');
 
-    // Show tutorial hint after turn summary is dismissed (so it's not hidden behind it)
-    if (gameState.pendingTutorialHint) {
-      gameState.pendingTutorialHint = false;
-      setTimeout(() => window.showTutorialHint(), 100);
+    // Show advisor modal hint after turn summary is dismissed (if any)
+    if (gameState.pendingAdvisorModal) {
+      gameState.pendingAdvisorModal = false;
+      const modalHint = window.getModalHint ? window.getModalHint() : null;
+      if (modalHint) {
+        setTimeout(() => showAdvisorModal(modalHint), 100);
+      }
     }
 
     // Process events after turn summary is closed
@@ -43,7 +46,14 @@ function setupTurnEventListeners() {
 
     gameState.turn++;
     gameState.season = (gameState.season + 1) % 4;
-    if (gameState.season === 0) gameState.year++;
+    if (gameState.season === 0) {
+      gameState.year++;
+      // Generate variable winter severity for the new year (0.7–1.3×)
+      gameState.winterSeverity = 0.7 + Math.random() * 0.6;
+    }
+
+    // Evaluate advisor hints for the new turn (after turn counter advances)
+    if (window.evaluateAdvisorHints) window.evaluateAdvisorHints();
 
     window.resetUnitMovement();
     // Recompute fog of war at turn start
@@ -55,13 +65,45 @@ function setupTurnEventListeners() {
     if (window.render) window.render();
     window.showTurnSummary(report, summarySeasonName, summaryYear);
 
-    // Show tutorial hints for early turns (queued after turn summary is dismissed)
-    if (gameState.turn <= 15 && gameState.turn > 1) {
-      gameState.pendingTutorialHint = true;
+    // Queue advisor modal hint if one is pending (shown after turn summary is dismissed)
+    const modalHint = window.getModalHint ? window.getModalHint() : null;
+    if (modalHint) {
+      gameState.pendingAdvisorModal = true;
     }
 
     gameState.pendingEventCheck = true;
   });
+}
+
+// ---- ADVISOR MODAL ----
+
+function showAdvisorModal(hint) {
+  // Reuse the tutorial overlay pattern for blocking modals
+  const existing = document.getElementById('tutorial-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'tutorial-overlay';
+  overlay.innerHTML = `
+    <div class="tutorial-dialog">
+      <div class="tutorial-header">
+        <h3>${hint.icon || '💡'} ${hint.title}</h3>
+        <button class="tutorial-close" onclick="closeAdvisorModal()">&times;</button>
+      </div>
+      <div class="tutorial-content">
+        <div class="tutorial-text">${hint.content}</div>
+      </div>
+      <div class="tutorial-actions">
+        <button onclick="closeAdvisorModal()" class="tutorial-ok">Got it!</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function closeAdvisorModal() {
+  const overlay = document.getElementById('tutorial-overlay');
+  if (overlay) overlay.remove();
 }
 
 // ---- CORE TURN PROCESSING ----
@@ -151,7 +193,8 @@ function processTurn() {
 
   // Winter penalty — applied before food consumption
   if (window.SEASONS[gameState.season] === 'Winter') {
-    let baseCost = Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5));
+    const severity = gameState.winterSeverity ?? 1.0;
+    let baseCost = Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5) * severity);
 
     // Apply event-based winter food reduction modifiers
     let totalReduction = 0;
@@ -165,10 +208,11 @@ function processTurn() {
     gameState.resources.food -= winterCost;
     report.winterCost = winterCost;
 
+    const severityLabel = severity >= 1.15 ? 'harsh ' : severity <= 0.85 ? 'mild ' : '';
     if (totalReduction > 0) {
-      report.events.push(`❄️ Winter consumed ${winterCost} food (reduced from preparations).`);
+      report.events.push(`❄️ A ${severityLabel}winter consumed ${winterCost} food (reduced from preparations).`);
     } else {
-      report.events.push(`❄️ The cold of winter consumed ${winterCost} extra food.`);
+      report.events.push(`❄️ The cold of a ${severityLabel}winter consumed ${winterCost} extra food.`);
     }
   }
 
@@ -1012,7 +1056,9 @@ export {
   getReproductiveAvailability,
   checkVictoryConditions,
   trackGovernanceChange,
-  releaseWorkersFromHexes
+  releaseWorkersFromHexes,
+  showAdvisorModal,
+  closeAdvisorModal
 };
 
 // For browser compatibility, attach to window if available

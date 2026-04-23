@@ -42,6 +42,9 @@ import * as VictoryDefeat from '../systems/victoryDefeat.js';
 import * as UnitManagement from '../systems/unitManagement.js';
 import * as Territory from '../systems/territory.js';
 import * as Tutorial from '../systems/tutorial.js';
+import * as Advisor from '../systems/advisor.js';
+import * as PolicyWizard from '../systems/policyWizard.js';
+import { ADVISOR_HINTS } from '../data/advisorHints.js';
 import * as Settings from '../systems/settings.js';
 import * as BuildingActions from '../systems/buildingActions.js';
 import * as Chronicle from '../systems/chronicle.js';
@@ -116,6 +119,7 @@ window.CULTURAL_GROWTH_DECAY = CONSTANTS.CULTURAL_GROWTH_DECAY;
 window.CULTURAL_GROWTH_REGION_BONUS = CONSTANTS.CULTURAL_GROWTH_REGION_BONUS;
 window.FOOD_PER_POP = CONSTANTS.FOOD_PER_POP;
 window.FOOD_PER_CHILD = CONSTANTS.FOOD_PER_CHILD;
+window.PUBERTY_AGE = CONSTANTS.PUBERTY_AGE;
 window.WORKING_AGE_MIN = CONSTANTS.WORKING_AGE_MIN;
 window.WORKING_AGE_MAX = CONSTANTS.WORKING_AGE_MAX;
 window.WORKING_AGE = CONSTANTS.WORKING_AGE;
@@ -157,6 +161,7 @@ window.getEdgeBetween = getEdgeBetween;
 // External Threats system
 window.spawnThreat = ExternalThreats.spawnThreat;
 window.findRandomMapEdge = ExternalThreats.findRandomMapEdge;
+window.findSpawnLocation = ExternalThreats.findSpawnLocation;
 window.findNearestSettlement = ExternalThreats.findNearestSettlement;
 window.processThreats = ExternalThreats.processThreats;
 window.moveThreatTowardTarget = ExternalThreats.moveThreatTowardTarget;
@@ -165,6 +170,11 @@ window.calculateDefensiveStrength = ExternalThreats.calculateDefensiveStrength;
 window.applyRaidDamage = ExternalThreats.applyRaidDamage;
 window.shouldSpawnThreat = ExternalThreats.shouldSpawnThreat;
 window.checkThreatSpawning = ExternalThreats.checkThreatSpawning;
+window.spawnBanditCamp = ExternalThreats.spawnBanditCamp;
+window.canAttackBanditCamp = ExternalThreats.canAttackBanditCamp;
+window.attackBanditCamp = ExternalThreats.attackBanditCamp;
+window.destroyBanditCamp = ExternalThreats.destroyBanditCamp;
+window.getBanditCampAt = ExternalThreats.getBanditCampAt;
 
 // Combat system
 window.initiateCombat = Combat.initiateCombat;
@@ -228,6 +238,8 @@ window.wfRemoveWorker = Economy.wfRemoveWorker;
 window.openWorkforceOverlay = Economy.openWorkforceOverlay;
 window.hexHasFreshWater = Economy.hexHasFreshWater;
 window.hexAdjacentToLake = Economy.hexAdjacentToLake;
+window.getChildFoodConsumption = Economy.getChildFoodConsumption;
+window.getChildFoodBreakdown = Economy.getChildFoodBreakdown;
 
 // Cohesion system
 window.calculateCohesion = Cohesion.calculateCohesion;
@@ -308,6 +320,8 @@ window.getHighIntensityFemaleWorkers = TurnProcessing.getHighIntensityFemaleWork
 window.getMilitaryFemaleCount = TurnProcessing.getMilitaryFemaleCount;
 window.getReproductiveAvailability = TurnProcessing.getReproductiveAvailability;
 window.releaseWorkersFromHexes = TurnProcessing.releaseWorkersFromHexes;
+window.showAdvisorModal = TurnProcessing.showAdvisorModal;
+window.closeAdvisorModal = TurnProcessing.closeAdvisorModal;
 
 // Rendering system
 window.initRendering = Rendering.initRendering;
@@ -322,12 +336,14 @@ window.drawMovementRange = Rendering.drawMovementRange;
 window.drawUnits = Rendering.drawUnits;
 window.drawUnitsInTraining = Rendering.drawUnitsInTraining;
 window.drawThreats = Rendering.drawThreats;
+window.drawBanditCamps = Rendering.drawBanditCamps;
 window.drawMinimap = Rendering.drawMinimap;
 window.minimapToCamera = Rendering.minimapToCamera;
 window.setDevRenderingFlags = Rendering.setDevRenderingFlags;
 window.updateCanvasRect = Rendering.updateCanvasRect;
 window.setMapDirty = Rendering.setMapDirty;
 window.invalidateFeatureLabelCache = Rendering.invalidateFeatureLabelCache;
+window.clearRenderingState = Rendering.clearRenderingState;
 
 // Side Panel system
 window.initSidePanel = SidePanel.initSidePanel;
@@ -409,6 +425,7 @@ window.devGiveResources = DevPanel.devGiveResources;
 window.devSetResource = DevPanel.devSetResource;
 window.devAddResource = DevPanel.devAddResource;
 window.devSpawnThreat = DevPanel.devSpawnThreat;
+window.devSpawnBanditCamp = DevPanel.devSpawnBanditCamp;
 window.devAddPopulation = DevPanel.devAddPopulation;
 window.devMaxCohesion = DevPanel.devMaxCohesion;
 window.devMinCohesion = DevPanel.devMinCohesion;
@@ -517,6 +534,7 @@ window.confirmForcePolicy = OverlayRenderers.confirmForcePolicy;
 // UI Updates system
 window.initUIUpdates = UIUpdates.initUIUpdates;
 window.updateAllUI = UIUpdates.updateAllUI;
+window.updateAdvisorWidget = UIUpdates.updateAdvisorWidget;
 window.updateCohesionDisplay = UIUpdates.updateCohesionDisplay;
 window.updateValuesDisplay = UIUpdates.updateValuesDisplay;
 window.updateTurnDisplay = UIUpdates.updateTurnDisplay;
@@ -664,16 +682,41 @@ window.handleFortifyClick = function(col, row, edge) {
   }
 };
 
-// Tutorial system
+// Tutorial system (legacy — retained for backward compat)
 window.initTutorial = Tutorial.initTutorial;
 window.showTutorialHint = Tutorial.showTutorialHint;
 window.showTutorialModal = Tutorial.showTutorialModal;
 window.closeTutorial = Tutorial.closeTutorial;
 
+// Advisor system
+window.initAdvisor = Advisor.initAdvisor;
+window.evaluateAdvisorHints = Advisor.evaluateAdvisorHints;
+window.getActiveAdvisories = Advisor.getActiveAdvisories;
+window.getAdvisorSummary = Advisor.getAdvisorSummary;
+window.getModalHint = Advisor.getModalHint;
+window.dismissAdvisory = Advisor.dismissAdvisory;
+window.setAdvisorEnabled = Advisor.setAdvisorEnabled;
+window.isAdvisorEnabled = Advisor.isAdvisorEnabled;
+window.resetAdvisorState = Advisor.resetAdvisorState;
+window.ADVISOR_HINTS = ADVISOR_HINTS;
+
+// Policy Wizard system
+window.initPolicyWizard = PolicyWizard.initPolicyWizard;
+window.showPolicyWizard = PolicyWizard.showPolicyWizard;
+window.skipPolicyWizard = PolicyWizard.skipPolicyWizard;
+window.advanceWizard = PolicyWizard.advanceWizard;
+
 // Settings & Notifications system
 window.initSettings = Settings.initSettings;
 window.openSettings = Settings.openSettings;
 window.returnToMainMenu = Settings.returnToMainMenu;
+window.showMainMenu = Settings.showMainMenu;
+window.hideMainMenu = Settings.hideMainMenu;
+window.refreshMainMenuButtons = Settings.refreshMainMenuButtons;
+window.startNewGame = Settings.startNewGame;
+window.continueGame = Settings.continueGame;
+window.loadFromMainMenu = Settings.loadFromMainMenu;
+window.openMainMenuSettings = Settings.openMainMenuSettings;
 window.showNotification = Settings.showNotification;
 window.applyUIScale = Settings.applyUIScale;
 
@@ -782,6 +825,9 @@ window.pendingCount = PolicyLag.pendingCount;
 window.classifyPolicyChange = PolicyLag.classifyPolicyChange;
 window.calculateEffectiveLag = PolicyLag.calculateEffectiveLag;
 window.getAdminHallReduction = PolicyLag.getAdminHallReduction;
+window.getActivePolicyLocks = PolicyLag.getActivePolicyLocks;
+window.isPolicyLocked = PolicyLag.isPolicyLocked;
+window.getActivePolicyPressures = PolicyLag.getActivePolicyPressures;
 
 // Resistance system
 window.initResistance = Resistance.initResistance;
@@ -1034,8 +1080,9 @@ window.initGameCore = initGameCore;
 // Signal that modules are ready
 window.modulesReady = true;
 
-// Initialize the game now that all modules are loaded
+// Initialize settings early (UI scale, event listeners)
 setTimeout(() => {
-  window.gameState = initGameCore(7743);
-  console.log('🎯 Game initialized with modules');
-}, 100); // Small delay to ensure DOM and other scripts are ready
+  if (window.initSettings) window.initSettings();
+  window.refreshMainMenuButtons();
+  console.log('🎯 Modules loaded — showing main menu');
+}, 100);

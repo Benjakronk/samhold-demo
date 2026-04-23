@@ -7,13 +7,27 @@ import { EVENT_LIBRARY } from '../data/events.js';
 // Constants (access from window object for compatibility)
 const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
 const FOOD_PER_POP = 2;
-const FOOD_PER_CHILD = 1;
+const FOOD_PER_CHILD = 1; // flat fallback — actual child food uses window.getChildFoodConsumption() with puberty scaling
 let WORKING_AGE = 10;
 
 // Event game state tracking
+// activeEvents is transient (current turn only), kept module-local
 let activeEvents = [];
-let eventCooldowns = {};
-let pendingEvents = [];
+
+// eventCooldowns and pendingEvents are persisted on gameState for save/load
+// Helper accessors ensure we always read/write the gameState copy
+function getEventCooldowns() {
+  const gs = getGameState();
+  if (!gs) return {};
+  if (!gs.eventCooldowns) gs.eventCooldowns = {};
+  return gs.eventCooldowns;
+}
+function getPendingEvents() {
+  const gs = getGameState();
+  if (!gs) return [];
+  if (!gs.pendingEvents) gs.pendingEvents = [];
+  return gs.pendingEvents;
+}
 
 // Helper function to access game state (using window for global access)
 function getGameState() {
@@ -50,7 +64,8 @@ function checkEventTriggers() {
   // Check each event in the library
   for (const [eventId, eventData] of Object.entries(EVENT_LIBRARY)) {
     // Skip if event is on cooldown
-    if (eventCooldowns[eventId] && eventCooldowns[eventId] > gameState.turn) {
+    const cooldowns = getEventCooldowns();
+    if (cooldowns[eventId] && cooldowns[eventId] > gameState.turn) {
       continue;
     }
 
@@ -63,7 +78,7 @@ function checkEventTriggers() {
     if (Math.random() < eventData.triggers.probability) {
       triggerEvent(eventData);
       // Add cooldown to prevent immediate re-trigger
-      eventCooldowns[eventId] = gameState.turn + 8; // 2 years minimum between same event
+      getEventCooldowns()[eventId] = gameState.turn + 8; // 2 years minimum between same event
       break; // Only trigger one event per turn
     }
   }
@@ -254,6 +269,12 @@ function evaluateCondition(condition) {
         case 'classMilitaryBasis':
           result = gameState.classSystem?.basis === 'military';
           break;
+        case 'classSystemInactive':
+          result = !gameState.classSystem?.active;
+          break;
+        case 'genderSystemInactive':
+          result = !gameState.genderFormalization?.active;
+          break;
         case 'fewActiveThreats':
           result = (gameState.externalThreats?.length ?? 0) <= 1;
           break;
@@ -293,6 +314,205 @@ function evaluateCondition(condition) {
           result = gf2?.active &&
             gameState.cohesion.legitimacy < driftThreshold &&
             Object.values(gf2.dimensions || {}).some(d => d.position > 0 && d.driftTimer > 0);
+          break;
+        }
+        // ---- Advisor system conditions ----
+        case 'turnEquals':
+          result = gameState.turn === condition.value;
+          break;
+        case 'turnAtLeast':
+          result = gameState.turn >= condition.value;
+          break;
+        case 'foodNetNegative': {
+          const inc = window.calculateIncome ? window.calculateIncome() : null;
+          result = inc ? inc.netFood < 0 : false;
+          break;
+        }
+        case 'foodStockpileLow':
+          result = gameState.resources.food < gameState.population.total * 4;
+          break;
+        case 'noFarms': {
+          let hasFarm = false;
+          for (let r = 0; r < (window.MAP_ROWS || 16); r++) {
+            for (let c = 0; c < (window.MAP_COLS || 20); c++) {
+              const hex = gameState.map?.[r]?.[c];
+              if (hex?.building === 'farm' && (hex.buildProgress ?? 0) <= 0) { hasFarm = true; break; }
+            }
+            if (hasFarm) break;
+          }
+          result = !hasFarm;
+          break;
+        }
+        case 'idleWorkersZero':
+          result = (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) === 0;
+          break;
+        case 'idleAbove2':
+          result = (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) > 2;
+          break;
+        case 'firstWinterApproaching': {
+          const season = window.SEASONS ? window.SEASONS[gameState.season] : '';
+          result = season === 'Autumn' && gameState.year <= 2;
+          break;
+        }
+        case 'noWarriors':
+          result = !(gameState.units ?? []).some(u => u.type === 'warrior');
+          break;
+        case 'noScouts':
+          result = !(gameState.units ?? []).some(u => u.type === 'scout');
+          break;
+        case 'noTraditions':
+          result = (gameState.traditions?.length ?? 0) === 0;
+          break;
+        case 'starvationOccurred':
+          result = (gameState.lastTurnReport?.adultDeaths ?? 0) > 0 || (gameState.lastTurnReport?.childDeaths ?? 0) > 0;
+          break;
+        case 'populationDeclining':
+          result = gameState.lastTurnReport && (
+            (gameState.lastTurnReport.adultDeaths ?? 0) + (gameState.lastTurnReport.elderDeaths ?? 0) >
+            (gameState.lastTurnReport.graduated ?? 0)
+          );
+          break;
+        case 'childrenExist':
+          result = (gameState.childCohorts?.length ?? 0) > 0;
+          break;
+        case 'anyBuildingCompleted':
+          result = (gameState.lastTurnReport?.buildingsCompleted?.length ?? 0) > 0;
+          break;
+        case 'anyPillarChangedSignificantly': {
+          const lu = gameState.cohesion.lastUpdate;
+          result = lu && (Math.abs(lu.identity) > 3 || Math.abs(lu.legitimacy) > 3 || Math.abs(lu.satisfaction) > 3 || Math.abs(lu.bonds) > 3);
+          break;
+        }
+        case 'anyPillarBelow25':
+          result = gameState.cohesion.identity < 25 || gameState.cohesion.legitimacy < 25 ||
+                   gameState.cohesion.satisfaction < 25 || gameState.cohesion.bonds < 25;
+          break;
+        case 'crimeEmerging':
+          result = (gameState.crime?.overallSeverity ?? 0) > 0;
+          break;
+        case 'crimeAbove3':
+          result = (gameState.crime?.overallSeverity ?? 0) > 3;
+          break;
+        case 'noJusticeHall': {
+          let hasJH = false;
+          for (let r = 0; r < (window.MAP_ROWS || 16); r++) {
+            for (let c = 0; c < (window.MAP_COLS || 20); c++) {
+              const hex = gameState.map?.[r]?.[c];
+              if (hex?.building === 'justice_hall' && (hex.buildProgress ?? 0) <= 0) { hasJH = true; break; }
+            }
+            if (hasJH) break;
+          }
+          result = !hasJH;
+          break;
+        }
+        case 'resistancePressureAbove25':
+          result = (gameState.resistance?.pressure ?? 0) > 25;
+          break;
+        case 'firstValueRecognized':
+          result = (gameState.values?.length ?? 0) > 0;
+          break;
+        case 'immigrantsArriving': {
+          const imm = gameState.immigration;
+          result = imm && (imm.lastArrivals > 0 || (window.stageTotal ? window.stageTotal(0) > 0 : false));
+          break;
+        }
+        case 'winterApproachingLowFood': {
+          const nextSeason = window.SEASONS ? window.SEASONS[(gameState.season + 1) % 4] : '';
+          result = nextSeason === 'Winter' && gameState.resources.food < gameState.population.total * 6;
+          break;
+        }
+        case 'governanceStrainHigh':
+          result = window.getTerritoryGovernanceStrain ? window.getTerritoryGovernanceStrain() > 3 : false;
+          break;
+        case 'monumentNeglected': {
+          let neglected = false;
+          for (let r = 0; r < (window.MAP_ROWS || 16); r++) {
+            for (let c = 0; c < (window.MAP_COLS || 20); c++) {
+              const hex = gameState.map?.[r]?.[c];
+              if (hex?.building === 'monument' && hex.monumentState === 'neglected') { neglected = true; break; }
+            }
+            if (neglected) break;
+          }
+          result = neglected;
+          break;
+        }
+        case 'governanceTransitionPending':
+          result = (gameState.governance?.modelChangeTimer ?? 0) > 0;
+          break;
+        case 'lowExploration': {
+          let revealed = 0;
+          const total = (window.MAP_ROWS || 16) * (window.MAP_COLS || 20);
+          if (gameState.visibilityMap) {
+            for (let r = 0; r < gameState.visibilityMap.length; r++)
+              for (let c = 0; c < (gameState.visibilityMap[r]?.length ?? 0); c++)
+                if (gameState.visibilityMap[r][c] > 0) revealed++;
+          }
+          result = revealed < total * 0.3;
+          break;
+        }
+        case 'identityRising': {
+          const lu2 = gameState.cohesion.lastUpdate;
+          result = lu2 && lu2.identity > 0.5;
+          break;
+        }
+        case 'satisfactionDeclining': {
+          const lu3 = gameState.cohesion.lastUpdate;
+          result = lu3 && lu3.satisfaction < -0.5;
+          break;
+        }
+        case 'genderRestrictingWorkforce': {
+          const gf3 = gameState.genderFormalization;
+          result = gf3?.active && (gf3.dimensions?.labor?.position ?? 0) < 0 &&
+                   (window.getAssignableIdle ? window.getAssignableIdle() : gameState.population.idle) < 2;
+          break;
+        }
+        case 'eldersContributing': {
+          const retired = window.getRetiredElderCount ? window.getRetiredElderCount() : 0;
+          result = retired > 3;
+          break;
+        }
+        case 'activeLagCountHigh': {
+          const lag = gameState.policyLag;
+          let count = 0;
+          if (lag) for (const key of ['freedom','mercy','tradition','isolation','culturalOpenness','progressiveness','workingAge','retirementAge']) {
+            if (lag[key] && lag[key].turnsRemaining > 0) count++;
+          }
+          result = count > 2;
+          break;
+        }
+        case 'trustRecovering': {
+          const t = gameState.trust;
+          result = t && t.deviations && t.deviations.interpersonal < -0.05 &&
+                   t.interpersonal > t.interpersonalBaseline;
+          break;
+        }
+        case 'valueViolationRecent': {
+          const report = gameState.lastTurnReport;
+          result = report?.events?.some(e => typeof e === 'string' && e.includes('value')) ?? false;
+          break;
+        }
+        case 'harshWinterOccurred': {
+          const season = window.SEASONS ? window.SEASONS[gameState.season] : '';
+          result = season === 'Winter' && (gameState.winterSeverity ?? 1.0) >= 1.15;
+          break;
+        }
+        case 'parallelSocietyAbove30':
+          result = (gameState.immigration?.parallelSociety?.strength ?? 0) >= 0.30;
+          break;
+        case 'identityLowestPillarNoShrine': {
+          const c = gameState.cohesion;
+          const isLowest = c.identity <= c.legitimacy && c.identity <= c.satisfaction && c.identity <= c.bonds;
+          let hasShrine = false;
+          if (isLowest) {
+            for (let r = 0; r < (window.MAP_ROWS || 16); r++) {
+              for (let cc = 0; cc < (window.MAP_COLS || 20); cc++) {
+                const hex = gameState.map?.[r]?.[cc];
+                if (hex?.building === 'shrine' && (hex.buildProgress ?? 0) <= 0) { hasShrine = true; break; }
+              }
+              if (hasShrine) break;
+            }
+          }
+          result = isLowest && !hasShrine;
           break;
         }
         default:
@@ -542,6 +762,37 @@ function generateEventFeedback(stateBefore, consequences) {
     }
   }
 
+  // Policy effects feedback
+  const policyEffects = consequences.immediate?.policyEffects;
+  if (policyEffects) {
+    const policyNames = { freedom: 'Freedom', mercy: 'Mercy', tradition: 'Tradition', isolation: 'Isolation', culturalOpenness: 'Cultural Openness', progressiveness: 'Progressiveness' };
+    if (policyEffects.shifts) {
+      for (const [policy, delta] of Object.entries(policyEffects.shifts)) {
+        const name = policyNames[policy] || policy;
+        const dir = delta > 0 ? 'increased' : 'decreased';
+        feedback.push(`📜 ${name} policy ${dir} by ${Math.abs(delta)}`);
+      }
+    }
+    if (policyEffects.locks) {
+      for (const lock of policyEffects.locks) {
+        const name = policyNames[lock.policy] || lock.policy;
+        if (lock.value !== undefined && lock.value !== null) {
+          feedback.push(`🔒 ${name} locked at ${lock.value} for ${lock.turns} turns`);
+        } else if (lock.direction === 'min') {
+          feedback.push(`🔒 ${name} cannot decrease for ${lock.turns} turns`);
+        } else if (lock.direction === 'max') {
+          feedback.push(`🔒 ${name} cannot increase for ${lock.turns} turns`);
+        }
+      }
+    }
+    if (policyEffects.pressure) {
+      for (const p of policyEffects.pressure) {
+        const name = policyNames[p.policy] || p.policy;
+        feedback.push(`⚡ Societal pressure toward ${name} ${p.target} for ${p.turns} turns`);
+      }
+    }
+  }
+
   // Crime effects feedback
   const crimeEffects = consequences.immediate?.crimeEffects;
   if (crimeEffects) {
@@ -549,6 +800,25 @@ function generateEventFeedback(stateBefore, consequences) {
       feedback.push('⚖️ Crime has been reduced');
     } else if (crimeEffects.severityReduction < 0) {
       feedback.push('⚖️ Crime may worsen as a result');
+    }
+  }
+
+  // Class system effects feedback
+  const classEffects = consequences.immediate?.classEffects;
+  if (classEffects) {
+    if (classEffects.activate) {
+      const basisNames = { property: 'property ownership', lineage: 'lineage', religious: 'religious authority', military: 'military standing' };
+      feedback.push(`👑 A formal class system has emerged, based on ${basisNames[classEffects.activate] || classEffects.activate}`);
+    }
+  }
+
+  // Gender formalization effects feedback
+  const genderEffects = consequences.immediate?.genderEffects;
+  if (genderEffects?.moves) {
+    const dimNames = { labor: 'labor roles', military: 'military access', inheritance: 'inheritance', civic: 'civic authority' };
+    for (const move of genderEffects.moves) {
+      const dir = move.direction > 0 ? 'egalitarian' : 'restrictive';
+      feedback.push(`⚤ Gender roles formalized: ${dimNames[move.dimension] || move.dimension} shifted toward ${dir}`);
     }
   }
 
@@ -654,7 +924,7 @@ function applyEventConsequences(consequences) {
   }
 
   if (consequences.delay) {
-    pendingEvents.push({
+    getPendingEvents().push({
       turnToTrigger: gameState.turn + consequences.delay,
       effects: consequences,
       followUp: consequences.followUp
@@ -765,6 +1035,60 @@ function applyImmediateEffects(effects) {
     }
   }
 
+  // Apply policy effects if specified
+  if (effects.policyEffects) {
+    const pe = effects.policyEffects;
+    // Shifts: immediate policy value changes (bypass lag)
+    if (pe.shifts) {
+      for (const [policy, delta] of Object.entries(pe.shifts)) {
+        if (gameState.governance.policies[policy] !== undefined) {
+          gameState.governance.policies[policy] = Math.max(0, Math.min(100,
+            gameState.governance.policies[policy] + delta
+          ));
+        }
+      }
+    }
+    // Locks: store for enforcement by policyLag and UI
+    if (pe.locks) {
+      if (!gameState.policyLocks) gameState.policyLocks = [];
+      for (const lock of pe.locks) {
+        const entry = {
+          policy: lock.policy,
+          expiresOnTurn: gameState.turn + (lock.turns || 4),
+          source: 'event'
+        };
+        if (lock.value !== undefined && lock.value !== null) {
+          entry.value = lock.value;
+          // Also snap the policy to the locked value
+          if (gameState.governance.policies[lock.policy] !== undefined) {
+            gameState.governance.policies[lock.policy] = lock.value;
+          }
+        }
+        if (lock.direction) entry.direction = lock.direction;
+        if (lock.floor !== undefined) {
+          entry.floor = lock.floor === 'current' ? gameState.governance.policies[lock.policy] : lock.floor;
+        }
+        if (lock.ceiling !== undefined) {
+          entry.ceiling = lock.ceiling === 'current' ? gameState.governance.policies[lock.policy] : lock.ceiling;
+        }
+        gameState.policyLocks.push(entry);
+      }
+    }
+    // Pressure: store for per-turn processing
+    if (pe.pressure) {
+      if (!gameState.policyPressures) gameState.policyPressures = [];
+      for (const p of pe.pressure) {
+        gameState.policyPressures.push({
+          policy: p.policy,
+          target: p.target,
+          expiresOnTurn: gameState.turn + (p.turns || 8),
+          costPerTurn: p.costPerTurn || {},
+          source: 'event'
+        });
+      }
+    }
+  }
+
   // Apply crime effects if specified
   if (effects.crimeEffects) {
     const ce = effects.crimeEffects;
@@ -778,6 +1102,37 @@ function applyImmediateEffects(effects) {
         c.violence = Math.max(0, c.violence - reduction * (c.violence / total));
         c.transgression = Math.max(0, c.transgression - reduction * (c.transgression / total));
         c.overallSeverity = c.theft + c.violence + c.transgression;
+      }
+    }
+  }
+
+  // Apply class system effects if specified
+  if (effects.classEffects) {
+    const ce = effects.classEffects;
+    if (ce.activate && !gameState.classSystem?.active) {
+      if (window.activateClassSystem) {
+        const result = window.activateClassSystem(ce.activate, { skipCosts: true });
+        if (result.success && ce.initialDifferentials) {
+          // Apply initial differential bumps (bypassing normal lag)
+          const diffs = gameState.classSystem.differentials;
+          for (const [dim, val] of Object.entries(ce.initialDifferentials)) {
+            if (diffs[dim] !== undefined) {
+              diffs[dim] = Math.max(0, Math.min(3, diffs[dim] + val));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Apply gender formalization effects if specified
+  if (effects.genderEffects) {
+    const ge = effects.genderEffects;
+    if (ge.moves) {
+      for (const move of ge.moves) {
+        if (window.moveGenderDimension) {
+          window.moveGenderDimension(move.dimension, move.direction, { skipCosts: true });
+        }
       }
     }
   }
@@ -848,18 +1203,27 @@ function calculateContextualModifiers(effects) {
 
 function processPendingEvents() {
   const gameState = getGameState();
+  const pending = getPendingEvents();
   // Process delayed events that should trigger this turn
-  for (let i = pendingEvents.length - 1; i >= 0; i--) {
-    const pending = pendingEvents[i];
-    if (pending.turnToTrigger <= gameState.turn) {
-      if (pending.followUp) {
+  for (let i = pending.length - 1; i >= 0; i--) {
+    const entry = pending[i];
+    if (entry.turnToTrigger <= gameState.turn) {
+      if (entry.followUp) {
         // Trigger follow-up event
-        const followUpEvent = EVENT_LIBRARY[pending.followUp];
+        const followUpEvent = EVENT_LIBRARY[entry.followUp];
         if (followUpEvent) {
           triggerEvent(followUpEvent);
+        } else {
+          console.warn(`Follow-up event '${entry.followUp}' not found in EVENT_LIBRARY`);
+        }
+      } else if (entry.effects?.delayedEffects) {
+        // Apply delayed effects directly (no follow-up event, just deferred consequences)
+        applyImmediateEffects(entry.effects.delayedEffects);
+        if (window.addChronicleEntry) {
+          window.addChronicleEntry('The delayed consequences of a past decision have taken effect.', 'event');
         }
       }
-      pendingEvents.splice(i, 1); // Remove processed event
+      pending.splice(i, 1); // Remove processed event
     }
   }
 }
@@ -882,8 +1246,11 @@ function processActiveEvents() {
 // Reset event system for new game
 function resetEventSystem() {
   activeEvents.length = 0; // Clear array in place
-  Object.keys(eventCooldowns).forEach(key => delete eventCooldowns[key]); // Clear object in place
-  pendingEvents.length = 0; // Clear array in place
+  const gs = getGameState();
+  if (gs) {
+    gs.eventCooldowns = {};
+    gs.pendingEvents = [];
+  }
 }
 
 // Export functions for module use
@@ -896,8 +1263,8 @@ export {
 
   // State variables
   activeEvents,
-  eventCooldowns,
-  pendingEvents,
+  getEventCooldowns,
+  getPendingEvents,
 
   // Core functions
   checkEventTriggers,
@@ -927,8 +1294,8 @@ if (typeof window !== 'undefined') {
   window.EventSystem = {
     EVENT_LIBRARY,
     activeEvents,
-    eventCooldowns,
-    pendingEvents,
+    getEventCooldowns,
+    getPendingEvents,
     checkEventTriggers,
     canEventTrigger,
     evaluateCondition,

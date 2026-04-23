@@ -21,7 +21,7 @@ export function initClassSystem(gameStateRef) {
 
 // ---- ACTIVATION ----
 
-export function activateClassSystem(basis) {
+export function activateClassSystem(basis, options = {}) {
   const cs = gameState.classSystem;
   const BASES = window.STRATIFICATION_BASES;
   const COSTS = window.ACTIVATION_COSTS;
@@ -45,10 +45,12 @@ export function activateClassSystem(basis) {
   }
   recalculatePrivilegedCount();
 
-  // Apply activation costs
-  gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy + COSTS.legitimacy);
-  gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction + COSTS.satisfaction);
-  if (window.addResistancePressure) window.addResistancePressure(COSTS.resistancePressure);
+  // Apply activation costs (skipped when triggered by events — costs are in event consequences)
+  if (!options.skipCosts) {
+    gameState.cohesion.legitimacy = Math.max(0, gameState.cohesion.legitimacy + COSTS.legitimacy);
+    gameState.cohesion.satisfaction = Math.max(0, gameState.cohesion.satisfaction + COSTS.satisfaction);
+    if (window.addResistancePressure) window.addResistancePressure(COSTS.resistancePressure);
+  }
 
   // Chronicle
   const baseDef = BASES[basis];

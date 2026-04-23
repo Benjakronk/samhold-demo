@@ -1007,8 +1007,19 @@ function composeStory() {
   const SEASONS_ARR = ['Spring', 'Summer', 'Autumn', 'Winter'];
   const currentSeason = SEASONS_ARR[gameState.season];
 
+  // Build set of chronicle entry keys already used as story sources (dedup)
+  const usedKeys = new Set();
+  for (const s of gameState.culture.stories) {
+    if (s.sourceKey) usedKeys.add(s.sourceKey);
+  }
+
   // Look at recent entries (last 12 turns), prefer meaningful categories
-  const recent = chronicle.filter(e => recentTurn - e.turn <= 12);
+  // Exclude entries already used as story sources and storytelling chronicle entries
+  const recent = chronicle.filter(e =>
+    recentTurn - e.turn <= 12 &&
+    !usedKeys.has(chronicleEntryKey(e)) &&
+    !e.text.includes('storytellers preserved a new account')
+  );
   const preferred = ['crisis', 'military', 'milestone'];
   let sourceEntry = null;
   for (const cat of preferred) {
@@ -1016,11 +1027,13 @@ function composeStory() {
     if (sourceEntry) break;
   }
   if (!sourceEntry) sourceEntry = recent.find(e => e.category === 'cultural');
+  if (!sourceEntry) sourceEntry = recent[0]; // any unused recent entry
 
   if (sourceEntry) {
     return {
       id: `story_${recentTurn}_${Math.floor(Math.random() * 1000)}`,
       ...storyFromEntry(sourceEntry),
+      sourceKey: chronicleEntryKey(sourceEntry),
       identityBonus: STORY_IDENTITY_BONUS,
       turn: recentTurn,
       year: gameState.year,
@@ -1028,7 +1041,7 @@ function composeStory() {
     };
   }
 
-  // Generic fallback
+  // Generic fallback (no unused source entries available)
   return {
     id: `story_${recentTurn}`,
     title: `Tales of Year ${gameState.year}`,
@@ -1038,6 +1051,11 @@ function composeStory() {
     year: gameState.year,
     season: currentSeason
   };
+}
+
+// Generate a stable key for a chronicle entry (used for story deduplication)
+function chronicleEntryKey(entry) {
+  return `${entry.turn}:${entry.category}:${entry.text.substring(0, 60)}`;
 }
 
 // Build a story title and description from a Chronicle entry

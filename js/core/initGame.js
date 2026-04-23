@@ -11,7 +11,7 @@ export function initGameCore(seed) {
   // Create game state and expose immediately so module functions can access it
   const gameState = window.createGameState();
   window.gameState = gameState;
-  console.log('🎮 Game state created in initGame');
+  console.log('🎮 Game state created in initGame, seed:', seed);
 
   // Initialize modules that need gameState early (before map generation)
   if (window.initTerritory) window.initTerritory(gameState);
@@ -65,6 +65,7 @@ export function initGameCore(seed) {
   gameState.territory = new Set(); gameState.lastTurnReport = null;
 
   window.resizeCanvas();
+
   gameState.map = window.generateMap(MAP_COLS, MAP_ROWS, seed);
 
   // Initialize visibility map — 0=unexplored, 1=revealed, 2=visible
@@ -140,10 +141,10 @@ export function initGameCore(seed) {
   gameState.population.employed = autoAssigned;
   gameState.population.idle = gameState.population.total - autoAssigned;
 
-  // Fog of war setup
+  // Fog of war setup — revealArea provides initial vision, recomputeVisibility
+  // (called after module inits) handles territory-based visibility
   const fogDisabled = window.isFogOfWarDisabled ? window.isFogOfWarDisabled() : false;
   if (fogDisabled) {
-    // All hexes fully visible when fog disabled
     for (let r = 0; r < MAP_ROWS; r++) {
       for (let c = 0; c < MAP_COLS; c++) {
         gameState.visibilityMap[r][c] = 2;
@@ -151,33 +152,12 @@ export function initGameCore(seed) {
     }
   } else {
     window.revealArea(sc, sr, 3);
-    // Reveal territory hexes and one hex beyond territory boundary
-    for (let r = 0; r < MAP_ROWS; r++) {
-      for (let c = 0; c < MAP_COLS; c++) {
-        if (window.isInTerritory(c, r)) {
-          gameState.map[r][c].revealed = true;
-          if (gameState.visibilityMap[r]) gameState.visibilityMap[r][c] = Math.max(gameState.visibilityMap[r][c], 2);
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const nr = r + dr;
-              const nc = c + dc;
-              if (nr >= 0 && nr < MAP_ROWS && nc >= 0 && nc < MAP_COLS) {
-                if (window.cubeDistance(window.offsetToCube(c, r), window.offsetToCube(nc, nr)) <= 1) {
-                  gameState.map[nr][nc].revealed = true;
-                  if (gameState.visibilityMap[nr]) gameState.visibilityMap[nr][nc] = Math.max(gameState.visibilityMap[nr][nc], 1);
-                }
-              }
-            }
-          }
-        }
-      }
-    }
   }
 
-  // Center camera on map
-  const ms = window.getMapPixelSize();
-  gameState.camera.x = ms.width / 2;
-  gameState.camera.y = ms.height / 2;
+  // Center camera on starting settlement
+  const settlementPixel = window.hexToPixel(sc, sr, window.HEX_SIZE);
+  gameState.camera.x = settlementPixel.x + window.MAP_PAD;
+  gameState.camera.y = settlementPixel.y + window.MAP_PAD;
 
   // Calculate initial cohesion values
   window.calculateCohesion();
@@ -264,6 +244,16 @@ export function initGameCore(seed) {
     console.log('Tutorial system initialized');
   }
 
+  if (window.initAdvisor) {
+    window.initAdvisor(gameState);
+    console.log('Advisor system initialized');
+  }
+
+  if (window.initPolicyWizard) {
+    window.initPolicyWizard(gameState);
+    console.log('Policy wizard initialized');
+  }
+
   if (window.initSettings) {
     window.initSettings();
     console.log('Settings & notifications system initialized');
@@ -329,13 +319,16 @@ export function initGameCore(seed) {
   // Compute initial visibility from settlement + territory
   if (window.recomputeVisibility) window.recomputeVisibility();
 
+  // Force full map re-render (clears cached offscreen canvas from previous game)
+  if (window.setMapDirty) window.setMapDirty(true);
+
   window.updateTurnDisplay();
   window.updateAllUI();
   if (!DEV_MODE) document.getElementById('dev-badge').style.display = 'none';
   else window.updateDevBadge();
   if (window.render) window.render();
 
-  // Show settlement naming dialog on first game start, then welcome tutorial hint
+  // Turn 1 flow: settlement naming → policy wizard → advisor welcome
   if (gameState.needsSettlementNaming) {
     delete gameState.needsSettlementNaming;
     setTimeout(() => {
@@ -343,8 +336,31 @@ export function initGameCore(seed) {
         window.showSettlementNamingDialog(0, () => {
           if (window.updateAllUI) window.updateAllUI();
           if (window.render) window.render();
-          // Show turn 1 tutorial hint after naming dialog is closed
-          setTimeout(() => { if (window.showTutorialHint) window.showTutorialHint(); }, 300);
+          // Show policy wizard after naming dialog
+          setTimeout(() => {
+            if (window.showPolicyWizard) {
+              window.showPolicyWizard(() => {
+                // After wizard completes or is skipped, update UI and show advisor
+                if (window.updateAllUI) window.updateAllUI();
+                setTimeout(() => {
+                  if (window.evaluateAdvisorHints) window.evaluateAdvisorHints();
+                  const modalHint = window.getModalHint ? window.getModalHint() : null;
+                  if (modalHint && window.showAdvisorModal) {
+                    window.showAdvisorModal(modalHint);
+                  }
+                }, 300);
+              });
+            } else {
+              // Fallback: skip wizard, show advisor directly
+              setTimeout(() => {
+                if (window.evaluateAdvisorHints) window.evaluateAdvisorHints();
+                const modalHint = window.getModalHint ? window.getModalHint() : null;
+                if (modalHint && window.showAdvisorModal) {
+                  window.showAdvisorModal(modalHint);
+                }
+              }, 300);
+            }
+          }, 200);
         });
       }
     }, 500);

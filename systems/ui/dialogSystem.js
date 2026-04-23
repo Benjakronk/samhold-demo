@@ -96,8 +96,9 @@ export function showConfirmDialogNonDestructive(title, bodyHtml, okLabel, cancel
 
     // showLabelsOverlay() is called AFTER onConfirm() so the render it triggers
     // sees any feature names added by the confirm action (e.g. naming a hex).
+    const onCancel = options && options.onCancel;
     document.getElementById('confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); showLabelsOverlay(); });
-    document.getElementById('confirm-cancel').addEventListener('click', () => { cleanup(); showLabelsOverlay(); });
+    document.getElementById('confirm-cancel').addEventListener('click', () => { cleanup(); if (onCancel) onCancel(); showLabelsOverlay(); });
 }
 
 // Game-specific confirmation dialogs

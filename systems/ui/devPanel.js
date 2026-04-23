@@ -222,10 +222,11 @@ export function renderDevTabContent() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
           ${devRow('Food per adult/turn', 'dev-food-per-pop', window.FOOD_PER_POP)}
           ${devRow('Food per child/turn', 'dev-food-per-child', window.FOOD_PER_CHILD)}
+          ${devRow('Puberty age (full rations)', 'dev-puberty-age', window.PUBERTY_AGE)}
           ${devRow('Food per elder/turn', 'dev-food-per-elder', window.FOOD_PER_ELDER)}
           ${devRow('Winter food per pop', 'dev-winter-food', window.WINTER_FOOD_PER_POP ?? 0.5)}
         </div>
-        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Immigrants use the adult rate. Winter cost = ceil(pop × winter rate), applied once per winter turn.</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Children aged ≥ puberty age eat full adult rations. Immigrants use the adult rate. Winter cost = ceil(pop × winter rate), applied once per winter turn.</div>
         <div style="margin-top:4px">
           ${devRow('Nursing income penalty', 'dev-nursing-penalty', window.NURSING_LABOR_PENALTY ?? 0.5)}
         </div>
@@ -246,6 +247,7 @@ export function renderDevTabContent() {
       const pairs = [
         ['dev-food-per-pop',     v => { window.FOOD_PER_POP   = parseInt(v) || 0; }],
         ['dev-food-per-child',   v => { window.FOOD_PER_CHILD  = parseInt(v) || 0; }],
+        ['dev-puberty-age',      v => { window.PUBERTY_AGE = Math.max(1, parseInt(v) || 12); }],
         ['dev-food-per-elder',   v => { window.FOOD_PER_ELDER  = parseInt(v) || 0; }],
         ['dev-winter-food',      v => { window.WINTER_FOOD_PER_POP  = Math.max(0, parseFloat(v) || 0); }],
         ['dev-nursing-penalty',  v => { window.NURSING_LABOR_PENALTY = Math.max(0, Math.min(1, parseFloat(v) || 0)); }],
@@ -552,14 +554,14 @@ export function renderDevTabContent() {
         <h4 style="color:var(--text-light);margin:0 0 4px;font-size:14px">Event State:</h4>
         <div style="color:var(--text-dim);font-size:12px;margin:0 0 8px">
           <div>Active Events: <span style="color:var(--text-light)">${window.EventSystem ? window.EventSystem.activeEvents.length : 0}</span></div>
-          <div>Pending Events: <span style="color:var(--text-light)">${window.EventSystem ? window.EventSystem.pendingEvents.length : 0}</span></div>
+          <div>Pending Events: <span style="color:var(--text-light)">${gameState.pendingEvents ? gameState.pendingEvents.length : 0}</span></div>
           <div>Current Turn: <span style="color:var(--text-light)">${gameState.turn}</span></div>
         </div>
 
         <h4 style="color:var(--text-light);margin:8px 0 4px;font-size:14px">Cooldowns:</h4>
         <div style="max-height:120px;overflow-y:auto;font-size:11px">`;
 
-    const cooldownEntries = window.EventSystem ? Object.entries(window.EventSystem.eventCooldowns) : [];
+    const cooldownEntries = gameState.eventCooldowns ? Object.entries(gameState.eventCooldowns) : [];
     if (cooldownEntries.length === 0) {
       html += `<div style="color:var(--text-dim)">No events on cooldown</div>`;
     } else {
@@ -580,15 +582,17 @@ export function renderDevTabContent() {
           <button class="dev-btn" onclick="devClearEventCooldowns()" style="width:100%;font-size:12px">Clear All Cooldowns</button>
         </div>
 
-        <h4 style="color:var(--text-light);margin:16px 0 4px;font-size:14px">\u{1F4A1} Tutorial Hints</h4>
+        <h4 style="color:var(--text-light);margin:16px 0 4px;font-size:14px">\u{1F4A1} Advisor Hints</h4>
         <div style="color:var(--text-dim);font-size:12px;margin:0 0 8px">
-          <div>Hints Status: <span style="color:var(--text-light)">${localStorage.getItem('samhold_tutorial_disabled') === 'true' ? 'Disabled' : 'Enabled'}</span></div>
+          <div>Advisor: <span style="color:var(--text-light)">${window.isAdvisorEnabled ? (window.isAdvisorEnabled() ? 'Enabled' : 'Disabled') : '?'}</span></div>
+          <div>Active: <span style="color:var(--text-light)">${gameState.advisor?.activeAdvisories?.length ?? 0} hints</span></div>
+          <div>Shown: <span style="color:var(--text-light)">${Object.keys(gameState.advisor?.shownHints ?? {}).length} unique</span></div>
+          <div>Dismissed: <span style="color:var(--text-light)">${Object.keys(gameState.advisor?.dismissedHints ?? {}).length}</span></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px">
-          <button class="dev-btn" onclick="devResetHints()" style="width:100%;font-size:12px">Reset & Enable Hints</button>
-          <button class="dev-btn" onclick="devDisableHints()" style="width:100%;font-size:12px">Disable Hints</button>
-          <button class="dev-btn" onclick="devTestHint()" style="width:100%;font-size:12px">Test Hint for Current Turn</button>
-          <button class="dev-btn" onclick="devShowRandomHint()" style="width:100%;font-size:12px">Show Random Hint</button>
+          <button class="dev-btn" onclick="devResetHints()" style="width:100%;font-size:12px">Reset All Advisor State</button>
+          <button class="dev-btn" onclick="devTestHint()" style="width:100%;font-size:12px">Evaluate Hints Now</button>
+          <button class="dev-btn" onclick="devShowRandomHint()" style="width:100%;font-size:12px">Show Random Hint Modal</button>
         </div>
       </div>
     </div>`;
@@ -735,6 +739,13 @@ export function renderDevTabContent() {
     }
 
     html += `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:rgba(139,105,20,0.15);border-radius:3px">
+            <div>
+              <div style="font-weight:bold;font-size:13px">🏕️ Bandit Camp</div>
+              <div style="color:var(--text-dim);font-size:11px">HP: 150 \u2022 Spawns threats</div>
+            </div>
+            <button class="dev-btn" onclick="devSpawnBanditCamp()" style="font-size:11px;padding:3px 12px;min-width:60px">Spawn</button>
+          </div>
         </div>
       </div>
       <div>
@@ -743,6 +754,7 @@ export function renderDevTabContent() {
           <div>Total Units: <span style="color:var(--text-light)">${gameState.units.length}</span></div>
           <div>Food Upkeep: <span style="color:var(--text-light)">${gameState.units.reduce((sum, u) => sum + window.UNIT_TYPES[u.type].upkeep.food, 0)}/turn</span></div>
           <div style="margin-top:8px;color:var(--accent-red)">Active Threats: <span style="color:var(--text-light)">${gameState.externalThreats.length}</span></div>
+          <div style="color:#8B6914">Bandit Camps: <span style="color:var(--text-light)">${(gameState.banditCamps || []).length}</span></div>
         </div>`;
 
     if (gameState.units.length > 0) {
@@ -1267,6 +1279,8 @@ export function applyDevValues() {
   if (foodEl) { const v = parseInt(foodEl.value); window.FOOD_PER_POP = isNaN(v) ? 2 : v; }
   const foodChildEl = document.getElementById('dev-food-per-child');
   if (foodChildEl) { const v = parseInt(foodChildEl.value); window.FOOD_PER_CHILD = isNaN(v) ? 1 : v; }
+  const pubertyEl = document.getElementById('dev-puberty-age');
+  if (pubertyEl) { const v = parseInt(pubertyEl.value); window.PUBERTY_AGE = isNaN(v) ? 12 : Math.max(1, v); }
   const foodElderEl = document.getElementById('dev-food-per-elder');
   if (foodElderEl) { const v = parseInt(foodElderEl.value); window.FOOD_PER_ELDER = isNaN(v) ? 1 : v; }
   const winterFoodEl = document.getElementById('dev-winter-food');
@@ -1353,9 +1367,7 @@ export function devTriggerEvent(eventId) {
 }
 
 export function devClearEventCooldowns() {
-  if (window.EventSystem) {
-    window.EventSystem.eventCooldowns = {};
-  }
+  gameState.eventCooldowns = {};
   console.log('Cleared all event cooldowns');
   renderDevTabContent();
 }
@@ -1407,7 +1419,7 @@ export function devGiveResources() {
 }
 
 export function devSpawnThreat(threatType) {
-  const edgePos = window.findRandomMapEdge();
+  const edgePos = window.findSpawnLocation ? window.findSpawnLocation() : window.findRandomMapEdge();
   const threat = window.spawnThreat(threatType, edgePos.col, edgePos.row);
 
   if (threat) {
@@ -1417,6 +1429,19 @@ export function devSpawnThreat(threatType) {
     if (window.render) window.render();
   } else {
     console.warn(`Failed to spawn ${threatType} threat`);
+  }
+}
+
+export function devSpawnBanditCamp() {
+  const loc = window.findSpawnLocation ? window.findSpawnLocation() : window.findRandomMapEdge();
+  const camp = window.spawnBanditCamp(loc.col, loc.row);
+  if (camp) {
+    console.log(`Spawned bandit camp at (${loc.col}, ${loc.row})`);
+    renderDevTabContent();
+    window.updateAllUI();
+    if (window.render) window.render();
+  } else {
+    console.warn('Failed to spawn bandit camp');
   }
 }
 
@@ -1498,40 +1523,43 @@ export function updateDevBadge() {
   }
 }
 
-// ---- Tutorial hint dev controls ----
+// ---- Advisor hint dev controls ----
 
 export function devResetHints() {
-  localStorage.removeItem('samhold_tutorial_disabled');
+  if (window.resetAdvisorState) window.resetAdvisorState();
+  if (window.setAdvisorEnabled) window.setAdvisorEnabled(true);
+  localStorage.removeItem('samhold_advisor_disabled');
   renderDevTabContent();
-  console.log('Tutorial hints reset and enabled');
+  if (window.updateAllUI) window.updateAllUI();
+  console.log('Advisor state reset and enabled');
 }
 
 export function devDisableHints() {
-  localStorage.setItem('samhold_tutorial_disabled', 'true');
+  if (window.setAdvisorEnabled) window.setAdvisorEnabled(false);
+  localStorage.setItem('samhold_advisor_disabled', 'true');
   renderDevTabContent();
-  console.log('Tutorial hints disabled');
+  if (window.updateAllUI) window.updateAllUI();
+  console.log('Advisor disabled');
 }
 
 export function devTestHint() {
-  window.showTutorialHint();
-  console.log(`Testing tutorial hint for turn ${gameState.turn}`);
+  if (window.evaluateAdvisorHints) {
+    window.evaluateAdvisorHints();
+    if (window.updateAllUI) window.updateAllUI();
+    const advisories = window.getActiveAdvisories ? window.getActiveAdvisories() : [];
+    console.log(`Evaluated advisor hints: ${advisories.length} active`, advisories.map(h => h.id));
+  }
+  renderDevTabContent();
 }
 
 export function devShowRandomHint() {
-  const allHints = [
-    { title: "Welcome to Samhold!", content: "Your small tribe has settled in this fertile land. Click on the hexes around your settlement to explore them. Look for good spots to assign workers for food and materials.", highlight: "exploration" },
-    { title: "Managing Resources", content: "Your people need 2 food per person each turn. Check your resource bars at the top - if food goes negative, people will starve. Assign workers to grassland hexes to gather food.", highlight: "resources" },
-    { title: "Building Your First Farm", content: "For stable food production, build a Farm on grassland. Open the side panel (click any hex), go to the Build tab, select Farm, then click a grassland hex in your territory to place it.", highlight: "building" },
-    { title: "Cohesion Matters", content: "The colored bars at the top show your society's Cohesion - how united your people are. Identity, Legitimacy, Satisfaction, and Bonds all matter. If total cohesion falls too low, your society may collapse!", highlight: "cohesion" },
-    { title: "Growing Your Population", content: "Your population grows through births each season, but children take years to become workers. Keep your people fed and happy to encourage steady population growth.", highlight: "population" },
-    { title: "Seasons and Planning", content: "Pay attention to the seasons! Winter requires extra food to survive the cold. Plan ahead by storing food in autumn, or your people may starve during the harsh winter months.", highlight: "seasons" },
-    { title: "Governance and Policies", content: "As your society grows, you may want to change your governance model. Check the Society tab in the side panel to explore different forms of leadership and policies.", highlight: "governance" },
-    { title: "Working Age Policy", content: "You have children growing up! Consider adjusting your Working Age policy in the Society panel. Lower ages provide workers faster but may reduce satisfaction and knowledge growth.", highlight: "working-age" }
-  ];
-
-  const randomHint = allHints[Math.floor(Math.random() * allHints.length)];
-  window.showTutorialModal(randomHint);
-  console.log(`Showing random tutorial hint: ${randomHint.title}`);
+  const hints = window.ADVISOR_HINTS || [];
+  if (hints.length === 0) return;
+  const randomHint = hints[Math.floor(Math.random() * hints.length)];
+  if (window.showAdvisorModal) {
+    window.showAdvisorModal(randomHint);
+  }
+  console.log(`Showing random advisor hint: ${randomHint.title}`);
 }
 
 // ---- River visualization helpers ----

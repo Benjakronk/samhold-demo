@@ -766,15 +766,19 @@ export function getImmigrantFoodConsumption() {
   const imm = gameState.immigration;
   const foodPerPop = window.FOOD_PER_POP || 2;
   const foodPerChild = window.FOOD_PER_CHILD || 1;
+  const pubertyAge = window.PUBERTY_AGE || 12;
 
   // All cohort adults eat full food
   const cohortPop = stageTotal(0) + stageTotal(1) + stageTotal(2);
   // PS adults eat full food
   const psPop = imm.parallelSociety.population;
-  // PS children eat child food
-  const psChildren = imm.parallelSociety.childCohorts.reduce((s, c) => s + c.count, 0);
+  // PS children eat age-scaled food (puberty scaling)
+  let psChildFood = 0;
+  for (const c of imm.parallelSociety.childCohorts) {
+    psChildFood += c.count * (c.age >= pubertyAge ? foodPerPop : foodPerChild);
+  }
 
-  return (cohortPop + psPop) * foodPerPop + psChildren * foodPerChild;
+  return (cohortPop + psPop) * foodPerPop + psChildFood;
 }
 
 /**

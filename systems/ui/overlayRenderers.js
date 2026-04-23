@@ -386,6 +386,21 @@ function renderGovernanceOverlay() {
     slider.min = constraints.min;
     slider.max = constraints.max;
 
+    // Check policy locks
+    const isLocked = window.isPolicyLocked ? window.isPolicyLocked(policy) : false;
+    const locks = window.getActivePolicyLocks ? window.getActivePolicyLocks(policy) : [];
+    const pressures = window.getActivePolicyPressures ? window.getActivePolicyPressures(policy) : [];
+
+    // Apply lock constraints to slider range
+    for (const lock of locks) {
+      if (lock.value !== undefined) {
+        slider.min = lock.value;
+        slider.max = lock.value;
+      }
+      if (lock.floor !== undefined) slider.min = Math.max(parseInt(slider.min), lock.floor);
+      if (lock.ceiling !== undefined) slider.max = Math.min(parseInt(slider.max), lock.ceiling);
+    }
+
     // Show pending value (if set) or effective value on the slider
     const lagState = window.getPolicyLagState ? window.getPolicyLagState(policy) : null;
     const pendingVal = lagState?.pending;
@@ -393,10 +408,22 @@ function renderGovernanceOverlay() {
     const displayVal = pendingVal !== null && pendingVal !== undefined ? pendingVal : effectiveVal;
     slider.value = displayVal;
     valueDisplay.textContent = displayVal;
+    slider.disabled = isLocked && locks.some(l => l.value !== undefined);
 
     const currentLevel = window.getPolicyLabel(policy, effectiveVal);
     const lagNote = lagState?.lag ? ` ⏳ → ${lagState.lag.target} (${lagState.lag.turnsRemaining}t)` : '';
-    header.textContent = `${policyHeaders[policy]} (${currentLevel})${lagNote}`;
+    let lockNote = '';
+    if (isLocked) {
+      const minExpiry = Math.min(...locks.map(l => l.expiresOnTurn)) - gameState.turn;
+      lockNote = ` 🔒 ${minExpiry}t`;
+    }
+    let pressureNote = '';
+    if (pressures.length > 0) {
+      const p = pressures[0];
+      const turnsLeft = p.expiresOnTurn - gameState.turn;
+      pressureNote = ` ⚡→${p.target} (${turnsLeft}t)`;
+    }
+    header.textContent = `${policyHeaders[policy]} (${currentLevel})${lagNote}${lockNote}${pressureNote}`;
 
     slider.oninput = (e) => {
       const newValue = parseInt(e.target.value);
@@ -1434,11 +1461,34 @@ function selectGovernanceModel(modelKey) {
       extraWarnings.push('• Succession crises may occur if no heir exists');
     }
 
+    // Calculate Meeting Hall reduction for display
+    let meetingHallWorkers = 0;
+    for (let r = 0; r < window.MAP_ROWS; r++) {
+      for (let c = 0; c < window.MAP_COLS; c++) {
+        const hex = gameState.map[r]?.[c];
+        if (hex?.building === 'meeting_hall' && hex.buildProgress <= 0 && hex.workers > 0) {
+          meetingHallWorkers += hex.workers;
+        }
+      }
+    }
+    const basePenalty = 25;
+    const mhReduction = meetingHallWorkers * 2;
+    const finalPenalty = Math.max(Math.floor(basePenalty / 2), basePenalty - mhReduction);
+    const militaryExtra = gameState.governance.model === 'militaryRule' ? 10 : 0;
+    const totalPenalty = finalPenalty + militaryExtra;
+
+    let penaltyHtml = `\u2022 Legitimacy penalty: <strong>-${totalPenalty}</strong>`;
+    if (mhReduction > 0) {
+      penaltyHtml += `<br><span style="color:var(--text-dim);font-size:12px">&nbsp;&nbsp;Base: -${basePenalty}${militaryExtra ? `, military exit: -${militaryExtra}` : ''}, Meeting Hall: +${Math.min(mhReduction, basePenalty - finalPenalty)} reduction (${meetingHallWorkers} workers)</span>`;
+    } else if (militaryExtra > 0) {
+      penaltyHtml += `<br><span style="color:var(--text-dim);font-size:12px">&nbsp;&nbsp;Base: -${basePenalty}, military exit: -${militaryExtra}</span>`;
+    }
+
     const warningHtml = extraWarnings.length > 0 ? '<br>' + extraWarnings.join('<br>') : '';
 
     window.showConfirmDialogNonDestructive(
       `Change to ${model.name}?`,
-      `Changing governance models causes major disruption:<br>\u2022 Legitimacy will drop significantly<br>\u2022 Takes several turns to stabilize<br>\u2022 Current model: ${window.GOVERNANCE_MODELS[gameState.governance.model].name}${warningHtml}`,
+      `Changing governance models causes major disruption:<br>${penaltyHtml}<br>\u2022 Takes several turns to stabilize<br>\u2022 Current model: ${window.GOVERNANCE_MODELS[gameState.governance.model].name}${warningHtml}`,
       'Confirm Change',
       'Cancel',
       () => {
@@ -1506,7 +1556,8 @@ function renderPopSummaryTab() {
   const s = getPopStats();
   const elderFood = s.elderCount * (window.FOOD_PER_ELDER || 1);
   const adultFood = s.workingAdults * window.FOOD_PER_POP;
-  const childFood = s.totalChildren * window.FOOD_PER_CHILD;
+  const childBreakdown = window.getChildFoodBreakdown ? window.getChildFoodBreakdown() : { youngCount: s.totalChildren, adolescentCount: 0, youngFood: s.totalChildren * window.FOOD_PER_CHILD, adolescentFood: 0, totalFood: s.totalChildren * window.FOOD_PER_CHILD };
+  const childFood = childBreakdown.totalFood;
   const totalFood = adultFood + elderFood + childFood;
 
   // Dependency ratio: (children + elders) / working adults
@@ -1551,7 +1602,9 @@ function renderPopSummaryTab() {
       <h3>Food Consumption</h3>
       <div class="detail-row"><span>\u{1F465} Working Adults (${s.workingAdults} \u00D7 ${window.FOOD_PER_POP}):</span><span>${adultFood} \u{1F33E}</span></div>
       ${s.elderCount > 0 ? `<div class="detail-row"><span>\u{1F9D3} Elders (${s.elderCount} \u00D7 ${window.FOOD_PER_ELDER || 1}):</span><span>${elderFood} \u{1F33E}</span></div>` : ''}
-      <div class="detail-row"><span>\u{1F476} Children (${s.totalChildren} \u00D7 ${window.FOOD_PER_CHILD}):</span><span>${childFood} \u{1F33E}</span></div>`;
+      ${childBreakdown.youngCount > 0 ? `<div class="detail-row"><span>\u{1F476} Young children (${childBreakdown.youngCount} \u00D7 ${window.FOOD_PER_CHILD}):</span><span>${childBreakdown.youngFood} \u{1F33E}</span></div>` : ''}
+      ${childBreakdown.adolescentCount > 0 ? `<div class="detail-row"><span>\u{1F9D2} Adolescents (${childBreakdown.adolescentCount} \u00D7 ${window.FOOD_PER_POP}):</span><span>${childBreakdown.adolescentFood} \u{1F33E}</span></div>` : ''}
+      ${childBreakdown.youngCount === 0 && childBreakdown.adolescentCount === 0 ? `<div class="detail-row"><span>\u{1F476} Children:</span><span>0 \u{1F33E}</span></div>` : ''}`;
 
   const immigrantFood = window.getImmigrantFoodConsumption ? window.getImmigrantFoodConsumption() : 0;
   const grandTotal = totalFood + immigrantFood;
@@ -2018,7 +2071,8 @@ function cohesionDriversSatisfaction() {
   const c = gs.cohesion;
 
   const totalChildren = window.getTotalChildren ? window.getTotalChildren() : 0;
-  const totalFoodNeed = (gs.population.total * (window.FOOD_PER_POP || 2)) + (totalChildren * (window.FOOD_PER_CHILD || 1));
+  const childFoodCost = window.getChildFoodConsumption ? window.getChildFoodConsumption() : (totalChildren * (window.FOOD_PER_CHILD || 1));
+  const totalFoodNeed = (gs.population.total * (window.FOOD_PER_POP || 2)) + childFoodCost;
   const stockpile = gs.resources.food;
   const netFood = window.calculateIncome ? window.calculateIncome().netFood : 0;
   const turnsOfFood = netFood >= 0 ? Infinity : stockpile / Math.abs(netFood);
@@ -2346,7 +2400,8 @@ function showResourceBreakdown(type) {
   const rows = [];
 
   const isWinter = window.SEASONS && window.SEASONS[gameState.season] === 'Winter';
-  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
+  const severity = gameState.winterSeverity ?? 1.0;
+  const winterCost = isWinter ? Math.ceil(gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5) * severity) : 0;
   const tradCosts = (window.getProjectedTraditionCosts && gameState?.traditions) ? window.getProjectedTraditionCosts() : { food: 0, materials: 0 };
   const crimeState = window.getCrimeState ? window.getCrimeState() : null;
 

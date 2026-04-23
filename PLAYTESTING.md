@@ -106,7 +106,7 @@ I would prefer that the labels behaved in a way where overlapping labels stop gr
 - [OK] Demographic pyramid displays correctly (male/female split)
 - [??] Nursing: births create nursing entries, decrement each turn
 
-**Nootes:** It is hard to track this since all are lumped into a single number in population info, so the player can't see how many finish in one, two or. three turns.
+**Notes:** It is hard to track this since all are lumped into a single number in population info, so the player can't see how many finish in one, two or. three turns.
 
 - [OK] Nursing mothers reduce effective labor capacity
 - [OK] Population summary in sidebar shows fertility section

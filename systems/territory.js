@@ -329,7 +329,7 @@ function showSettlementNamingDialog(settlementIndex, callback) {
       if (window.render) window.render();
       if (callback) callback(name);
     },
-    { noBackdropDismiss: true }
+    { noBackdropDismiss: true, onCancel: () => { if (callback) callback(null); } }
   );
 }
 

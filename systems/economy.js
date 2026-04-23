@@ -196,6 +196,8 @@ export function calculateIncome() {
   }, 0);
 
   const totalChildren = getTotalChildren();
+  const childFoodTotal = getChildFoodConsumption();
+  const childBreakdown = getChildFoodBreakdown();
   const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
   const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
   const foodPerElder = (window.FOOD_PER_ELDER != null) ? window.FOOD_PER_ELDER : 1;
@@ -211,7 +213,7 @@ export function calculateIncome() {
   // Immigrant food consumption (pipeline cohorts + PS adults + PS children)
   const immigrantFood = window.getImmigrantFoodConsumption ? window.getImmigrantFoodConsumption() : 0;
 
-  const popFoodConsumed = workingAdults * foodPerPop + workingElders * foodPerPop + retiredElders * foodPerElder + totalChildren * foodPerChild + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood;
+  const popFoodConsumed = workingAdults * foodPerPop + workingElders * foodPerPop + retiredElders * foodPerElder + childFoodTotal + constructionWorkers * foodPerPop + unitsInTraining * foodPerPop + immigrantFood;
 
   // Unit food = their population share (foodPerPop) + unit-specific upkeep
   const unitFoodUpkeep = window.gameState.units.reduce((total, unit) => {
@@ -241,7 +243,11 @@ export function calculateIncome() {
       adults:    (workingAdults - constructionWorkers) * foodPerPop,
       workingElders: workingElders * foodPerPop,
       retiredElders: retiredElders * foodPerElder,
-      children:  totalChildren * foodPerChild,
+      children:  childFoodTotal,
+      youngChildren: childBreakdown.youngCount,
+      youngChildrenFood: childBreakdown.youngFood,
+      adolescents: childBreakdown.adolescentCount,
+      adolescentFood: childBreakdown.adolescentFood,
       builders:  constructionWorkers * foodPerPop * 2,   // double rations
       training:  unitsInTraining * foodPerPop * 2,       // double rations
       immigrants: immigrantFood,
@@ -297,19 +303,32 @@ export function calculateIncome() {
 
 // Ensure workers don't exceed population (after starvation/emigration)
 export function clampWorkers() {
+  const gs = window.gameState;
+
+  // Clamp hex workers
   let totalAssigned = 0;
   const workedHexes = [];
   for (let r = 0; r < window.MAP_ROWS; r++) for (let c = 0; c < window.MAP_COLS; c++) {
-    const hex = window.gameState.map[r][c];
+    const hex = gs.map[r][c];
     if (hex.workers > 0) { totalAssigned += hex.workers; workedHexes.push(hex); }
   }
-  // Remove workers from end of list until within population
-  while (totalAssigned > window.gameState.population.total && workedHexes.length > 0) {
+  while (totalAssigned > gs.population.total && workedHexes.length > 0) {
     const hex = workedHexes[workedHexes.length - 1];
-    const remove = Math.min(hex.workers, totalAssigned - window.gameState.population.total);
+    const remove = Math.min(hex.workers, totalAssigned - gs.population.total);
     hex.workers -= remove;
     totalAssigned -= remove;
     if (hex.workers <= 0) workedHexes.pop();
+  }
+
+  // Clamp storytellers — they count as employed and must fit within population
+  const culture = gs.culture;
+  if (culture && culture.storytellers > 0) {
+    const unitPop = (gs.units || []).reduce((s, u) => s + (window.UNIT_TYPES?.[u.type]?.cost?.population || 0), 0);
+    const maxEmployed = Math.max(0, gs.population.total - unitPop);
+    if (totalAssigned + culture.storytellers > maxEmployed) {
+      const excess = (totalAssigned + culture.storytellers) - maxEmployed;
+      culture.storytellers = Math.max(0, culture.storytellers - excess);
+    }
   }
 }
 
@@ -369,13 +388,55 @@ export function getTotalChildren() {
     .reduce((sum, cohort) => sum + cohort.count, 0);
 }
 
+// Get child food consumption with puberty scaling
+// Children under PUBERTY_AGE eat FOOD_PER_CHILD; those at/above eat FOOD_PER_POP
+export function getChildFoodConsumption() {
+  const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
+  const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
+  const pubertyAge = (window.PUBERTY_AGE != null) ? window.PUBERTY_AGE : 12;
+  let total = 0;
+  for (const cohort of window.gameState.childCohorts) {
+    if (cohort.age >= WORKING_AGE) continue;
+    if (cohort.age >= pubertyAge) {
+      total += cohort.count * foodPerPop;
+    } else {
+      total += cohort.count * foodPerChild;
+    }
+  }
+  return total;
+}
+
+// Get child food breakdown (young vs adolescent) for UI display
+export function getChildFoodBreakdown() {
+  const foodPerPop = (window.FOOD_PER_POP != null) ? window.FOOD_PER_POP : 2;
+  const foodPerChild = (window.FOOD_PER_CHILD != null) ? window.FOOD_PER_CHILD : 1;
+  const pubertyAge = (window.PUBERTY_AGE != null) ? window.PUBERTY_AGE : 12;
+  let youngCount = 0, adolescentCount = 0;
+  for (const cohort of window.gameState.childCohorts) {
+    if (cohort.age >= WORKING_AGE) continue;
+    if (cohort.age >= pubertyAge) {
+      adolescentCount += cohort.count;
+    } else {
+      youngCount += cohort.count;
+    }
+  }
+  return {
+    youngCount,
+    adolescentCount,
+    youngFood: youngCount * foodPerChild,
+    adolescentFood: adolescentCount * foodPerPop,
+    totalFood: youngCount * foodPerChild + adolescentCount * foodPerPop
+  };
+}
+
 // Update all resource UI displays
 export function updateAllUI() {
   const inc = calculateIncome();
 
   // Calculate winter penalty for display
   const isWinter = window.SEASONS[window.gameState.season] === 'Winter';
-  const winterCost = isWinter ? Math.ceil(window.gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5)) : 0;
+  const severity = window.gameState.winterSeverity ?? 1.0;
+  const winterCost = isWinter ? Math.ceil(window.gameState.population.total * (window.WINTER_FOOD_PER_POP ?? 0.5) * severity) : 0;
   const effectiveNetFood = inc.netFood - winterCost;
 
   document.getElementById('res-food').textContent = window.gameState.resources.food;
@@ -533,7 +594,7 @@ export function renderWorkersTab() {
 
   // Cultural Roles section — storytellers
   const storyCapacity = storytellers * 4;
-  const canAddStoryteller = pop.idle > 0;
+  const canAddStoryteller = pop.idle > 0; // retired elders count — storytelling is an appropriate elder role
   const canRemoveStoryteller = storytellers > 0;
   const storyCount = window.gameState.culture?.stories?.length ?? 0;
   const storytellerSection = `<div class="wf-section">
@@ -542,7 +603,7 @@ export function renderWorkersTab() {
       <div class="wf-group-header">
         <span class="wf-group-icon">📖</span>
         <span class="wf-group-name">Storytellers</span>
-        <span class="wf-group-count">${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'} preserved · capacity ${storyCapacity}</span>
+        <span class="wf-group-count">${storyCount} stor${storyCount !== 1 ? 'ies' : 'y'} preserved · capacity ${storyCapacity}${retiredCount > 0 ? ` · <span style="color:var(--text-dim)">${retiredCount} retired eligible</span>` : ''}</span>
       </div>
       <div class="wf-group-body">
         <span class="wf-yield">${storyCount > 0 ? `Identity +${storyCount} (from oral tradition)` : 'No stories yet — assign storytellers to begin'}</span>
